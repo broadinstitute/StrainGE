@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 parser = OptionParser()
 parser.add_option("-k", type='int', help="Kmer size", default=31)
 parser.add_option("-s", "--spectrum", type='str', help='File to store kmer spectrum png')
-parser.add_option("--smax", type='int', help="Maximum frequency in spectrum plot")
+parser.add_option("--smax", type='int', default=300, help="Maximum frequency in spectrum plot")
 
 (options, args) = parser.parse_args()
 

@@ -6,11 +6,13 @@ import kmerizer
 import numpy as np
 import pydot
 
+
 def fastaLoad(fileName):
     file = SeqIO.parse(open(fileName, 'r'), "fasta")
     scaffolds = [scaffold for scaffold in file]
     file.close()
     return scaffolds
+
 
 def intersectionStats(nodePair, kmerSets, intersections):
     node1, node2 = nodePair

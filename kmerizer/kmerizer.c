@@ -8,7 +8,7 @@
 #define RC(b) ((b) ^ 3)
 
 typedef uint64_t kmer_t;
-
+typedef int64_t count_t;
 
 int kmerizer_kmerize_internal(int k, char *seq, int length, kmer_t *kmers) {
   int kcount = 0;
@@ -98,6 +98,61 @@ kmerizer_kmerize_into_array(PyObject *self, PyObject *args)
   return Py_BuildValue("i", kcount);
 }
 
+
+static PyObject *
+kmerizer_merge_counts(PyObject *self, PyObject *args)
+{
+  PyObject *kmers1, *count1, *kmers2, *count2, *kmersOut, *countOut;
+
+  if (!PyArg_ParseTuple(args, "OOOOOO", &kmers1, &count1, &kmers2, &count2, &kmersOut, &countOut))
+    return NULL;
+  
+  kmer_t *k1 = PyArray_GETPTR1(kmers1, 0);
+  kmer_t *k2 = PyArray_GETPTR1(kmers2, 0);
+  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
+
+  npy_intp k1size = *PyArray_DIMS(kmers1);
+  npy_intp k2size = *PyArray_DIMS(kmers2);
+
+  count_t *c1 = PyArray_GETPTR1(count1, 0);
+  count_t *c2 = PyArray_GETPTR1(count2, 0);
+  count_t *cout = PyArray_GETPTR1(countOut, 0);
+
+  int kcount = 0;
+  int i1 = 0, i2 = 0;
+  /* walk through sorted arrays in parallel */
+  while (i1 < k1size && i2 < k2size) {
+    kmer_t kmer1 = k1[i1];
+    kmer_t kmer2 = k2[i2];
+    /*printf("count=%d i1=%d i2=%d k1=%lx k2=%lx c1=%d c2=%d\n", kcount, i1, i2, kmer1, kmer2, c1[i1], c2[i2]);*/
+    if (kmer1 == kmer2) {
+      /* in both */
+      kout[kcount] = kmer1;
+      cout[kcount] = c1[i1++] + c2[i2++];
+    } else if (kmer1 < kmer2) {
+      /* only in kmers1 */
+      kout[kcount] = kmer1;
+      cout[kcount] = c1[i1++];
+    } else {
+      /* only in kmers2 */
+      kout[kcount] = kmer2;
+      cout[kcount] = c2[i2++];
+    }
+    ++kcount;
+  }
+  /* leftovers in kmers1 */
+  while (i1 < k1size) {
+    kout[kcount] = k1[i1];
+    cout[kcount++] = c1[i1++];
+  }
+  /* leftovers in kmers2 */
+  while (i2 < k2size) {
+    kout[kcount] = k2[i2];
+    cout[kcount++] = c2[i2++];
+  }
+  return Py_BuildValue("i", kcount);
+}
+
 static PyObject *KmerizerError;
 
 static PyMethodDef KmerizerMethods[] = {
@@ -105,6 +160,8 @@ static PyMethodDef KmerizerMethods[] = {
        "Kmerize sequence returning new numpy array."},
       {"kmerize_into_array",  kmerizer_kmerize_into_array, METH_VARARGS,
        "Kmerize sequence into existing numpy array."},
+      {"merge_counts",  kmerizer_merge_counts, METH_VARARGS,
+       "Merge and sum  two sets of kmer and count arrays."},
       {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
@@ -116,7 +173,6 @@ initkmerizer(void)
   m = Py_InitModule("kmerizer", KmerizerMethods);
   if (m == NULL)
     return;
-
 
   import_array();
 

@@ -30,16 +30,11 @@ def openFastq(fileName):
 
 def mergeCounts(unique, counts, newKmers):
     newUnique, newCounts = np.unique(kmerBatch[:nkmers], return_counts=True)
-    print 'New:', newUnique.size, newCounts.sum()
+    #print 'New:', newUnique.size, newCounts.sum()
     if type(unique) == type(None):
         return (newUnique, newCounts)
     else:
-        maxSize = unique.size + newUnique.size
-        mergedUnique = np.zeros(maxSize, dtype=np.uint64)
-        mergedCounts = np.zeros(maxSize, dtype=np.int64)
-        count = kmerizer.merge_counts(unique, counts, newUnique, newCounts, mergedUnique, mergedCounts)
-        print 'Merged:', count, mergedCounts.sum()
-        return (mergedUnique[:count], mergedCounts[:count])
+        return kmerizer.merge_counts(unique, counts, newUnique, newCounts)
 
 kmers = None
 counts = None
@@ -58,7 +53,7 @@ def processBatch():
     totalReads += nreads
     totalBases += nbases
     totalKmers += nkmers
-    print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers
+    #print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers
     kmers, counts = mergeCounts(kmers, counts, kmerBatch[:nkmers])
     nreads = 0
     nbases = 0
@@ -76,8 +71,9 @@ for arg in args:
     fastq.close()
 if nkmers:
     processBatch()
-kmerBatch = kmers
-print 'Unique Kmers:', kmerBatch.size, ', Singletons:', kmerBatch.size - np.count_nonzero(counts - 1)
+kmerBatch = None
+print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers
+print 'Unique Kmers:', kmers.size, ', Singletons:', kmers.size - np.count_nonzero(counts - 1)
 
 if options.spectrum:
     # to get kmer profile, count the counts!

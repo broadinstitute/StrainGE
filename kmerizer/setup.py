@@ -6,7 +6,7 @@ module1 = Extension('kmerizer',
 setup (name = 'kmerizer',
        version = '1.0',
        author = 'Bruce Walker',
-       author_email = 'bruce@w1bw.us'
+       author_email = 'bruce@w1bw.us',
        description = 'This is a kmer generation package',
        ext_modules = [module1])
 

@@ -25,12 +25,8 @@ print k23.size, k23rc.size, np.intersect1d(k23, k232).size
 k23counts = np.unique(k23, return_counts=True)
 k232counts = np.unique(k232, return_counts=True)
 countSum = k23.size + k232.size
-mergedKmers = np.zeros(countSum, dtype=np.uint64)
-mergedCounts = np.zeros(countSum, dtype=np.int64)
 print k23counts
 print k232counts
-print mergedKmers, mergedCounts
-count = kmerizer.merge_counts(k23counts[0], k23counts[1], k232counts[0], k232counts[1], mergedKmers, mergedCounts)
-mergedKmers = mergedKmers[:count]
-mergedCounts = mergedCounts[:count]
-print count, mergedKmers, mergedCounts, mergedCounts.sum()
+merged = kmerizer.merge_counts(k23counts[0], k23counts[1], k232counts[0], k232counts[1])
+mergedKmers, mergedCounts = merged
+print merged, mergedCounts.sum()

@@ -53,8 +53,9 @@ def processBatch():
     totalReads += nreads
     totalBases += nbases
     totalKmers += nkmers
-    #print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers
+    print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers,
     kmers, counts = mergeCounts(kmers, counts, kmerBatch[:nkmers])
+    print ', Unique Kmers:', kmers.size
     nreads = 0
     nbases = 0
     nkmers = 0

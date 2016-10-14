@@ -163,7 +163,7 @@ kmerizer_merge_counts(PyObject *self, PyObject *args)
   bcopy(cout, counts, kcount * sizeof(count_t));
   free(cout);
   
-  return Py_BuildValue("(OO)", kmersOut, countsOut);
+  return Py_BuildValue("(NN)", kmersOut, countsOut);
 }
 
 

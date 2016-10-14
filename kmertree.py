@@ -22,9 +22,12 @@ def intersectionStats(nodePair, kmerSets, intersections):
     if pair in intersections:
         stats = intersections[pair]
     else:
-        kint = np.intersect1d(k1, k2, assume_unique = True)
-        stats = (kint.size, float(kint.size) / float(min(k1.size, k2.size)))
+        #kint = np.intersect1d(k1, k2, assume_unique = True)
+        common = kmerizer.count_common(k1, k2)
+        stats = (common, float(common) / float(min(k1.size, k2.size)))
         intersections[pair] = stats
+        print pair, stats
+        sys.stdout.flush()
     return stats
 
 

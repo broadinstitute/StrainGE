@@ -53,9 +53,9 @@ def processBatch():
     totalReads += nreads
     totalBases += nbases
     totalKmers += nkmers
-    print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers,
+    print 'Reads:', totalReads, 'Bases:', totalBases, 'Kmers:', totalKmers,
     kmers, counts = mergeCounts(kmers, counts, kmerBatch[:nkmers])
-    print ', Unique Kmers:', kmers.size
+    print 'Unique Kmers:', kmers.size
     nreads = 0
     nbases = 0
     nkmers = 0
@@ -64,14 +64,14 @@ def processBatch():
 for arg in args:
     fastq = SeqIO.parse(openFastq(arg), "fastq")
     for read in fastq:
-        nkmers += kmerizer.kmerize_into_array(options.k, str(read.seq), kmerBatch, nkmers)
         nreads += 1
-        nbases += len(read)
-        if nbases > options.batch:
+        readLength = len(read)
+        nbases += readLength
+        if nkmers + readLength > options.batch:
             processBatch()
+        nkmers += kmerizer.kmerize_into_array(options.k, str(read.seq), kmerBatch, nkmers)
     fastq.close()
-if nkmers:
-    processBatch()
+processBatch()
 kmerBatch = None
 print 'Reads:', totalReads, ', Bases:', totalBases, ', Kmers:', totalKmers
 print 'Unique Kmers:', kmers.size, ', Singletons:', kmers.size - np.count_nonzero(counts - 1)

@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import sys
+import random
 from itertools import combinations
 from Bio import SeqIO
 import kmerizer
 import numpy as np
 import pydot
+
 
 
 def fastaLoad(fileName):
@@ -26,8 +28,8 @@ def intersectionStats(nodePair, kmerSets, intersections):
         common = kmerizer.count_common(k1, k2)
         stats = (common, float(common) / float(min(k1.size, k2.size)))
         intersections[pair] = stats
-        print pair, stats
-        sys.stdout.flush()
+        #print pair, stats
+        #sys.stdout.flush()
     return stats
 
 
@@ -49,9 +51,9 @@ def buildTree(tree, kmerSets, intersections):
     kmerSets[newNode] = kint
     kmerSets[n1] = k1diff
     kmerSets[n2] = k2diff
-    print n1, k1diff.size
-    print n2, k2diff.size
-    print newNode, kint.size
+    #print n1, k1diff.size
+    #print n2, k2diff.size
+    print newNode, kint.size, k1diff.size, k2diff.size
     print 'tree:', newTree
     sys.stdout.flush()
     return newTree
@@ -71,10 +73,12 @@ def graphTree(graph, tree, kmerSets, parentNode):
         graphTree(graph, tree[1], kmerSets, node)
 
 K = int(sys.argv[1])
+hashSize = int(sys.argv[2])
 suffix = '.genome.fa'
+hashBits = random.getrandbits(K * 2)
 
 kmerSets = {}
-for arg in sys.argv[2:]:
+for arg in sys.argv[3:]:
     name = arg
     if name.endswith(suffix):
         name = name[:-len(suffix)]
@@ -82,7 +86,10 @@ for arg in sys.argv[2:]:
     sys.stdout.flush()
     scaffolds = fastaLoad(arg)
     kmerArray = np.unique(np.concatenate([kmerizer.kmerize(K, str(s.seq)) for s in scaffolds]))
-    kmerSets[name] = kmerArray
+    kmerArray ^= hashBits
+    kmerArray.sort()
+    # kmerSets[name] = kmerArray
+    kmerSets[name] = kmerArray[:hashSize]
 
 tree = kmerSets.keys()
 nleaves = len(tree)

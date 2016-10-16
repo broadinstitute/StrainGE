@@ -26,7 +26,7 @@ def intersectionStats(nodePair, kmerSets, intersections):
     else:
         #kint = np.intersect1d(k1, k2, assume_unique = True)
         common = kmerizer.count_common(k1, k2)
-        stats = (common, float(common) / float(min(k1.size, k2.size)))
+        stats = common
         intersections[pair] = stats
         #print pair, stats
         #sys.stdout.flush()
@@ -36,7 +36,7 @@ def intersectionStats(nodePair, kmerSets, intersections):
 def buildTree(tree, kmerSets, intersections):
     # calculate the intersection stats of kmers for all tree node pairs
     intStats = [(pair, intersectionStats(pair, kmerSets, intersections)) for pair in  combinations(tree, 2)]
-    intStats.sort(lambda a, b: cmp(b[1][0], a[1][0]))
+    intStats.sort(lambda a, b: cmp(b[1], a[1]))
     closePair, statsx = intStats[0]
     n1, n2 = closePair
     k1 = kmerSets[n1]

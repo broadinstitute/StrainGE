@@ -3,6 +3,7 @@ import sys
 import random
 from itertools import combinations
 from Bio import SeqIO
+import kmertools
 import kmerizer
 import numpy as np
 import pydot
@@ -73,23 +74,21 @@ def graphTree(graph, tree, kmerSets, parentNode):
         graphTree(graph, tree[1], kmerSets, node)
 
 K = int(sys.argv[1])
-hashSize = int(sys.argv[2])
 suffix = '.genome.fa'
-hashBits = random.getrandbits(K * 2)
-
 kmerSets = {}
-for arg in sys.argv[3:]:
+for arg in sys.argv[2:]:
     name = arg
     if name.endswith(suffix):
         name = name[:-len(suffix)]
     print 'Kmerizing', name
     sys.stdout.flush()
-    scaffolds = fastaLoad(arg)
-    kmerArray = np.unique(np.concatenate([kmerizer.kmerize(K, str(s.seq)) for s in scaffolds]))
-    kmerArray ^= hashBits
-    kmerArray.sort()
-    # kmerSets[name] = kmerArray
-    kmerSets[name] = kmerArray[:hashSize]
+
+    kset = kmertools.KmerSet(K)
+    kset.kmerizeFile(arg)
+    kset.minHash()
+
+    # just using fingerprint for now
+    kmerSets[name] = kset.fingerprint
 
 tree = kmerSets.keys()
 nleaves = len(tree)

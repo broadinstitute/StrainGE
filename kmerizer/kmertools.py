@@ -6,6 +6,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import kmerizer
 
+A = 0
+C = 1
+G = 2
+T = 3
+
+BASES = "ACGT"
+
 # A random 64-bit number used in hashing function
 HASH_BITS = 0x29679e096c8c07bf
 
@@ -127,6 +134,21 @@ class KmerSet:
         else:
             func = np.savez
         func(fileName, **kwargs)
+
+    def load(self, fileName):
+        npData = np.load(fileName)
+        if 'kmers' in npData.files:
+            self.kmers = npData['kmers']
+        if 'counts' in npData.files:
+            self.counts = npData['counts']
+            self.nKmers = self.counts.sum()
+        if 'fingerprint' in npData.files:
+            self.fingerprint = npData['fingerprint']
+
+    def kmerString(self, kmer):
+        return ''.join([BASES[(kmer >> shift) & 3] for shift in xrange(2 * self.k - 2, -1, -2)])
+
+
 
 
 

@@ -23,6 +23,8 @@ def openSeqFile(fileName):
     elif "gz" in components:
         file = gzip.GzipFile(fileName, 'r')
         SeqIO.parse(file, "fastq")
+    else:
+        file = open(fileName, 'r')
     if "fastq" in components or "fq" in components:
         fileType = "fastq"
     else:

@@ -113,12 +113,7 @@ class KmerSet:
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
 
     def hashKmers(self):
-        k = self.k
-        mask = (1 << (2 * k)) - 1
-        hashedKmers = self.kmers >> k
-        hashedKmers |= self.kmers << k
-        hashedKmers ^= HASH_BITS
-        hashedKmers &= mask
+        hashedKmers = self.kmers ^ HASH_BITS
         hashedKmers.sort()
         return hashedKmers
 

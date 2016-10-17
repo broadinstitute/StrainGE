@@ -38,6 +38,15 @@ def openSeqFile(fileName):
         fileType = "fasta"
     return SeqIO.parse(file, fileType)
 
+
+def loadFingerprint(fileName):
+    """
+    :param fileName: A numpy npz file containing a 'fingerprint' array
+    :return: the fingerprint array
+    """
+    data = np.load(fileName)
+    return data['fingerprint']
+
 class KmerSet:
     """
     Holds array of kmers and their associated counts & stats.

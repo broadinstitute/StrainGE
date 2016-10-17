@@ -8,50 +8,56 @@ import kmerizer
 import numpy as np
 import pydot
 
+class TreeNode:
+    def __init__(self, kmers, name = '', children = []):
+        self.name = name
+        self.kmers = kmers
+        self.children = children
 
+    def isLeaf(self):
+        return not self.children
 
-def fastaLoad(fileName):
-    file = SeqIO.parse(open(fileName, 'r'), "fasta")
-    scaffolds = [scaffold for scaffold in file]
-    file.close()
-    return scaffolds
+    def label(self):
+        s = str(self.kmers.size)
+        if self.name:
+            s += "\n" + self.name
+        return s
 
-
-def intersectionStats(nodePair, kmerSets, intersections):
+def intersectionStats(nodePair, intersections):
     node1, node2 = nodePair
-    k1 = kmerSets[node1]
-    k2 = kmerSets[node2]
+    k1 = node1.kmers
+    k2 = node2.kmers
     pair = (node1, node2)
     if pair in intersections:
-        stats = intersections[pair]
+        score = intersections[pair]
     else:
         #kint = np.intersect1d(k1, k2, assume_unique = True)
-        common = kmerizer.count_common(k1, k2)
-        stats = common
-        intersections[pair] = stats
+        score = kmerizer.count_common(k1, k2)
+        intersections[pair] = score
         #print pair, stats
         #sys.stdout.flush()
-    return stats
+    return score
 
 
-def buildTree(tree, kmerSets, intersections):
+def buildTree(tree, intersections):
     # calculate the intersection stats of kmers for all tree node pairs
-    intStats = [(pair, intersectionStats(pair, kmerSets, intersections)) for pair in  combinations(tree, 2)]
+    intStats = [(pair, intersectionStats(pair, intersections)) for pair in  combinations(tree, 2)]
     intStats.sort(lambda a, b: cmp(b[1], a[1]))
-    closePair, statsx = intStats[0]
+    closePair, stats = intStats[0]
     n1, n2 = closePair
-    k1 = kmerSets[n1]
-    k2 = kmerSets[n2]
+    k1 = n1.kmers
+    k2 = n2.kmers
     kint = np.intersect1d(k1, k2, assume_unique = True)
     k1diff = np.setdiff1d(k1, k2, assume_unique = True)
     k2diff = np.setdiff1d(k2, k1, assume_unique = True)
     # build new tree: start by removing the nodes to be joined
     newTree = [x for x in tree if x not in (n1, n2)]
-    newNode = (n1, n2)
+
+    newNode = TreeNode(kint, children = [n1, n2])
     newTree.append(newNode)
-    kmerSets[newNode] = kint
-    kmerSets[n1] = k1diff
-    kmerSets[n2] = k2diff
+    newNode.kmers = kint
+    n1.kmers = k1diff
+    n2.kmers = k2diff
     #print n1, k1diff.size
     #print n2, k2diff.size
     print newNode, kint.size, k1diff.size, k2diff.size
@@ -60,47 +66,40 @@ def buildTree(tree, kmerSets, intersections):
     return newTree
 
 
-def graphTree(graph, tree, kmerSets, parentNode):
-    leaf = isinstance(tree, str)
-    nodeLabel = str(kmerSets[tree].size)
-    if leaf:
-        nodeLabel += "\n" + tree
+def graphTree(graph, tree, parentNode):
+    leaf = tree.isLeaf()
+    nodeLabel = tree.label()
     node = pydot.Node(nodeLabel)
     graph.add_node(node)
     if parentNode:
         graph.add_edge(pydot.Edge(parentNode, node))
     if not leaf:
-        graphTree(graph, tree[0], kmerSets, node)
-        graphTree(graph, tree[1], kmerSets, node)
+        for child in tree.children:
+            graphTree(graph, child, node)
 
-K = int(sys.argv[1])
-suffix = '.genome.fa'
-kmerSets = {}
-for arg in sys.argv[2:]:
-    name = arg
-    if name.endswith(suffix):
-        name = name[:-len(suffix)]
-    print 'Kmerizing', name
-    sys.stdout.flush()
 
-    kset = kmertools.KmerSet(K)
-    kset.kmerizeFile(arg)
-    kset.minHash()
+###
+### Main
+###
 
+nodes = []
+
+for arg in sys.argv[1:]:
     # just using fingerprint for now
-    kmerSets[name] = kset.fingerprint
+    name = arg.split(".")[0]
+    fingerprint = kmertools.loadFingerprint(arg)
+    nodes.append(TreeNode(fingerprint, name = name))
 
-tree = kmerSets.keys()
-nleaves = len(tree)
-print 'Kmerized', nleaves, 'genomes'
-sys.stdout.flush()
+nleaves = len(nodes)
+print 'Loaded', nleaves, 'genomes'
 
 intersections = {}
+tree = nodes
 while len(tree) > 1:
-    tree = buildTree(tree, kmerSets, intersections)
+    tree = buildTree(tree, intersections)
     print len(tree)
     sys.stdout.flush()
 
 graph = pydot.Dot(graph_type='graph', rankdir='LR')
-graphTree(graph, tree[0], kmerSets, None)
+graphTree(graph, tree[0], None)
 graph.write_png("kmertree.png")

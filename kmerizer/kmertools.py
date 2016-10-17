@@ -38,21 +38,28 @@ def openSeqFile(fileName):
         fileType = "fasta"
     return SeqIO.parse(file, fileType)
 
+def loadNpz(filename, thing):
+    """
+    :param fileName: A numpy npz file
+    :param thing: A file element of the npz file to return
+    :return: the the thing array
+    """
+    data = np.load(fileName)
+    return data[thing]
 
 def loadFingerprint(fileName):
     """
     :param fileName: A numpy npz file containing a 'fingerprint' array
     :return: the fingerprint array
     """
-    data = np.load(fileName)
-    return data['fingerprint']
+    return loadNpz(fileName, "fingerprint")
 
 class KmerSet:
     """
     Holds array of kmers and their associated counts & stats.
     """
 
-    def __init__(self, k):
+    def __init__(self, k = 31):
         self.k = k
         # data arrays
         self.kmers = None
@@ -119,16 +126,45 @@ class KmerSet:
         self.fingerprint = self.hashKmers()[:nkmers]
         return self.fingerprint
 
+    def freqFilter(self, minFreq = 1, maxFreq = None):
+        condition = (self.counts >= minFreq)
+        if maxFreq:
+            condition &= (self.counts <= maxFreq)
+        self.kmers = self.kmers[condition]
+        self.counts = self.counts[condition]
+    def spectrum(self):
+        return np.unique(self.counts, return_counts=True)
+
+    def spectrumMinMax(self, delta = .5):
+        freq, counts = self.spectrum()
+        minIndex = 0
+        maxIndex = 0
+        for i in xrange(freq.size):
+            count = counts[i]
+            if minIndex and counts[i] > counts[maxIndex]:
+                maxIndex = i
+            elif counts[i] < counts[minIndex]:
+                minIndex = maxIndex = i
+            if minIndex and maxIndex and counts[i] < counts[maxIndex] * (1 - delta):
+                return (freq[minIndex], freq[maxIndex])
+        return None
+
+    def spectrumFilter(self, maxCopyNumber = 20):
+        thresholds = self.spectrumMinMax()
+        if thresholds:
+            self.freqFilter(thresholds[0], thresholds[1] * maxCopyNumber)
+        return thresholds
+
+
     def plotSpectrum(self, fileName = None, maxFreq = None):
         # to get kmer profile, count the counts!
-        spectrum = np.unique(counts, return_counts=True)
+        spectrum = self.spectrum()
         plt.semilogy(spectrum[0], spectrum[1])
         plt.grid = True
         if maxFreq:
             plt.xlim(0, maxFreq)
         plt.xlabel("Kmer Frequency")
         plt.ylabel("Number of Kmers")
-        plt.suptitle = "Kmer Spectrum (K=%d)" % (options.k,)
         if fileName:
             plt.savefig(fileName)
         else:

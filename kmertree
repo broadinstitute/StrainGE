@@ -77,6 +77,12 @@ def graphTree(graph, tree, parentNode):
         for child in tree.children:
             graphTree(graph, child, node)
 
+def nwk(tree):
+    if tree.isLeaf():
+        return tree.label()
+    else:
+        return '(' + ','.join([nwk(child) for child in tree.children]) + ')' + tree.label()
+
 
 ###
 ### Main
@@ -103,3 +109,5 @@ while len(tree) > 1:
 graph = pydot.Dot(graph_type='graph', rankdir='LR')
 graphTree(graph, tree[0], None)
 graph.write_png("kmertree.png")
+
+print nwk(tree[0]) + ';'

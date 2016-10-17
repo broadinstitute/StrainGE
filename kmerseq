@@ -11,6 +11,7 @@ parser.add_option("-m", "--smax", type='int', default=300, help="Maximum frequen
 parser.add_option("-o", "--output", type='str', help="Output file for kmers and counts")
 parser.add_option("-c", "--compress", action='store_true', help="Store kmer output file in compressed format")
 parser.add_option("-f", "--fingerprint", action='store_true', help="Store MinHash fingerprint")
+parser.add_option("--filter", action='store_true', help="Auto-filter based on kmer spectrum")
 
 (options, args) = parser.parse_args()
 
@@ -19,6 +20,12 @@ kset = kmertools.KmerSet(options.k)
 for arg in args:
     print 'Kmerizing', arg
     kset.kmerizeFile(arg)
+
+if options.filter:
+    thresholds = kset.spectrumFilter()
+    if thresholds:
+        print 'Keeping kmers with frequency in the range', thresholds
+    kset.printStats()
 
 if options.fingerprint:
     kset.minHash()

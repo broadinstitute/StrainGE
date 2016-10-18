@@ -94,6 +94,13 @@ class KmerSet:
         seqFile.close()
         self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
 
+    def kmerizeSeq(self, seq):
+        kmers = kmerizer.kmerize(self.k, seq)
+        self.nSeqs += 1
+        self.nBases += len(seq)
+        self.nKmers = kmers.size
+        self.kmers, self.counts = np.unique(kmers, return_counts=True)
+
     def processBatch(self, batch, nseqs, nbases, nkmers, verbose):
         self.nSeqs += nseqs
         self.nBases += nbases
@@ -115,14 +122,15 @@ class KmerSet:
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
 
     def hashKmers(self, kmers):
-        mask = (1 << (2 * self.k)) - 1
-        hashedKmers = kmers ^ (HASH_BITS & mask)
-        hashedKmers.sort()
-        return hashedKmers
+        hashed = kmerizer.hash_kmers(self.k, kmers)
+        hashed.sort()
+        return hashed
 
     def unHashKmers(self, kmers):
         # un-do the hash function; this trival one self-reverses
-        return self.hashKmers(kmers)
+        unhashed = kmerizer.unhash_kmers(self.k, kmers)
+        unhashed.sort()
+        return unhashed
 
     def minHash(self, nkmers = 10000):
         self.fingerprint = self.hashKmers(self.kmers)[:nkmers]

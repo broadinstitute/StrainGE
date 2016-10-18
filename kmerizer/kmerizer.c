@@ -196,6 +196,68 @@ kmerizer_merge_counts(PyObject *self, PyObject *args)
   return Py_BuildValue("(NN)", kmersOut, countsOut);
 }
 
+kmer_t HASH_BITS = 0x29679e096c8c07bf;
+kmer_t LOW_BIT_MASK = 0x5555555555555555;
+
+static PyObject *
+kmerizer_hash_kmers(PyObject *self, PyObject *args) {
+  int k;
+  PyObject *kmersIn;
+
+  if (!PyArg_ParseTuple(args, "iO", &k, &kmersIn))
+    return NULL;
+
+  npy_intp size = *PyArray_DIMS(kmersIn);
+  PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
+  kmer_t *kin = PyArray_GETPTR1(kmersIn, 0);
+  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
+
+  int kbits = 2 * k;
+  kmer_t mask = (1L << kbits) - 1;
+  int halfbits = k & ~1;
+  kmer_t halfmask = (1L << halfbits) - 1;
+
+  for (int i = 0; i < size; ++i) {
+    kmer_t kmer = kin[i];
+    kmer_t hashed = (kmer >> halfbits) | ((kmer & halfmask) << (kbits - halfbits));
+    hashed &= ~LOW_BIT_MASK;
+    hashed |= kmer & LOW_BIT_MASK;
+    hashed ^= (HASH_BITS & mask);
+    kout[i] = hashed;
+  }
+  return kmersOut;
+}
+
+
+static PyObject *
+kmerizer_unhash_kmers(PyObject *self, PyObject *args) {
+  int k;
+  PyObject *kmersIn;
+
+  if (!PyArg_ParseTuple(args, "iO", &k, &kmersIn))
+    return NULL;
+
+  npy_intp size = *PyArray_DIMS(kmersIn);
+  PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
+  kmer_t *kin = PyArray_GETPTR1(kmersIn, 0);
+  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
+
+  int kbits = 2 * k;
+  kmer_t mask = (1L << kbits) - 1;
+  int halfbits = k & ~1;
+  kmer_t halfmask = (1L << (kbits - halfbits)) - 1;
+
+  for (int i = 0; i < size; ++i) {
+    kmer_t kmer = kin[i];
+    kmer ^= (HASH_BITS & mask);
+    kmer_t unhashed = kmer;
+    unhashed = ((unhashed & halfmask) << halfbits) | (unhashed >> (kbits - halfbits));
+    unhashed &= ~LOW_BIT_MASK;
+    unhashed |= kmer & LOW_BIT_MASK;
+    kout[i] = unhashed;
+  }
+  return kmersOut;
+}
 static PyObject *KmerizerError;
 
 static PyMethodDef KmerizerMethods[] = {
@@ -207,6 +269,10 @@ static PyMethodDef KmerizerMethods[] = {
        "Merge and sum  two sets of kmer and count arrays."},
       {"count_common",  kmerizer_count_common, METH_VARARGS,
        "Count common elements in two sorted kmer arrays."},
+      {"hash_kmers",  kmerizer_hash_kmers, METH_VARARGS,
+       "Scrable bits of kmers as a hash function."},
+      {"unhash_kmers",  kmerizer_unhash_kmers, METH_VARARGS,
+       "Unscrable bits of kmers to reverse hash function."},
       {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

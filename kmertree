@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 import sys
-import random
+import argparse
 from itertools import combinations
-from Bio import SeqIO
 import kmertools
 import kmerizer
 import numpy as np
@@ -20,8 +19,15 @@ class TreeNode:
     def label(self):
         s = str(self.kmers.size)
         if self.name:
-            s += "\n" + self.name
+            s += " " + self.name
         return s
+
+    def nwk(self):
+        if self.isLeaf():
+            return self.name
+        else:
+            return "(" + ",".join([c.nwk() for c in self.children]) + ")"
+
 
 def intersectionStats(nodePair, intersections):
     node1, node2 = nodePair
@@ -32,8 +38,10 @@ def intersectionStats(nodePair, intersections):
         score = intersections[pair]
     else:
         #kint = np.intersect1d(k1, k2, assume_unique = True)
-        score = kmerizer.count_common(k1, k2)
+        common = kmerizer.count_common(k1, k2)
+        score = 2.0 * common / (k1.size + k2.size)
         intersections[pair] = score
+        #print score
         #print pair, stats
         #sys.stdout.flush()
     return score
@@ -43,7 +51,7 @@ def buildTree(tree, intersections):
     # calculate the intersection stats of kmers for all tree node pairs
     intStats = [(pair, intersectionStats(pair, intersections)) for pair in  combinations(tree, 2)]
     intStats.sort(lambda a, b: cmp(b[1], a[1]))
-    closePair, stats = intStats[0]
+    closePair, score = intStats[0]
     n1, n2 = closePair
     k1 = n1.kmers
     k2 = n2.kmers
@@ -58,43 +66,60 @@ def buildTree(tree, intersections):
     newNode.kmers = kint
     n1.kmers = k1diff
     n2.kmers = k2diff
+    print score,
     #print n1, k1diff.size
     #print n2, k2diff.size
-    print newNode, kint.size, k1diff.size, k2diff.size
-    print 'tree:', newTree
-    sys.stdout.flush()
+    #print newNode, kint.size, k1diff.size, k2diff.size
+    #sys.stdout.flush()
     return newTree
 
 
-def graphTree(graph, tree, parentNode):
+def graphTree(graph, tree, parentNode, vsSample = None):
     leaf = tree.isLeaf()
     nodeLabel = tree.label()
-    node = pydot.Node(nodeLabel)
+    color = 1
+    textcolor = 9
+    if type(vsSample) != type(None) and tree.kmers.size > 0:
+        common = kmerizer.count_common(tree.kmers, vsSample)
+        #nodeLabel = str(common) + "/" + nodeLabel
+        frac = float(common) / tree.kmers.size
+        nodeLabel = "%.1f%%\n%s" % (100.0 * frac, nodeLabel)
+        color = int(round(frac * frac * 8.0)) + 1
+        if color >= 7: textcolor = 1
+    node = pydot.Node(nodeLabel, style="filled", colorscheme='blues9', fillcolor=color, fontcolor=textcolor)
     graph.add_node(node)
     if parentNode:
         graph.add_edge(pydot.Edge(parentNode, node))
     if not leaf:
         for child in tree.children:
-            graphTree(graph, child, node)
-
-def nwk(tree):
-    if tree.isLeaf():
-        return tree.label()
-    else:
-        return '(' + ','.join([nwk(child) for child in tree.children]) + ')' + tree.label()
-
+            graphTree(graph, child, node, vsSample)
 
 ###
 ### Main
 ###
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--verbose", help="increase output verbosity",
+                    action="store_true")
+parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
+                    action="store_true")
+parser.add_argument("--nwk", help="File to receive NWK format tree")
+parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
+parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
+parser.add_argument('genomes', nargs='+',
+                    help='kmerized genome npz files')
+args = parser.parse_args()
+
 nodes = []
 
-for arg in sys.argv[1:]:
+for arg in args.genomes:
     # just using fingerprint for now
     name = arg.split(".")[0]
-    fingerprint = kmertools.loadFingerprint(arg)
-    nodes.append(TreeNode(fingerprint, name = name))
+    if args.fingerprint:
+        kmers = kmertools.loadFingerprint(arg)
+    else:
+        kmers = kmertools.loadKmers(arg)
+    nodes.append(TreeNode(kmers, name = name))
 
 nleaves = len(nodes)
 print 'Loaded', nleaves, 'genomes'
@@ -106,8 +131,17 @@ while len(tree) > 1:
     print len(tree)
     sys.stdout.flush()
 
-graph = pydot.Dot(graph_type='graph', rankdir='LR')
-graphTree(graph, tree[0], None)
-graph.write_png("kmertree.png")
+if args.sample:
+    sampleKmers = kmertools.loadKmers(args.sample)
+else:
+    sampleKmers = None
 
-print nwk(tree[0]) + ';'
+
+if args.dot:
+    graph = pydot.Dot(graph_type='graph', rankdir='LR')
+    graphTree(graph, tree[0], None, sampleKmers)
+    graph.write_png(args.dot)
+
+if args.nwk:
+    with open(args.nwk, 'w') as nwk:
+        print >>nwk, tree[0].nwk() + ';'

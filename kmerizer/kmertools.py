@@ -38,7 +38,7 @@ def openSeqFile(fileName):
         fileType = "fasta"
     return SeqIO.parse(file, fileType)
 
-def loadNpz(filename, thing):
+def loadNpz(fileName, thing):
     """
     :param fileName: A numpy npz file
     :param thing: A file element of the npz file to return
@@ -47,11 +47,13 @@ def loadNpz(filename, thing):
     data = np.load(fileName)
     return data[thing]
 
+def loadKmers(fileName):
+    return loadNpz(fileName, "kmers")
+
+def loadCounts(fileName):
+    return loadNpz(fileName, "counts")
+
 def loadFingerprint(fileName):
-    """
-    :param fileName: A numpy npz file containing a 'fingerprint' array
-    :return: the fingerprint array
-    """
     return loadNpz(fileName, "fingerprint")
 
 class KmerSet:
@@ -112,13 +114,19 @@ class KmerSet:
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
 
-    def hashKmers(self):
-        hashedKmers = self.kmers ^ HASH_BITS
+    def hashKmers(self, kmers):
+        mask = (1 << (2 * self.k)) - 1
+        hashedKmers = kmers ^ (HASH_BITS & mask)
         hashedKmers.sort()
         return hashedKmers
 
+    def unHashKmers(self, kmers):
+        # un-do the hash function; this trival one self-reverses
+        return self.hashKmers(kmers)
+
     def minHash(self, nkmers = 10000):
-        self.fingerprint = self.hashKmers()[:nkmers]
+        self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
+        self.fingerprint = self.unHashKmers(self.fingerprint)
         return self.fingerprint
 
     def freqFilter(self, minFreq = 1, maxFreq = None):
@@ -127,6 +135,7 @@ class KmerSet:
             condition &= (self.counts <= maxFreq)
         self.kmers = self.kmers[condition]
         self.counts = self.counts[condition]
+
     def spectrum(self):
         return np.unique(self.counts, return_counts=True)
 

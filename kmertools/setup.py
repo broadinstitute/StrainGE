@@ -1,6 +1,6 @@
 from distutils.core import setup, Extension
 
-setup (name = 'kmerizer',
+setup (name = 'kmertools',
        version = '1.0',
        author = 'Bruce Walker',
        author_email = 'bruce@w1bw.us',

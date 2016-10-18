@@ -1,39 +1,48 @@
 #!/usr/bin/env python
 import sys
+import argparse
 import kmertools
 import numpy as np
-from optparse import OptionParser
 
-parser = OptionParser()
-parser.add_option("-k", type='int', help="Kmer size", default=31)
-parser.add_option("-s", "--spectrum", type='str', help='File to store kmer spectrum png')
-parser.add_option("-m", "--smax", type='int', default=300, help="Maximum frequency in spectrum plot")
-parser.add_option("-o", "--output", type='str', help="Output file for kmers and counts")
-parser.add_option("-c", "--compress", action='store_true', help="Store kmer output file in compressed format")
-parser.add_option("-f", "--fingerprint", action='store_true', help="Store MinHash fingerprint")
-parser.add_option("--filter", action='store_true', help="Auto-filter based on kmer spectrum")
 
-(options, args) = parser.parse_args()
 
-kset = kmertools.KmerSet(options.k)
+parser = argparse.ArgumentParser()
+parser.add_argument('sequences', nargs='+',
+                    help='Input sequence files (fasta or fastq; optionally compressed with gz or bz2)')
+parser.add_argument("-k", "--K", help="Kmer size (default 31)", type=int, default=31)
+parser.add_argument("-o", "--output", help="Output file (in numpy npz format)")
+parser.add_argument("-f", "--fingerprint", help="Include kmer fingerprint in output file for quick matching",
+                    action="store_true")
+parser.add_argument("-c", "--compress", help="Compress output file",
+                    action="store_true")
+parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
+                    action="store_true")
+parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
+args = parser.parse_args()
 
-for arg in args:
+kset = kmertools.KmerSet(args.K)
+
+for arg in args.sequences:
     print 'Kmerizing', arg
     kset.kmerizeFile(arg)
 
-if options.filter:
+if args.spectrum:
+    thresholds = kset.spectrumMinMax()
+    if thresholds:
+        kset.plotSpectrum(args.spectrum, thresholds[2])
+    else:
+        kset.plotSpectrum(args.spectrum)
+
+if args.filter:
     thresholds = kset.spectrumFilter()
     if thresholds:
         print 'Keeping kmers with frequency in the range', thresholds
     kset.printStats()
 
-if options.fingerprint:
+if args.fingerprint:
     kset.minHash()
 
-if options.output:
-    print 'Writing output to', options.output
-    kset.save(options.output, options.compress)
-
-if options.spectrum:
-    kset.plotSpectrum(options.spectrum, options.smax)
+if args.output:
+    print 'Writing output to', args.output
+    kset.save(args.output, args.compress)
 

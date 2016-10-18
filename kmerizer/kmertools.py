@@ -139,24 +139,37 @@ class KmerSet:
     def spectrum(self):
         return np.unique(self.counts, return_counts=True)
 
-    def spectrumMinMax(self, delta = .5):
+    def spectrumMinMax(self, delta = .5, maxCopyNumber = 20):
         freq, counts = self.spectrum()
         minIndex = 0
         maxIndex = 0
+        haveMin = False
+        haveMax = False
         for i in xrange(freq.size):
             count = counts[i]
-            if minIndex and counts[i] > counts[maxIndex]:
+            if freq[i] != i + 1 or (haveMax and count > counts[maxIndex] * maxCopyNumber):
+                break
+            if haveMin:
+                if count > counts[maxIndex]:
+                    maxIndex = i
+                if count < counts[maxIndex] * (1 - delta):
+                    haveMax = True
+            elif count > counts[minIndex] * (1 + delta):
+                haveMin = True
+            elif count < counts[minIndex]:
+                minIndex = i
                 maxIndex = i
             elif counts[i] < counts[minIndex]:
                 minIndex = maxIndex = i
-            if minIndex and maxIndex and counts[i] < counts[maxIndex] * (1 - delta):
-                return (freq[minIndex], freq[maxIndex])
+            #print i, freq[i], count, haveMin, freq[minIndex], haveMax, freq[maxIndex]
+        if minIndex and maxIndex and counts[maxIndex] > counts[minIndex] * (1 + delta):
+            return (freq[minIndex], freq[maxIndex], freq[i-1])
         return None
 
     def spectrumFilter(self, maxCopyNumber = 20):
         thresholds = self.spectrumMinMax()
         if thresholds:
-            self.freqFilter(thresholds[0], thresholds[1] * maxCopyNumber)
+            self.freqFilter(thresholds[0], thresholds[2])
         return thresholds
 
 

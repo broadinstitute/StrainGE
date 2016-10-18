@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import sys
 import argparse
+import random
+import string
 from itertools import combinations
 import kmertools
 import kmerizer
@@ -74,11 +76,13 @@ def buildTree(tree, intersections):
     return newTree
 
 
+
 def graphTree(graph, tree, parentNode, vsSample = None):
     leaf = tree.isLeaf()
     nodeLabel = tree.label()
     color = 1
     textcolor = 9
+    id = ''.join([random.choice(string.ascii_letters) for _ in xrange(8)])
     if type(vsSample) != type(None) and tree.kmers.size > 0:
         common = kmerizer.count_common(tree.kmers, vsSample)
         #nodeLabel = str(common) + "/" + nodeLabel
@@ -86,7 +90,7 @@ def graphTree(graph, tree, parentNode, vsSample = None):
         nodeLabel = "%.1f%%\n%s" % (100.0 * frac, nodeLabel)
         color = int(round(frac * frac * 8.0)) + 1
         if color >= 7: textcolor = 1
-    node = pydot.Node(nodeLabel, style="filled", colorscheme='blues9', fillcolor=color, fontcolor=textcolor)
+    node = pydot.Node(id, label=nodeLabel, style="filled", colorscheme='blues9', fillcolor=color, fontcolor=textcolor)
     graph.add_node(node)
     if parentNode:
         graph.add_edge(pydot.Edge(parentNode, node))

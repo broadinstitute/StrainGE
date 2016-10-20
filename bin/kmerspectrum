@@ -2,6 +2,7 @@
 import sys
 import argparse
 import kmertools
+import kmerizer
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -10,15 +11,39 @@ parser.add_argument('kmerfiles', nargs='+',
                     help='Input kmer files (npz with counts)')
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
 parser.add_argument("-m", "--max", type=int, help="Max frequence for kmer spectrum plot")
+parser.add_argument("-r", "--ref", help="Reference kmer file for comparison")
 args = parser.parse_args()
 
 kset = kmertools.KmerSet()
-
 
 for kmerfile in args.kmerfiles:
     kset.load(kmerfile)
     spectrum = kset.spectrum()
     plt.semilogy(spectrum[0], spectrum[1], label=kmerfile.split('.')[0])
+
+if args.ref:
+    OFFSET = 1000000
+    kref = kmertools.KmerSet()
+    kref.load(args.ref)
+    pseudoCounts = np.maximum(kref.counts, OFFSET)
+    (allKmers, allCounts) = kmerizer.merge_counts(kref.kmers, pseudoCounts, kset.kmers, kset.counts)
+    genomic = allCounts >= OFFSET
+    genomicCounts = allCounts[genomic]
+    genomicCounts -= OFFSET
+    genomicSpectrum = np.unique(genomicCounts, return_counts=True)
+    plt.semilogy(genomicSpectrum[0], genomicSpectrum[1], label='genomic')
+    bogusCounts = allCounts[np.logical_not(genomic)]
+    bogusSpectrum = np.unique(bogusCounts, return_counts=True)
+    plt.semilogy(bogusSpectrum[0], bogusSpectrum[1], label='bogus')
+    # if we used a given cutoff, how many errors would we have?
+    freq = range(1, 200)
+    errors = []
+    for f in freq:
+        fp = bogusCounts[bogusCounts >= f].size
+        fn = genomicCounts[genomicCounts < f].size
+        errors.append(fp + fn)
+    print 'Min errors:', min(errors)
+    plt.semilogy(freq, errors, label='total errors')
 
 plt.xlabel("Kmer Frequency")
 plt.ylabel("Number of Kmers")

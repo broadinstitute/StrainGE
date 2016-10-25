@@ -100,6 +100,8 @@ def graphTree(graph, tree, parentNode, vsSample = None):
             graphTree(graph, child, node, vsSample)
 
 
+
+
 def dedupeTree(tree):
     def gatherKmers(node):
         if node.isLeaf():
@@ -107,13 +109,22 @@ def dedupeTree(tree):
         else:
             return [kmers for child in node.children for kmers in gatherKmers(child)] + [node.kmers]
 
-    def dedupe(node, unique, parent):
-        for child in node.children:
-            dedupe(child, unique, node)
+    def dedupe(node, unique):
         node.kmers = np.intersect1d(node.kmers, unique, assume_unique=True)
-        if parent and node.kmers.size == 0:
-            parent.children.remove(node)
-            parent.children = parent.children + node.children
+        for child in node.children:
+            dedupe(child, unique)
+        return
+
+    def simplifyTree(node, parent = None):
+        # first simplify tree below us
+        for child in node.children:
+            simplifyTree(child, node)
+        # adopt grandchildren where our child is dead
+        deadChildren = [child for child in node.children if child.kmers.size == 0 and not child.isLeaf()]
+        grandChildren = [grandChild for child in deadChildren for grandChild in child.children]
+        for child in deadChildren:
+            node.children.remove(child)
+        node.children += grandChildren
 
     print 'Deduping:',
     kmerList = gatherKmers(tree)
@@ -123,7 +134,8 @@ def dedupeTree(tree):
     print distinctKmers[0].size, 'distinct,',
     uniqueKmers = distinctKmers[0][distinctKmers[1] == 1]
     print uniqueKmers.size, 'unique'
-    dedupe(tree, uniqueKmers, None)
+    dedupe(tree, uniqueKmers)
+    simplifyTree(tree)
 
 
 ###

@@ -44,16 +44,16 @@ def intersectionStats(nodePair, intersections):
         # Use Jaccard similarity index
         score = float(common) / float(k1.size + k2.size - common)
         intersections[pair] = score
-        #print score
-        #print pair, stats
-        #sys.stdout.flush()
     return score
 
+def similarityScores(tree, intersections):
+    # calculate the intersection stats of kmers for all tree node pairs
+    intStats = [(pair, intersectionStats(pair, intersections)) for pair in combinations(tree, 2)]
+    intStats.sort(lambda a, b: cmp(b[1], a[1]))
+    return intStats
 
 def buildTree(tree, intersections):
-    # calculate the intersection stats of kmers for all tree node pairs
-    intStats = [(pair, intersectionStats(pair, intersections)) for pair in  combinations(tree, 2)]
-    intStats.sort(lambda a, b: cmp(b[1], a[1]))
+    intStats = similarityScores(tree, intersections)
     closePair, score = intStats[0]
     n1, n2 = closePair
     k1 = n1.kmers
@@ -151,6 +151,7 @@ parser.add_argument("--dedupe", action="store_true", help="Remove duplicate kmer
 parser.add_argument("--nwk", help="File to receive NWK format tree")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
+parser.add_argument("--similarity", help="Similarity score output file")
 parser.add_argument('genomes', nargs='+',
                     help='kmerized genome npz files')
 args = parser.parse_args()
@@ -171,6 +172,16 @@ print 'Loaded', nleaves, 'genomes'
 
 intersections = {}
 tree = nodes
+
+if args.similarity:
+    # pre-compute pairwise similarity
+    stats = similarityScores(tree, intersections)
+    with open(args.similarity, "w") as similarityFile:
+        for stat in stats:
+            (pair, score) = stat
+            print >>similarityFile, pair[0].name, pair[1].name, score
+
+
 while len(tree) > 1:
     tree = buildTree(tree, intersections)
     print len(tree)

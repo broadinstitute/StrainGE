@@ -89,7 +89,7 @@ def graphTree(graph, tree, parentNode, vsSample = None):
         #nodeLabel = str(common) + "/" + nodeLabel
         frac = float(common) / tree.kmers.size
         nodeLabel = "%.1f%%\n%s" % (100.0 * frac, nodeLabel)
-        color = int(round(frac * frac * 8.0)) + 1
+        color = int(round(frac * 8.0)) + 1
         if color >= 7: textcolor = 1
     node = pydot.Node(id, label=nodeLabel, style="filled", colorscheme='blues9', fillcolor=color, fontcolor=textcolor)
     graph.add_node(node)
@@ -98,6 +98,35 @@ def graphTree(graph, tree, parentNode, vsSample = None):
     if not leaf:
         for child in tree.children:
             graphTree(graph, child, node, vsSample)
+
+
+def dedupeTree(tree):
+    def gatherKmers(node):
+        if node.isLeaf():
+            return [node.kmers]
+        else:
+            return [kmers for child in node.children for kmers in gatherKmers(child)] + [node.kmers]
+
+    def dedupe(node, unique, parent):
+        for child in node.children:
+            dedupe(child, unique, node)
+        node.kmers = np.intersect1d(node.kmers, unique, assume_unique=True)
+        if parent and node.kmers.size == 0:
+            parent.children.remove(node)
+            parent.children = parent.children + node.children
+
+    print 'Deduping'
+    kmerList = gatherKmers(tree)
+    allKmers = np.concatenate(kmerList)
+    print allKmers.size, 'kmers'
+    distinctKmers = np.unique(allKmers, return_counts = True)
+    print distinctKmers[0].size, 'distinct'
+    print distinctKmers[1]
+    uniqueKmers = distinctKmers[0][distinctKmers[1] == 1]
+    print uniqueKmers.size, 'unique'
+    dedupe(tree, uniqueKmers, None)
+    print 'done deduping'
+
 
 ###
 ### Main
@@ -108,6 +137,7 @@ parser.add_argument("--verbose", help="increase output verbosity",
                     action="store_true")
 parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
                     action="store_true")
+parser.add_argument("--dedupe", action="store_true", help="Remove duplicate kmers from tree")
 parser.add_argument("--nwk", help="File to receive NWK format tree")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
@@ -135,6 +165,9 @@ while len(tree) > 1:
     tree = buildTree(tree, intersections)
     print len(tree)
     sys.stdout.flush()
+
+if args.dedupe:
+    dedupeTree(tree[0])
 
 if args.sample:
     sampleKmers = kmertools.loadKmers(args.sample)

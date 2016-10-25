@@ -115,17 +115,15 @@ def dedupeTree(tree):
             parent.children.remove(node)
             parent.children = parent.children + node.children
 
-    print 'Deduping'
+    print 'Deduping:',
     kmerList = gatherKmers(tree)
     allKmers = np.concatenate(kmerList)
-    print allKmers.size, 'kmers'
+    print allKmers.size, 'kmers,',
     distinctKmers = np.unique(allKmers, return_counts = True)
-    print distinctKmers[0].size, 'distinct'
-    print distinctKmers[1]
+    print distinctKmers[0].size, 'distinct,',
     uniqueKmers = distinctKmers[0][distinctKmers[1] == 1]
     print uniqueKmers.size, 'unique'
     dedupe(tree, uniqueKmers, None)
-    print 'done deduping'
 
 
 ###

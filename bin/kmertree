@@ -41,7 +41,8 @@ def intersectionStats(nodePair, intersections):
     else:
         #kint = np.intersect1d(k1, k2, assume_unique = True)
         common = kmerizer.count_common(k1, k2)
-        score = 2.0 * common / (k1.size + k2.size)
+        # Use Jaccard similarity index
+        score = float(common) / float(k1.size + k2.size - common)
         intersections[pair] = score
         #print score
         #print pair, stats
@@ -68,7 +69,7 @@ def buildTree(tree, intersections):
     newNode.kmers = kint
     n1.kmers = k1diff
     n2.kmers = k2diff
-    print score,
+    print "%.3f" % score,
     #print n1, k1diff.size
     #print n2, k2diff.size
     #print newNode, kint.size, k1diff.size, k2diff.size

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import argparse
+import csv
 import random
 import string
 from itertools import combinations
@@ -176,10 +177,11 @@ tree = nodes
 if args.similarity:
     # pre-compute pairwise similarity
     stats = similarityScores(tree, intersections)
-    with open(args.similarity, "w") as similarityFile:
+    with open(args.similarity, "w") as simFile:
+        csvwriter = csv.writer(simFile, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
         for stat in stats:
             (pair, score) = stat
-            print >>similarityFile, pair[0].name, pair[1].name, score
+            csvwriter.writerow([pair[0].name, pair[1].name, "%.5f" % score])
 
 
 while len(tree) > 1:

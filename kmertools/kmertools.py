@@ -64,6 +64,13 @@ def loadCounts(fileName):
 def loadFingerprint(fileName):
     return loadNpz(fileName, "fingerprint")
 
+def similarityScore(kmers1, kmers2):
+    """Compute Jaccard similarity index"""
+    intersection = kmerizer.count_common(kmers1, kmers2)
+    # Use Jaccard similarity index
+    score = float(intersection) / float(kmers1.size + kmers2.size - intersection)
+    return score
+
 class KmerSet:
     """
     Holds array of kmers and their associated counts & stats.

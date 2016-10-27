@@ -41,10 +41,7 @@ def intersectionStats(nodePair, intersections):
     if pair in intersections:
         score = intersections[pair]
     else:
-        #kint = np.intersect1d(k1, k2, assume_unique = True)
-        common = kmerizer.count_common(k1, k2)
-        # Use Jaccard similarity index
-        score = float(common) / float(k1.size + k2.size - common)
+        score = kmertools.similarityScore(k1, k2)
         intersections[pair] = score
     return score
 

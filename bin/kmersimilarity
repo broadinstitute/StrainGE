@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+import sys
+import argparse
+import csv
+from itertools import combinations
+import kmertools
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
+                    action="store_true")
+parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
+parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
+parser.add_argument('strains', nargs='+',
+                    help='kmerized strain npz files')
+args = parser.parse_args()
+
+
+def baseName(fileName):
+    return fileName.split('.')[0]
+
+if args.fingerprint:
+    loader = kmertools.loadFingerprint
+else:
+    loader = kmertools.loadKmers
+
+
+strains = [(baseName(arg), loader(arg)) for arg in args.strains]
+
+scoreFormat = "%.5f"
+
+if args.sample:
+    name = baseName(args.sample)
+    print >>sys.stderr, 'Computing similarity of', name, 'vs. strins'
+    kmers = loader(args.sample)
+    scores = [(name, strainName, kmertools.similarityScore(kmers, strainKmers)) for (strainName, strainKmers) in strains]
+else:
+    print >>sys.stderr, 'Computing pairwise similarity'
+    scores = []
+    for pair in combinations(strains, 2):
+        strain1, strain2 = pair
+        s1name, s1kmers = strain1
+        s2name, s2kmers = strain2
+        scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers)))
+
+scores.sort(lambda a, b: cmp(b[2], a[2]))
+
+if args.similarity:
+    output = open(args.similarity, 'w')
+else:
+    output = sys.stdout
+csvwriter = csv.writer(output, delimiter="\t", lineterminator="\n")
+
+
+for name1, name2, score in scores:
+    csvwriter.writerow((name1, name2, scoreFormat % score))

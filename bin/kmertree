@@ -197,7 +197,7 @@ if args.similarity:
     print 'Computing pairwise similarity'
     stats = similarityScores(nodes, intersections)
     with open(args.similarity, "w") as simFile:
-        csvwriter = csv.writer(simFile, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
+        csvwriter = csv.writer(simFile, delimiter="\t", lineterminator="\n")
         for stat in stats:
             (pair, score) = stat
             csvwriter.writerow([pair[0].name, pair[1].name, "%.5f" % score])

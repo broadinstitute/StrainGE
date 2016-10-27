@@ -24,18 +24,15 @@ if args.fingerprint:
 else:
     loader = kmertools.loadKmers
 
-
-strains = [(baseName(arg), loader(arg)) for arg in args.strains]
-
-scoreFormat = "%.5f"
-
 if args.sample:
     name = baseName(args.sample)
-    print >>sys.stderr, 'Computing similarity of', name, 'vs. strins'
+    print >>sys.stderr, 'Computing similarity of', name, 'vs. strains'
     kmers = loader(args.sample)
-    scores = [(name, strainName, kmertools.similarityScore(kmers, strainKmers)) for (strainName, strainKmers) in strains]
+    scores = [(name, baseName(strain), kmertools.similarityScore(kmers, loader(strain)))
+              for strain in args.strains]
 else:
     print >>sys.stderr, 'Computing pairwise similarity'
+    strains = [(baseName(arg), loader(arg)) for arg in args.strains]
     scores = []
     for pair in combinations(strains, 2):
         strain1, strain2 = pair
@@ -53,4 +50,4 @@ csvwriter = csv.writer(output, delimiter="\t", lineterminator="\n")
 
 
 for name1, name2, score in scores:
-    csvwriter.writerow((name1, name2, scoreFormat % score))
+    csvwriter.writerow((name1, name2, "%.5f" % score))

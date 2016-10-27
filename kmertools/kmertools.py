@@ -16,6 +16,14 @@ BASES = "ACGT"
 # A random 64-bit number used in hashing function
 HASH_BITS = 0x29679e096c8c07bf
 
+
+def kmerString(k, kmer):
+    seq = ''.join([BASES[(kmer >> (2 * k)) & 3] for k in xrange(k - 1, -1, -1)])
+    #seqrc = Seq.reverse_complement(seq)
+    #return ("%x" % kmer, seq, seqrc)
+    return seq
+
+
 def openSeqFile(fileName):
     """
     Open a sequence file with SeqIO; can be fasta or fastq with optional gz or bz2 compression.
@@ -214,9 +222,6 @@ class KmerSet:
             self.nKmers = self.counts.sum()
         if 'fingerprint' in npData.files:
             self.fingerprint = npData['fingerprint']
-
-    def kmerString(self, kmer):
-        return ''.join([BASES[(kmer >> shift) & 3] for shift in xrange(2 * self.k - 2, -1, -2)])
 
 
 

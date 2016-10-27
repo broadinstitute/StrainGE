@@ -6,7 +6,8 @@ import numpy as np
 from Bio.Seq import Seq
 
 seq = Seq('agcttttcattctgactgcaacgggcaatatgtctctgtgtggattaaaaaaagagtgtc')
-kset = kmertools.KmerSet(int(sys.argv[1]))
+k = int(sys.argv[1])
+kset = kmertools.KmerSet(k)
 kset.kmerizeSeq(str(seq))
 print kset.kmers, kset.counts
 hashed = kset.hashKmers(kset.kmers)
@@ -14,10 +15,8 @@ unhashed = kset.unHashKmers(hashed)
 print hashed
 print unhashed
 print kset.kmers == unhashed
-exit(0)
-for i in xrange(unhashed.size):
-    print "%16x" % kset.kmers[i]
-    print "%16x" % hashed[i]
-    print "%16x" % unhashed[i]
 
-
+print seq
+kmers = kmerizer.kmerize(k, str(seq))
+for km in kmers:
+    print kmertools.kmerString(k, int(km))

@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+import sys
+import argparse
+import csv
+import kmertools
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--fingerprint", help="dump fingerprint kmers instead of full set",
+                    action="store_true")
+parser.add_argument("-k", "--K", type=int, help="Kmer size")
+parser.add_argument("-o", "--output", help="Output file (default stdout)")
+parser.add_argument('strain', help='Kmer set .npz file')
+args = parser.parse_args()
+
+if args.output:
+    output = open(args.output, "w")
+else:
+    output = sys.stdout
+
+kset = kmertools.KmerSet(args.K)
+kset.load(args.strain)
+
+if args.fingerprint:
+    for i in xrange(kset.fingerprint.size):
+        print >> output, kmertools.kmerString(args.K, int(kset.fingerprint[i]))
+else:
+    for i in xrange(kset.kmers.size):
+        print >> output, "%s\t%d" % (kmertools.kmerString(args.K, int(kset.kmers[i])), kset.counts[i])
+
+
+
+
+

@@ -210,6 +210,12 @@ class KmerSet:
         else:
             plt.show()
 
+    def writeHistogram(self, fileName):
+        spectrum = self.spectrum()
+        with open(fileName, 'w') as hist:
+            for i in xrange(spectrum[0].size):
+                print >> hist, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
+
     def save(self, fileName, compress = False):
         kwargs = {'kmers': self.kmers, 'counts': self.counts}
         if type(self.fingerprint) != type(None):

@@ -196,6 +196,39 @@ kmerizer_merge_counts(PyObject *self, PyObject *args)
   return Py_BuildValue("(NN)", kmersOut, countsOut);
 }
 
+/* implementation of FNV1a for 64bit->64bit */
+/* 64 bit FNV_prime = 240 + 28 + 0xb3 */
+#define FNV_PRIME 1099511628211UL
+#define FNV_OFFSET 14695981039346656037UL
+
+static PyObject *
+kmerizer_fnvhash_kmers(PyObject *self, PyObject *args) {
+
+  PyObject *kmersIn;
+
+  if (!PyArg_ParseTuple(args, "O", &kmersIn))
+    return NULL;
+
+  npy_intp size = *PyArray_DIMS(kmersIn);
+  PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
+  kmer_t *kin = PyArray_GETPTR1(kmersIn, 0);
+  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
+
+  for (int i = 0; i < size; ++i) {
+    kmer_t kmer = kin[i];
+    kmer_t hash = FNV_OFFSET;
+    /* loop over bytes in original kmer */
+    for (int b = 0; b < 8; ++b) {
+      hash ^= (kmer & 0xff);
+      hash *= FNV_PRIME;
+      kmer >>= 8;
+    }
+    kout[i] = hash;
+  }
+  return kmersOut;
+}
+
+
 kmer_t HASH_BITS = 0x29679e096c8c07bf;
 kmer_t LOW_BIT_MASK = 0x5555555555555555;
 
@@ -258,6 +291,10 @@ kmerizer_unhash_kmers(PyObject *self, PyObject *args) {
   }
   return kmersOut;
 }
+
+
+
+
 static PyObject *KmerizerError;
 
 static PyMethodDef KmerizerMethods[] = {
@@ -271,6 +308,8 @@ static PyMethodDef KmerizerMethods[] = {
        "Count common elements in two sorted kmer arrays."},
       {"hash_kmers",  kmerizer_hash_kmers, METH_VARARGS,
        "Scrable bits of kmers as a hash function."},
+      {"fnvhash_kmers",  kmerizer_fnvhash_kmers, METH_VARARGS,
+       "Hash kmers using FNV1a hash algorithm."},
       {"unhash_kmers",  kmerizer_unhash_kmers, METH_VARARGS,
        "Unscrable bits of kmers to reverse hash function."},
       {NULL, NULL, 0, NULL}        /* Sentinel */

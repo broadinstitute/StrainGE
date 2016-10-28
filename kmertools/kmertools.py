@@ -147,9 +147,15 @@ class KmerSet:
         unhashed.sort()
         return unhashed
 
-    def minHash(self, nkmers = 10000):
+    def minHashBruce(self, nkmers = 10000):
         self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
         self.fingerprint = self.unHashKmers(self.fingerprint)
+        return self.fingerprint
+
+    def minHash(self, nkmers = 10000):
+        order = kmerizer.fnvhash_kmers(self.kmers).argsort()[:nkmers]
+        self.fingerprint = self.kmers[order]
+        self.fingerprint.sort()
         return self.fingerprint
 
     def freqFilter(self, minFreq = 1, maxFreq = None):

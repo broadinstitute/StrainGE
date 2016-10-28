@@ -203,12 +203,13 @@ kmerizer_merge_counts(PyObject *self, PyObject *args)
 
 static PyObject *
 kmerizer_fnvhash_kmers(PyObject *self, PyObject *args) {
-
+  int k;
   PyObject *kmersIn;
 
-  if (!PyArg_ParseTuple(args, "O", &kmersIn))
+  if (!PyArg_ParseTuple(args, "iO", &k, &kmersIn))
     return NULL;
 
+  int kbits = 2 * k;
   npy_intp size = *PyArray_DIMS(kmersIn);
   PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
   kmer_t *kin = PyArray_GETPTR1(kmersIn, 0);
@@ -218,7 +219,7 @@ kmerizer_fnvhash_kmers(PyObject *self, PyObject *args) {
     kmer_t kmer = kin[i];
     kmer_t hash = FNV_OFFSET;
     /* loop over bytes in original kmer */
-    for (int b = 0; b < 8; ++b) {
+    for (int b = kbits; b > 0; b -= 8) {
       hash ^= (kmer & 0xff);
       hash *= FNV_PRIME;
       kmer >>= 8;

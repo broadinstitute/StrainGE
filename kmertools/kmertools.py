@@ -153,7 +153,7 @@ class KmerSet:
         return self.fingerprint
 
     def minHash(self, nkmers = 10000):
-        order = kmerizer.fnvhash_kmers(self.kmers).argsort()[:nkmers]
+        order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
         self.fingerprint = self.kmers[order]
         self.fingerprint.sort()
         return self.fingerprint

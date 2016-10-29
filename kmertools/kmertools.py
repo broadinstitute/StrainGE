@@ -136,23 +136,30 @@ class KmerSet:
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
 
-    def hashKmers(self, kmers):
-        hashed = kmerizer.hash_kmers(self.k, kmers)
-        hashed.sort()
-        return hashed
+    # def hashKmers(self, kmers):
+    #     hashed = kmerizer.hash_kmers(self.k, kmers)
+    #     hashed.sort()
+    #     return hashed
+    #
+    # def unHashKmers(self, kmers):
+    #     # un-do the hash function; this trival one self-reverses
+    #     unhashed = kmerizer.unhash_kmers(self.k, kmers)
+    #     unhashed.sort()
+    #     return unhashed
+    #
+    # def minHashBruce(self, nkmers = 10000):
+    #     self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
+    #     self.fingerprint = self.unHashKmers(self.fingerprint)
+    #     return self.fingerprint
+    #
+    # def minHashFNV(self, nkmers = 10000):
+    #     order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
+    #     self.fingerprint = self.kmers[order]
+    #     self.fingerprint.sort()
+    #     return self.fingerprint
 
-    def unHashKmers(self, kmers):
-        # un-do the hash function; this trival one self-reverses
-        unhashed = kmerizer.unhash_kmers(self.k, kmers)
-        unhashed.sort()
-        return unhashed
-
-    def minHashBruce(self, nkmers = 10000):
-        self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
-        self.fingerprint = self.unHashKmers(self.fingerprint)
-        return self.fingerprint
-
-    def minHash(self, nkmers = 10000):
+    def minHash(self, frac = 0.002):
+        nkmers = int(round(self.kmers.size * frac))
         order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
         self.fingerprint = self.kmers[order]
         self.fingerprint.sort()

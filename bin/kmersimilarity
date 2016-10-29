@@ -16,23 +16,20 @@ parser.add_argument('strains', nargs='+',
 args = parser.parse_args()
 
 
-def baseName(fileName):
-    return fileName.split('.')[0]
-
 if args.fingerprint:
     loader = kmertools.loadFingerprint
 else:
     loader = kmertools.loadKmers
 
 if args.sample:
-    name = baseName(args.sample)
+    name = kmertools.nameFromPath(args.sample)
     print >>sys.stderr, 'Computing similarity of', name, 'vs. strains'
     kmers = loader(args.sample)
-    scores = [(name, baseName(strain), kmertools.similarityScore(kmers, loader(strain)))
+    scores = [(name, kmertools.nameFromPath(strain), kmertools.similarityScore(kmers, loader(strain)))
               for strain in args.strains]
 else:
     print >>sys.stderr, 'Computing pairwise similarity'
-    strains = [(baseName(arg), loader(arg)) for arg in args.strains]
+    strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
     scores = []
     for pair in combinations(strains, 2):
         strain1, strain2 = pair

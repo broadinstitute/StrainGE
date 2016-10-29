@@ -1,4 +1,4 @@
-import sys
+import os
 import gzip
 import bz2
 from Bio import SeqIO
@@ -70,6 +70,9 @@ def similarityScore(kmers1, kmers2):
     # Use Jaccard similarity index
     score = float(intersection) / float(kmers1.size + kmers2.size - intersection)
     return score
+
+def nameFromPath(filePath):
+    return os.path.basename(filePath).split(".")[0]
 
 class KmerSet:
     """

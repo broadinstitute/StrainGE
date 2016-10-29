@@ -161,7 +161,7 @@ def treeFromNWK(nwkFile, nodes):
 
 
 def loadLeafNode(fileName, fingerprint):
-    name = arg.split(".")[0]
+    name = kmertools.nameFromPath(fileName)
     if args.fingerprint:
         kmers = kmertools.loadFingerprint(arg)
     else:

@@ -43,7 +43,7 @@ int kmerizer_kmerize_internal(int k, char *seq, int length, kmer_t *kmers) {
     fw = ((fw << 2) & mask) | value;
     rc = ((rc >> 2) & mask) | (RC(value) << shift);
     if (++n >= k) {
-      kmer_t kmer = (fw > rc) ? fw : rc;
+      kmer_t kmer = (fw < rc) ? fw : rc;
       *kmers++ = kmer;
       kcount++;
     }
@@ -74,6 +74,7 @@ kmerizer_kmerize(PyObject *self, PyObject *args)
 
   return result;
 }
+
 
 static PyObject *
 kmerizer_kmerize_into_array(PyObject *self, PyObject *args)
@@ -107,7 +108,6 @@ kmerizer_count_common_internal(kmer_t *kmers1, count_t size1, kmer_t *kmers2, co
   for (kcount = 0, i1 = 0, i2 = 0; i1 < size1 && i2 < size2; ) {
     kmer_t kmer1 = kmers1[i1];
     kmer_t kmer2 = kmers2[i2];
-    /*printf("count=%d i1=%d i2=%d k1=%lx k2=%lx c1=%d c2=%d\n", kcount, i1, i2, kmer1, kmer2, c1[i1], c2[i2]);*/
     if (kmer1 == kmer2) {
       /* in both */
       ++kcount;
@@ -118,7 +118,6 @@ kmerizer_count_common_internal(kmer_t *kmers1, count_t size1, kmer_t *kmers2, co
   }
   return kcount;
 }
-
 
 static PyObject *
 kmerizer_count_common(PyObject *self, PyObject *args)

@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('kmerfiles', nargs='+',
                     help='Input kmer files (npz with counts)')
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
-parser.add_argument("-o", "--output", help="Text output file for histogram")
+parser.add_argument("--histogram", help="Text output file for histogram (count of kmers by frequency)")
 parser.add_argument("-m", "--max", type=int, help="Max frequence for kmer spectrum plot")
 parser.add_argument("-r", "--ref", help="Reference kmer file for comparison")
 args = parser.parse_args()
@@ -22,11 +22,8 @@ for kmerfile in args.kmerfiles:
     spectrum = kset.spectrum()
     plt.semilogy(spectrum[0], spectrum[1], label=kmerfile.split('.')[0])
 
-if args.output:
-    # print output histogram text file
-    with open(args.output, 'w') as output:
-        for i in xrange(spectrum[0].size):
-            print >>output, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
+if args.histogram:
+    kset.writeHistogram(args.histogram)
 
 if args.ref:
     OFFSET = 1000000

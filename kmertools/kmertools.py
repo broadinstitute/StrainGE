@@ -139,20 +139,33 @@ class KmerSet:
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
 
-    def hashKmers(self, kmers):
-        hashed = kmerizer.hash_kmers(self.k, kmers)
-        hashed.sort()
-        return hashed
+    # def hashKmers(self, kmers):
+    #     hashed = kmerizer.hash_kmers(self.k, kmers)
+    #     hashed.sort()
+    #     return hashed
+    #
+    # def unHashKmers(self, kmers):
+    #     # un-do the hash function; this trival one self-reverses
+    #     unhashed = kmerizer.unhash_kmers(self.k, kmers)
+    #     unhashed.sort()
+    #     return unhashed
+    #
+    # def minHashBruce(self, nkmers = 10000):
+    #     self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
+    #     self.fingerprint = self.unHashKmers(self.fingerprint)
+    #     return self.fingerprint
+    #
+    # def minHashFNV(self, nkmers = 10000):
+    #     order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
+    #     self.fingerprint = self.kmers[order]
+    #     self.fingerprint.sort()
+    #     return self.fingerprint
 
-    def unHashKmers(self, kmers):
-        # un-do the hash function; this trival one self-reverses
-        unhashed = kmerizer.unhash_kmers(self.k, kmers)
-        unhashed.sort()
-        return unhashed
-
-    def minHash(self, nkmers = 10000):
-        self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
-        self.fingerprint = self.unHashKmers(self.fingerprint)
+    def minHash(self, frac = 0.002):
+        nkmers = int(round(self.kmers.size * frac))
+        order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
+        self.fingerprint = self.kmers[order]
+        self.fingerprint.sort()
         return self.fingerprint
 
     def freqFilter(self, minFreq = 1, maxFreq = None):
@@ -212,6 +225,12 @@ class KmerSet:
             plt.savefig(fileName)
         else:
             plt.show()
+
+    def writeHistogram(self, fileName):
+        spectrum = self.spectrum()
+        with open(fileName, 'w') as hist:
+            for i in xrange(spectrum[0].size):
+                print >> hist, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
 
     def save(self, fileName, compress = False):
         kwargs = {'kmers': self.kmers, 'counts': self.counts}

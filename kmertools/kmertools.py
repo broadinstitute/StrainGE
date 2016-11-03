@@ -269,8 +269,6 @@ class KmerSet:
                 print >> hist, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
 
     def save_npz(self, fileName, compress = False):
-        self.save_hdf5(fileName, compress)
-        t0 = time.time()
         kwargs = {'kmers': self.kmers, 'counts': self.counts}
         if self.fingerprint is not None:
             kwargs['fingerprint'] = self.fingerprint
@@ -290,8 +288,11 @@ class KmerSet:
         if 'fingerprint' in npData.files:
             self.fingerprint = npData['fingerprint']
 
-    def save(self, fileName, compress = None):
+    def save(self, fileName, compress = None, npz = False):
         """Save in HDF5 file format"""
+        if npz:
+            self.save_npz(fileName, compress)
+            return
         if compress is True:
             compress = "gzip"
         if not fileName.endswith(".hdf5"):

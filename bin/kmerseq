@@ -13,8 +13,8 @@ parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, defaul
 parser.add_argument("-o", "--output", help="Output file (in numpy npz format)")
 parser.add_argument("-f", "--fingerprint", help="Include kmer fingerprint in output file for quick matching",
                     action="store_true")
-parser.add_argument("-c", "--compress", help="Compress output file",
-                    action="store_true")
+parser.add_argument("-c", "--compress", help="Compress output file", action="store_true")
+parser.add_argument("--npz", help="Store output in npz format (default hdf5)", action="store_true")
 parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
                     action="store_true")
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
@@ -48,5 +48,5 @@ if args.fingerprint:
 
 if args.output:
     print 'Writing output to', args.output
-    kset.save(args.output, args.compress)
+    kset.save(args.output, compress=args.compress, npz=args.npz)
 

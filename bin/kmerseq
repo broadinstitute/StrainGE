@@ -9,7 +9,7 @@ import numpy as np
 parser = argparse.ArgumentParser()
 parser.add_argument('sequences', nargs='+',
                     help='Input sequence files (fasta or fastq; optionally compressed with gz or bz2)')
-parser.add_argument("-k", "--K", help="Kmer size (default 31)", type=int, default=31)
+parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
 parser.add_argument("-o", "--output", help="Output file (in numpy npz format)")
 parser.add_argument("-f", "--fingerprint", help="Include kmer fingerprint in output file for quick matching",
                     action="store_true")

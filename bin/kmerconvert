@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+import argparse
+import kmertools
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('genomes', nargs='+',
+                    help="npz file to convert to hdf5 file")
+parser.add_argument("-k", "--K", type=int, help="Kmer size", default=23)
+args = parser.parse_args()
+
+for npzfile in sys.argv[1:]:

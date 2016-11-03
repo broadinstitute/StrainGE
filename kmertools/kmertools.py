@@ -1,5 +1,7 @@
 import os
+import time
 import gzip
+import h5py
 import bz2
 from Bio import SeqIO
 import numpy as np
@@ -74,6 +76,36 @@ def similarityScore(kmers1, kmers2):
 def nameFromPath(filePath):
     return os.path.basename(filePath).split(".")[0]
 
+
+def kmerSetFromNpz(filePath, k):
+    if not filePath.endswith(".npz"):
+        filePath += ".npz"
+    kset = KmerSet(k)
+    data = np.load(filePath)
+    if "fingerprint" in data:
+        kset.fingerprint = data["fingerprint"]
+    if "kmers" in data:
+        kset.kmers = data["kmers"]
+    if "counts" in data:
+        kset.counts = data["counts"]
+    return kset
+
+
+def kmerSetFromHdf5(filePath):
+    if not filePath.endswith(".hdf5"):
+        filePath += ".hdf5"
+    with h5py.File(filePath, 'r') as h5:
+        assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
+        kset = KmerSet(h5.attrs['k'])
+        if "fingerprint" in h5:
+            kset.fingerprint = np.array(h5["fingerprint"])
+        if "kmers" in h5:
+            kset.kmers = np.array(h5["kmers"])
+        if "counts" in h5:
+            kset.counts = np.array(h5["counts"])
+    return kset
+
+
 class KmerSet:
     """
     Holds array of kmers and their associated counts & stats.
@@ -89,6 +121,10 @@ class KmerSet:
         self.nSeqs = 0
         self.nBases = 0
         self.nKmers = 0
+
+    def __eq__(self, other):
+        return self.k == other.k and np.array_equal(self.fingerprint, other.fingerprint) \
+               and np.array_equal(self.kmers, other.kmers) and np.array_equal(self.counts, other.counts)
 
     def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True):
         seqFile = openSeqFile(fileName)
@@ -126,7 +162,7 @@ class KmerSet:
 
         newKmers, newCounts = np.unique(batch[:nkmers], return_counts=True)
 
-        if type(self.kmers) == type(None):
+        if self.kmers is None:
             self.kmers = newKmers
             self.counts = newCounts
         else:
@@ -232,9 +268,11 @@ class KmerSet:
             for i in xrange(spectrum[0].size):
                 print >> hist, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
 
-    def save(self, fileName, compress = False):
+    def save_npz(self, fileName, compress = False):
+        self.save_hdf5(fileName, compress)
+        t0 = time.time()
         kwargs = {'kmers': self.kmers, 'counts': self.counts}
-        if type(self.fingerprint) != type(None):
+        if self.fingerprint is not None:
             kwargs['fingerprint'] = self.fingerprint
         if compress:
             func = np.savez_compressed
@@ -251,6 +289,24 @@ class KmerSet:
             self.nKmers = self.counts.sum()
         if 'fingerprint' in npData.files:
             self.fingerprint = npData['fingerprint']
+
+    def save(self, fileName, compress = None):
+        """Save in HDF5 file format"""
+        if compress is True:
+            compress = "gzip"
+        if not fileName.endswith(".hdf5"):
+            fileName += ".hdf5"
+        with h5py.File(fileName, 'w') as h5:
+            h5.attrs["type"] = np.string_("KmerSet")
+            h5.attrs["k"] = self.k;
+            if self.fingerprint is not None:
+                h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
+            if self.kmers is not None:
+                h5.create_dataset("kmers", data=self.kmers, compression=compress)
+            if self.counts is not None:
+                h5.create_dataset("counts", data=self.counts, compression=compress)
+
+
 
 
 

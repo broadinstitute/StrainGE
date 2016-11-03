@@ -4,9 +4,21 @@ import kmertools
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('genomes', nargs='+',
-                    help="npz file to convert to hdf5 file")
+parser.add_argument('npz', nargs='+',
+                    help="npz file(s) to convert to hdf5 file")
 parser.add_argument("-k", "--K", type=int, help="Kmer size", default=23)
+parser.add_argument("-c", "--compress", help="Compress output file",
+                    action="store_true")
 args = parser.parse_args()
 
-for npzfile in sys.argv[1:]:
+for npz in args.npz:
+    print "converting", npz,
+    kset = kmertools.kmerSetFromNpz(npz, args.K)
+    if npz.endswith(".npz"):
+        hdf5 = npz[:-4] + ".hdf5"
+    else:
+        hdf5 = npz + ".hdf5"
+    print "to", hdf5
+    kset.save(hdf5, compress=args.compress)
+
+

@@ -10,7 +10,7 @@ parser.add_argument("--fingerprint", help="dump fingerprint kmers instead of ful
                     action="store_true")
 parser.add_argument("-k", "--K", default=23, type=int, help="Kmer size (default 23)")
 parser.add_argument("-o", "--output", help="Output file (default stdout)")
-parser.add_argument('strain', help='Kmer set .npz file')
+parser.add_argument('strain', help='Kmer set hdf5 or npz file')
 args = parser.parse_args()
 
 if args.output:
@@ -27,6 +27,7 @@ if args.fingerprint:
 else:
     for i in xrange(kset.kmers.size):
         print >> output, "%s\t%d" % (kmertools.kmerString(args.K, int(kset.kmers[i])), kset.counts[i])
+
 
 
 

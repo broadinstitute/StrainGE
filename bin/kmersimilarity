@@ -12,7 +12,7 @@ parser.add_argument("--fingerprint", help="use minhash fingerprint instead of fu
 parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
 parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
 parser.add_argument('strains', nargs='+',
-                    help='kmerized strain npz files')
+                    help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
 
 

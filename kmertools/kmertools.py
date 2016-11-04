@@ -8,15 +8,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import kmerizer
 
+DEFAULT_K = 23
+
 A = 0
 C = 1
 G = 2
 T = 3
 
 BASES = "ACGT"
-
-# A random 64-bit number used in hashing function
-HASH_BITS = 0x29679e096c8c07bf
 
 
 def kmerString(k, kmer):
@@ -57,21 +56,28 @@ def loadNpz(fileName, thing):
     data = np.load(fileName)
     return data[thing]
 
+def loadHdf5(filePath, thing):
+    with h5py.File(filePath, 'r') as h5:
+        assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
+        return np.array(h5[thing])
+
 def loadKmers(fileName):
-    return loadNpz(fileName, "kmers")
+    if fileName.endswith(".npz"):
+        return loadNpz(fileName, "kmers")
+    else:
+        return loadHdf5(fileName, "kmers")
 
 def loadCounts(fileName):
-    return loadNpz(fileName, "counts")
+    if fileName.endswith(".npz"):
+        return loadNpz(fileName, "counts")
+    else:
+        return loadHdf5(fileName, "counts")
 
 def loadFingerprint(fileName):
-    return loadNpz(fileName, "fingerprint")
-
-def similarityScore(kmers1, kmers2):
-    """Compute Jaccard similarity index"""
-    intersection = kmerizer.count_common(kmers1, kmers2)
-    # Use Jaccard similarity index
-    score = float(intersection) / float(kmers1.size + kmers2.size - intersection)
-    return score
+    if fileName.endswith(".npz"):
+        return loadNpz(fileName, "fingerprint")
+    else:
+        return loadHdf5(fileName, "fingerprint")
 
 def nameFromPath(filePath):
     return os.path.basename(filePath).split(".")[0]
@@ -90,7 +96,6 @@ def kmerSetFromNpz(filePath, k):
         kset.counts = data["counts"]
     return kset
 
-
 def kmerSetFromHdf5(filePath):
     if not filePath.endswith(".hdf5"):
         filePath += ".hdf5"
@@ -106,12 +111,28 @@ def kmerSetFromHdf5(filePath):
     return kset
 
 
+
+def kmerSetFromFile(filePath, k = DEFAULT_K):
+    if filePath.endswith(".npz"):
+        return kmerSetFromNpz(filePath, k)
+    else:
+        return kmerSetFromHdf5(filePath)
+
+
+def similarityScore(kmers1, kmers2):
+    """Compute Jaccard similarity index"""
+    intersection = kmerizer.count_common(kmers1, kmers2)
+    # Use Jaccard similarity index
+    score = float(intersection) / float(kmers1.size + kmers2.size - intersection)
+    return score
+
+
 class KmerSet:
     """
     Holds array of kmers and their associated counts & stats.
     """
 
-    def __init__(self, k = 31):
+    def __init__(self, k = DEFAULT_K):
         self.k = k
         # data arrays
         self.kmers = None
@@ -278,15 +299,6 @@ class KmerSet:
             func = np.savez
         func(fileName, **kwargs)
 
-    def load(self, fileName):
-        npData = np.load(fileName)
-        if 'kmers' in npData.files:
-            self.kmers = npData['kmers']
-        if 'counts' in npData.files:
-            self.counts = npData['counts']
-            self.nKmers = self.counts.sum()
-        if 'fingerprint' in npData.files:
-            self.fingerprint = npData['fingerprint']
 
     def save(self, fileName, compress = None, npz = False):
         """Save in HDF5 file format"""
@@ -307,9 +319,29 @@ class KmerSet:
             if self.counts is not None:
                 h5.create_dataset("counts", data=self.counts, compression=compress)
 
+    def load_npz(self, fileName):
+        npData = np.load(fileName)
+        if 'kmers' in npData.files:
+            self.kmers = npData['kmers']
+        if 'counts' in npData.files:
+            self.counts = npData['counts']
+            self.nKmers = self.counts.sum()
+        if 'fingerprint' in npData.files:
+            self.fingerprint = npData['fingerprint']
 
-
-
+    def load(self, fileName):
+        if fileName.endswith(".npz"):
+            self.load_npz(fileName)
+            return
+        with h5py.File(fileName, 'r') as h5:
+            assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
+            self.k = KmerSet(h5.attrs['k'])
+            if "fingerprint" in h5:
+                self.fingerprint = np.array(h5["fingerprint"])
+            if "kmers" in h5:
+                self.kmers = np.array(h5["kmers"])
+            if "counts" in h5:
+                self.counts = np.array(h5["counts"])
 
 
 

@@ -15,7 +15,7 @@ treeNodeCount = 0
 
 class KmerTreeNode:
     def __init__(self, kmers, name = None, children = []):
-        if name is None:
+        if name is not None:
             self.name = name
         else:
             self.name = "node-" + str(treeNodeCount)
@@ -104,14 +104,13 @@ def graphTree(graph, tree, parentNode, vsSample = None):
 
 
 
+def gatherKmers(node):
+    if node.isLeaf():
+        return [node.kmers]
+    else:
+        return [kmers for child in node.children for kmers in gatherKmers(child)] + [node.kmers]
 
 def dedupeTree(tree):
-    def gatherKmers(node):
-        if node.isLeaf():
-            return [node.kmers]
-        else:
-            return [kmers for child in node.children for kmers in gatherKmers(child)] + [node.kmers]
-
     def dedupe(node, unique):
         node.kmers = np.intersect1d(node.kmers, unique, assume_unique=True)
         for child in node.children:
@@ -139,6 +138,30 @@ def dedupeTree(tree):
     print uniqueKmers.size, 'unique'
     dedupe(tree, uniqueKmers)
     simplifyTree(tree)
+
+
+def countTree(tree):
+
+    def setCounts(node, allKmers, allCounts):
+        OFFSET = 1000000000
+        print 'setCounts', node.name
+        counts = np.empty(node.kmers.size, dtype=np.int64)
+        counts = OFFSET
+        merged = kmerizer.merge_counts(node.kmers, counts, allKmers, allCounts)
+        mine = merged[1] >= OFFSET
+        node.kmers = node.kmers[mine]
+        node.counts = merged[1][mine]
+        node.counts -= OFFSET
+        for child in node.children:
+            setCounts(child, allKmers, allCounts)
+        return
+
+    print 'Setting node kmer counts',
+    kmerList = gatherKmers(tree)
+    allKmers = np.concatenate(kmerList)
+    distinctKmers = np.unique(allKmers, return_counts=True)
+    setCounts(tree, distinctKmers[0], distinctKmers[1])
+
 
 def treeFromNWK(nwkFile, nodes):
     nwk = open(nwkFile, 'r')
@@ -215,6 +238,8 @@ else:
         print len(nodes)
         sys.stdout.flush()
     tree = nodes[0]
+
+countTree(tree)
 
 if args.dedupe:
     dedupeTree(tree)

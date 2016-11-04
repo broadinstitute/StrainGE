@@ -2,6 +2,7 @@
 import sys
 import argparse
 import csv
+import h5py
 import random
 import re
 import string
@@ -14,22 +15,26 @@ import pydot
 treeNodeCount = 0
 
 class KmerTreeNode:
-    def __init__(self, kmers, name = None, children = []):
-        if name is not None:
+    """Class to recursively hold tree representation"""
+    def __init__(self, kmers, name = None, children = [], counts = None):
+        global treeNodeCount
+        if name:
             self.name = name
         else:
+            treeNodeCount += 1
             self.name = "node-" + str(treeNodeCount)
         self.kmers = kmers
-        self.counts = None
+        self.counts = counts
         self.children = children
 
     def isLeaf(self):
         return not self.children
 
     def label(self):
-        s = str(self.kmers)
-        if not self.isLeaf():
-            s += " " + self.name
+        s = str(self.kmers.size)
+        if self.counts is not None:
+            s += "/" + str((self.counts == 1).sum())
+        s += " " + self.name
         return s
 
     def nwk(self):
@@ -37,6 +42,20 @@ class KmerTreeNode:
             return self.name
         else:
             return "(" + ",".join([c.nwk() for c in self.children]) + ")"
+
+    def saveHdf5(self, h5node, compress = True):
+        if compress is True:
+            compress = "gzip"
+        h5node.attrs["type"] = np.string_("KmerTreeNode")
+        h5node.attrs["name"] = np.string_(self.name)
+        #h5.attrs["k"] = self.k;
+        if self.kmers is not None:
+            h5node.create_dataset("kmers", data=self.kmers, compression=compress)
+        if self.counts is not None:
+            h5node.create_dataset("counts", data=self.counts, compression=compress)
+        for child in self.children:
+            childGroup = h5node.create_group(child.name)
+            child.saveHdf5(childGroup, compress=compress)
 
 
 def getScore(nodePair, scores):
@@ -73,10 +92,10 @@ def newTreeNode(children):
 def buildTree(tree, scores):
     pairScores = similarityScores(tree, scores)
     closePair, score = pairScores[0]
-    newNode = newTreeNode(closePair)
+    newNode = newTreeNode(list(closePair))
     newTree = [x for x in tree if x not in closePair]
     newTree.append(newNode)
-    print "%.3f" % score,
+    print "%.5f" % score,
     return newTree
 
 
@@ -86,7 +105,7 @@ def graphTree(graph, tree, parentNode, vsSample = None):
     nodeLabel = tree.label()
     color = 1
     textcolor = 9
-    id = ''.join([random.choice(string.ascii_letters) for _ in xrange(8)])
+    id = tree.name
     if type(vsSample) != type(None) and tree.kmers.size > 0:
         common = kmerizer.count_common(tree.kmers, vsSample)
         #nodeLabel = str(common) + "/" + nodeLabel
@@ -126,6 +145,7 @@ def dedupeTree(tree):
         grandChildren = [grandChild for child in deadChildren for grandChild in child.children]
         for child in deadChildren:
             node.children.remove(child)
+        print node.name, node.children, grandChildren
         node.children += grandChildren
 
     print 'Deduping:',
@@ -144,19 +164,17 @@ def countTree(tree):
 
     def setCounts(node, allKmers, allCounts):
         OFFSET = 1000000000
-        print 'setCounts', node.name
-        counts = np.empty(node.kmers.size, dtype=np.int64)
-        counts = OFFSET
+        counts = np.full(node.kmers.size, OFFSET, dtype=np.int64)
         merged = kmerizer.merge_counts(node.kmers, counts, allKmers, allCounts)
         mine = merged[1] >= OFFSET
-        node.kmers = node.kmers[mine]
+        node.kmers = merged[0][mine]
         node.counts = merged[1][mine]
         node.counts -= OFFSET
         for child in node.children:
             setCounts(child, allKmers, allCounts)
         return
 
-    print 'Setting node kmer counts',
+    print 'Setting node kmer counts'
     kmerList = gatherKmers(tree)
     allKmers = np.concatenate(kmerList)
     distinctKmers = np.unique(allKmers, return_counts=True)
@@ -180,6 +198,23 @@ def treeFromNWK(nwkFile, nodes):
 
     return makeTree(treeStructure)
 
+def treeFromHdf5(h5node):
+    assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
+    name = h5node.attrs["name"]
+    children = []
+    kmers = None
+    counts = None
+    for key, value in h5node.items():
+        print '', key, value
+        if key == "kmers"
+            kmers = np.array(value)
+        elif key == "counts"
+            counts = np.array(value)
+        else:
+            children.append(value)
+    node = KmerTreeNode(kmers, name = name, counts = counts)
+    print name
+
 
 def loadLeafNode(fileName, fingerprint):
     name = kmertools.nameFromPath(fileName)
@@ -189,6 +224,8 @@ def loadLeafNode(fileName, fingerprint):
     else:
         kset.kmers = kmertools.loadKmers(arg)
     return KmerTreeNode(kset.kmers, name=name)
+
+
 
 ###
 ### Main
@@ -205,36 +242,23 @@ parser.add_argument("--input", help="HDF5 tree input file")
 parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
-parser.add_argument("--similarity", help="Similarity score output file")
 parser.add_argument('genomes', nargs='+',
                     help='kmerized genome hdf5 or npz files')
 args = parser.parse_args()
 
-nodes = [loadLeafNode(arg, args.fingerprint) for arg in args.genomes]
-nleaves = len(nodes)
-print 'Loaded', nleaves, 'genomes'
-
-intersections = {}
-
-if args.similarity:
-    print 'Computing pairwise similarity'
-    stats = similarityScores(nodes, intersections)
-    with open(args.similarity, "w") as simFile:
-        csvwriter = csv.writer(simFile, delimiter="\t", lineterminator="\n")
-        for stat in stats:
-            (pair, score) = stat
-            csvwriter.writerow([pair[0].name, pair[1].name, "%.5f" % score])
-
-if not args.dot and not args.nwk:
-    print 'No tree output...exiting!'
-    sys.exit(0)
 
 if args.input:
     print 'Generating kmer tree from', args.input
-    tree = treeFromNWK(args.input, nodes)
+    #tree = treeFromNWK(args.input, nodes)
+    with h5py.File(args.input, 'r') as h5:
+        tree = treeFromHdf5(h5)
 else:
+    scores = {}
+    nodes = [loadLeafNode(arg, args.fingerprint) for arg in args.genomes]
+    nleaves = len(nodes)
+    print 'Loaded', nleaves, 'genomes'
     while len(nodes) > 1:
-        nodes = buildTree(nodes, intersections)
+        nodes = buildTree(nodes, scores)
         print len(nodes)
         sys.stdout.flush()
     tree = nodes[0]
@@ -248,6 +272,14 @@ if args.sample:
     sampleKmers = kmertools.loadKmers(args.sample)
 else:
     sampleKmers = None
+
+if args.output:
+    fileName = args.output
+    if not fileName.endswith(".hdf5"):
+        fileName += ".hdf5"
+    print 'Saving tree to', fileName
+    with h5py.File(fileName, 'w') as h5:
+        tree.saveHdf5(h5, compress = True)
 
 if args.dot:
     graph = pydot.Dot(graph_type='graph', rankdir='LR')

@@ -11,18 +11,24 @@ import kmerizer
 import numpy as np
 import pydot
 
-class TreeNode:
-    def __init__(self, kmers, name = '', children = []):
-        self.name = name
+treeNodeCount = 0
+
+class KmerTreeNode:
+    def __init__(self, kmers, name = None, children = []):
+        if name is None:
+            self.name = name
+        else:
+            self.name = "node-" + str(treeNodeCount)
         self.kmers = kmers
+        self.counts = None
         self.children = children
 
     def isLeaf(self):
         return not self.children
 
     def label(self):
-        s = str(self.kmers.size)
-        if self.name:
+        s = str(self.kmers)
+        if not self.isLeaf():
             s += " " + self.name
         return s
 
@@ -33,23 +39,22 @@ class TreeNode:
             return "(" + ",".join([c.nwk() for c in self.children]) + ")"
 
 
-def intersectionStats(nodePair, intersections):
-    node1, node2 = nodePair
-    k1 = node1.kmers
-    k2 = node2.kmers
-    pair = (node1, node2)
-    if pair in intersections:
-        score = intersections[pair]
+def getScore(nodePair, scores):
+    if nodePair in scores:
+        score = scores[nodePair]
     else:
+        node1, node2 = nodePair
+        k1 = node1.kmers
+        k2 = node2.kmers
         score = kmertools.similarityScore(k1, k2)
-        intersections[pair] = score
+        scores[nodePair] = score
     return score
 
-def similarityScores(tree, intersections):
+def similarityScores(tree, scores):
     # calculate the intersection stats of kmers for all tree node pairs
-    intStats = [(pair, intersectionStats(pair, intersections)) for pair in combinations(tree, 2)]
-    intStats.sort(lambda a, b: cmp(b[1], a[1]))
-    return intStats
+    pairScores = [(pair, getScore(pair, scores)) for pair in combinations(tree, 2)]
+    pairScores.sort(lambda a, b: cmp(b[1], a[1]))
+    return pairScores
 
 def newTreeNode(children):
     """
@@ -59,22 +64,15 @@ def newTreeNode(children):
     :return: the new node
     """
     intersection = reduce(lambda x, y: np.intersect1d(x.kmers, y.kmers, assume_unique=True), children)
-    node = TreeNode(intersection, children=children)
+    node = KmerTreeNode(intersection, children=children)
     for child in children:
         child.kmers = np.setdiff1d(child.kmers, intersection, assume_unique=True)
     return node
 
 
-def buildTree(tree, intersections):
-    intStats = similarityScores(tree, intersections)
-    closePair, score = intStats[0]
-    #n1, n2 = closePair
-    #k1 = n1.kmers
-    #k2 = n2.kmers
-    #kint = np.intersect1d(k1, k2, assume_unique = True)
-    #k1diff = np.setdiff1d(k1, k2, assume_unique = True)
-    #k2diff = np.setdiff1d(k2, k1, assume_unique = True)
-    # build new tree: start by removing the nodes to be joined
+def buildTree(tree, scores):
+    pairScores = similarityScores(tree, scores)
+    closePair, score = pairScores[0]
     newNode = newTreeNode(closePair)
     newTree = [x for x in tree if x not in closePair]
     newTree.append(newNode)
@@ -162,11 +160,12 @@ def treeFromNWK(nwkFile, nodes):
 
 def loadLeafNode(fileName, fingerprint):
     name = kmertools.nameFromPath(fileName)
+    kset = kmertools.KmerSet()
     if args.fingerprint:
-        kmers = kmertools.loadFingerprint(arg)
+        kset.kmers = kmertools.loadFingerprint(arg)
     else:
-        kmers = kmertools.loadKmers(arg)
-    return TreeNode(kmers, name=name)
+        kset.kmers = kmertools.loadKmers(arg)
+    return KmerTreeNode(kset.kmers, name=name)
 
 ###
 ### Main
@@ -179,12 +178,13 @@ parser.add_argument("--fingerprint", help="use minhash fingerprint instead of fu
                     action="store_true")
 parser.add_argument("--dedupe", action="store_true", help="Remove duplicate kmers from tree")
 parser.add_argument("--nwk", help="File to receive NWK format tree")
-parser.add_argument("--input", help="NWK file to use as the tree")
+parser.add_argument("--input", help="HDF5 tree input file")
+parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
 parser.add_argument("--similarity", help="Similarity score output file")
 parser.add_argument('genomes', nargs='+',
-                    help='kmerized genome npz files')
+                    help='kmerized genome hdf5 or npz files')
 args = parser.parse_args()
 
 nodes = [loadLeafNode(arg, args.fingerprint) for arg in args.genomes]

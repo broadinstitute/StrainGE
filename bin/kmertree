@@ -57,6 +57,20 @@ class KmerTreeNode:
             childGroup = h5node.create_group(child.name)
             child.saveHdf5(childGroup, compress=compress)
 
+    def saveText(self, outfile):
+        header = ["%", self.name] + [child.name for child in self.children]
+        print >>outfile, "\t".join(header)
+
+        if self.counts is None:
+            for i in xrange(self.kmers.size):
+                    print >> outfile, kmertools.kmerString(args.K, int(self.kmers[i]))
+        else:
+            for i in xrange(self.kmers.size):
+                print >> outfile, "%s\t%d" % (kmertools.kmerString(args.K, int(self.kmers[i])), self.counts[i])
+        for child in self.children:
+            child.saveText(outfile)
+
+
 
 def getScore(nodePair, scores):
     if nodePair in scores:
@@ -205,15 +219,15 @@ def treeFromHdf5(h5node):
     kmers = None
     counts = None
     for key, value in h5node.items():
-        print '', key, value
-        if key == "kmers"
+        if key == "kmers":
             kmers = np.array(value)
-        elif key == "counts"
+        elif key == "counts":
             counts = np.array(value)
         else:
             children.append(value)
     node = KmerTreeNode(kmers, name = name, counts = counts)
-    print name
+    node.children = [treeFromHdf5(child) for child in children]
+    return node
 
 
 def loadLeafNode(fileName, fingerprint):
@@ -238,14 +252,15 @@ parser.add_argument("--fingerprint", help="use minhash fingerprint instead of fu
                     action="store_true")
 parser.add_argument("--dedupe", action="store_true", help="Remove duplicate kmers from tree")
 parser.add_argument("--nwk", help="File to receive NWK format tree")
+parser.add_argument("-k", "--K", help="Kmer size (default 23)", default=23)
 parser.add_argument("--input", help="HDF5 tree input file")
 parser.add_argument("--output", help="HDF5 tree output file")
+parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
-parser.add_argument('genomes', nargs='+',
+parser.add_argument('genomes', nargs='*',
                     help='kmerized genome hdf5 or npz files')
 args = parser.parse_args()
-
 
 if args.input:
     print 'Generating kmer tree from', args.input
@@ -262,8 +277,7 @@ else:
         print len(nodes)
         sys.stdout.flush()
     tree = nodes[0]
-
-countTree(tree)
+    countTree(tree)
 
 if args.dedupe:
     dedupeTree(tree)
@@ -280,6 +294,10 @@ if args.output:
     print 'Saving tree to', fileName
     with h5py.File(fileName, 'w') as h5:
         tree.saveHdf5(h5, compress = True)
+
+if args.text:
+    with open(args.text, 'w') as outtext:
+        tree.saveText(outtext)
 
 if args.dot:
     graph = pydot.Dot(graph_type='graph', rankdir='LR')

@@ -26,6 +26,7 @@ class KmerTreeNode:
         self.kmers = kmers
         self.counts = counts
         self.children = children
+        self.score = None
 
     def isLeaf(self):
         return not self.children
@@ -69,6 +70,34 @@ class KmerTreeNode:
                 print >> outfile, "%s\t%d" % (kmertools.kmerString(args.K, int(self.kmers[i])), self.counts[i])
         for child in self.children:
             child.saveText(outfile)
+
+    def computeScoreWeighted(self, kmers):
+        """Score this node vs a set of kmers"""
+        weights = 1.0 / self.counts
+        total = weights.sum()
+        if total > 0:
+            common = np.in1d(self.kmers, kmers, assume_unique = True)
+            score = weights[common].sum()
+            self.score = score / total
+        else:
+            self.score = 0
+
+    def computeScoreUnique(self, kmers):
+        """Score this node vs a set of kmers"""
+        uniqueKmers = self.kmers[self.counts == 1]
+        if uniqueKmers.size > 0:
+            common = np.intersect1d(uniqueKmers, kmers, assume_unique=True)
+            self.score = float(common.size) / float(uniqueKmers.size)
+        else:
+            self.score = 0
+
+    def computeScore(self, kmers):
+        """Score this node vs a set of kmers"""
+        if self.kmers.size > 0:
+            common = np.intersect1d(self.kmers, kmers, assume_unique=True)
+            self.score = float(common.size) / float(self.kmers.size)
+        else:
+            self.score = 0
 
 
 
@@ -114,26 +143,25 @@ def buildTree(tree, scores):
 
 
 
-def graphTree(graph, tree, parentNode, vsSample = None):
+def graphTree(graph, tree, parentNode):
     leaf = tree.isLeaf()
     nodeLabel = tree.label()
     color = 1
     textcolor = 9
     id = tree.name
-    if type(vsSample) != type(None) and tree.kmers.size > 0:
-        common = kmerizer.count_common(tree.kmers, vsSample)
-        #nodeLabel = str(common) + "/" + nodeLabel
-        frac = float(common) / tree.kmers.size
-        nodeLabel = "%.1f%%\n%s" % (100.0 * frac, nodeLabel)
+    if tree.score is not None:
+        frac = tree.score
+        nodeLabel = "%.0f%%\n%s" % (100.0 * frac, nodeLabel)
         color = int(round(frac * 8.0)) + 1
-        if color >= 7: textcolor = 1
+        if color >= 7:
+            textcolor = 1
     node = pydot.Node(id, label=nodeLabel, style="filled", colorscheme='blues9', fillcolor=color, fontcolor=textcolor)
     graph.add_node(node)
     if parentNode:
         graph.add_edge(pydot.Edge(parentNode, node))
     if not leaf:
         for child in tree.children:
-            graphTree(graph, child, node, vsSample)
+            graphTree(graph, child, node)
 
 
 
@@ -239,7 +267,15 @@ def loadLeafNode(fileName, fingerprint):
         kset.kmers = kmertools.loadKmers(arg)
     return KmerTreeNode(kset.kmers, name=name)
 
-
+def scoreSample(tree, sampleKmers, scoring):
+    if scoring == "unique":
+        tree.computeScoreUnique(sampleKmers)
+    elif scoring == "weighted":
+        tree.computeScoreWeighted(sampleKmers)
+    else:
+        tree.computeScore(sampleKmers)
+    for child in tree.children:
+        scoreSample(child, sampleKmers, scoring)
 
 ###
 ### Main
@@ -258,6 +294,7 @@ parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
+parser.add_argument("--scoring", help="scoring method", choices=["all", "unique", "weighted"], default="all")
 parser.add_argument('genomes', nargs='*',
                     help='kmerized genome hdf5 or npz files')
 args = parser.parse_args()
@@ -283,7 +320,9 @@ if args.dedupe:
     dedupeTree(tree)
 
 if args.sample:
+    print 'Scoring sample'
     sampleKmers = kmertools.loadKmers(args.sample)
+    scoreSample(tree, sampleKmers, args.scoring)
 else:
     sampleKmers = None
 
@@ -301,7 +340,7 @@ if args.text:
 
 if args.dot:
     graph = pydot.Dot(graph_type='graph', rankdir='LR')
-    graphTree(graph, tree, None, sampleKmers)
+    graphTree(graph, tree, None)
     graph.write_png(args.dot)
 
 if args.nwk:

@@ -10,6 +10,17 @@
 typedef uint64_t kmer_t;
 typedef int64_t count_t;
 
+static PyObject *KmerizerError;
+
+
+int check_k(int k) {
+  if (k < 1 || k > 32) {
+    PyErr_SetString(KmerizerError, "k must be in the range of 1-32");
+    return 0;
+  }
+  return 1;
+}
+
 int kmerizer_kmerize_internal(int k, char *seq, int length, kmer_t *kmers) {
   int kcount = 0;
 
@@ -61,6 +72,9 @@ kmerizer_kmerize(PyObject *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "is#", &k, &seq, &length))
     return NULL;
 
+  if (!check_k(k))
+    return NULL;
+
   int max_kmers = length + 1 - k;
 
   kmer_t *kmers = malloc(max_kmers * sizeof(kmer_t));
@@ -86,6 +100,9 @@ kmerizer_kmerize_into_array(PyObject *self, PyObject *args)
   int offset;
 
   if (!PyArg_ParseTuple(args, "is#Oi", &k, &seq, &length, &array, &offset))
+    return NULL;
+
+  if (!check_k(k))
     return NULL;
 
   int max_kmers = length + 1 - k;
@@ -208,6 +225,9 @@ kmerizer_fnvhash_kmers(PyObject *self, PyObject *args) {
   if (!PyArg_ParseTuple(args, "iO", &k, &kmersIn))
     return NULL;
 
+  if (!check_k(k))
+    return NULL;
+
   int kbits = 2 * k;
   npy_intp size = *PyArray_DIMS(kmersIn);
   PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
@@ -228,75 +248,6 @@ kmerizer_fnvhash_kmers(PyObject *self, PyObject *args) {
   return kmersOut;
 }
 
-
-kmer_t HASH_BITS = 0x29679e096c8c07bf;
-kmer_t LOW_BIT_MASK = 0x5555555555555555;
-
-static PyObject *
-kmerizer_hash_kmers(PyObject *self, PyObject *args) {
-  int k;
-  PyObject *kmersIn;
-
-  if (!PyArg_ParseTuple(args, "iO", &k, &kmersIn))
-    return NULL;
-
-  npy_intp size = *PyArray_DIMS(kmersIn);
-  PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
-  kmer_t *kin = PyArray_GETPTR1(kmersIn, 0);
-  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
-
-  int kbits = 2 * k;
-  kmer_t mask = (1L << kbits) - 1;
-  int halfbits = k & ~1;
-  kmer_t halfmask = (1L << halfbits) - 1;
-
-  for (int i = 0; i < size; ++i) {
-    kmer_t kmer = kin[i];
-    kmer_t hashed = (kmer >> halfbits) | ((kmer & halfmask) << (kbits - halfbits));
-    hashed &= ~LOW_BIT_MASK;
-    hashed |= kmer & LOW_BIT_MASK;
-    hashed ^= (HASH_BITS & mask);
-    kout[i] = hashed;
-  }
-  return kmersOut;
-}
-
-
-static PyObject *
-kmerizer_unhash_kmers(PyObject *self, PyObject *args) {
-  int k;
-  PyObject *kmersIn;
-
-  if (!PyArg_ParseTuple(args, "iO", &k, &kmersIn))
-    return NULL;
-
-  npy_intp size = *PyArray_DIMS(kmersIn);
-  PyObject *kmersOut = PyArray_SimpleNew(1, &size, NPY_ULONG);
-  kmer_t *kin = PyArray_GETPTR1(kmersIn, 0);
-  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
-
-  int kbits = 2 * k;
-  kmer_t mask = (1L << kbits) - 1;
-  int halfbits = k & ~1;
-  kmer_t halfmask = (1L << (kbits - halfbits)) - 1;
-
-  for (int i = 0; i < size; ++i) {
-    kmer_t kmer = kin[i];
-    kmer ^= (HASH_BITS & mask);
-    kmer_t unhashed = kmer;
-    unhashed = ((unhashed & halfmask) << halfbits) | (unhashed >> (kbits - halfbits));
-    unhashed &= ~LOW_BIT_MASK;
-    unhashed |= kmer & LOW_BIT_MASK;
-    kout[i] = unhashed;
-  }
-  return kmersOut;
-}
-
-
-
-
-static PyObject *KmerizerError;
-
 static PyMethodDef KmerizerMethods[] = {
       {"kmerize",  kmerizer_kmerize, METH_VARARGS,
        "Kmerize sequence returning new numpy array."},
@@ -306,12 +257,8 @@ static PyMethodDef KmerizerMethods[] = {
        "Merge and sum  two sets of kmer and count arrays."},
       {"count_common",  kmerizer_count_common, METH_VARARGS,
        "Count common elements in two sorted kmer arrays."},
-      {"hash_kmers",  kmerizer_hash_kmers, METH_VARARGS,
-       "Scrable bits of kmers as a hash function."},
       {"fnvhash_kmers",  kmerizer_fnvhash_kmers, METH_VARARGS,
        "Hash kmers using FNV1a hash algorithm."},
-      {"unhash_kmers",  kmerizer_unhash_kmers, METH_VARARGS,
-       "Unscrable bits of kmers to reverse hash function."},
       {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
@@ -326,7 +273,9 @@ initkmerizer(void)
 
   import_array();
 
-  KmerizerError = PyErr_NewException("kmerizer.error", NULL, NULL);
+  KmerizerError = PyErr_NewException("kmerizer.KmerizerException", NULL, NULL);
   Py_INCREF(KmerizerError);
-  PyModule_AddObject(m, "error", KmerizerError);
+  PyModule_AddObject(m, "KmerizerError", KmerizerError);
+  PyModule_AddObject(m, "UNION", PyInt_FromLong(1));
+  PyModule_AddObject(m, "INTERSECTION", PyInt_FromLong(2));
 }

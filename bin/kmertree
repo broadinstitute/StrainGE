@@ -32,10 +32,11 @@ class KmerTreeNode:
         return not self.children
 
     def label(self):
-        s = str(self.kmers.size)
+        s = ""
         if self.counts is not None:
-            s += "/" + str((self.counts == 1).sum())
-        s += " " + self.name
+            s += str((self.counts == 1).sum()) + "/"
+        s += str(self.kmers.size)
+        s += "\n" + self.name
         return s
 
     def nwk(self):
@@ -76,9 +77,12 @@ class KmerTreeNode:
         weights = 1.0 / self.counts
         total = weights.sum()
         if total > 0:
-            common = np.in1d(self.kmers, kmers, assume_unique = True)
-            score = weights[common].sum()
-            self.score = score / total
+            #common = np.in1d(self.kmers, kmers, assume_unique = True)
+            #score = weights[common].sum()
+            #self.score = score / total
+
+            subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
+            self.score = (1.0 / subCounts).sum()  / total
         else:
             self.score = 0
 
@@ -86,16 +90,16 @@ class KmerTreeNode:
         """Score this node vs a set of kmers"""
         uniqueKmers = self.kmers[self.counts == 1]
         if uniqueKmers.size > 0:
-            common = np.intersect1d(uniqueKmers, kmers, assume_unique=True)
-            self.score = float(common.size) / float(uniqueKmers.size)
+            common = kmerizer.count_common(uniqueKmers, kmers)
+            self.score = float(common) / float(uniqueKmers.size)
         else:
             self.score = 0
 
     def computeScore(self, kmers):
         """Score this node vs a set of kmers"""
         if self.kmers.size > 0:
-            common = np.intersect1d(self.kmers, kmers, assume_unique=True)
-            self.score = float(common.size) / float(self.kmers.size)
+            common = kmerizer.count_common(self.kmers, kmers)
+            self.score = float(common) / float(self.kmers.size)
         else:
             self.score = 0
 
@@ -151,7 +155,7 @@ def graphTree(graph, tree, parentNode):
     id = tree.name
     if tree.score is not None:
         frac = tree.score
-        nodeLabel = "%.0f%%\n%s" % (100.0 * frac, nodeLabel)
+        nodeLabel = "%.0f%% %s" % (100.0 * frac, nodeLabel)
         color = int(round(frac * 8.0)) + 1
         if color >= 7:
             textcolor = 1

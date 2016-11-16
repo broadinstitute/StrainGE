@@ -11,6 +11,7 @@ parser.add_argument('kmerfiles', nargs='+',
                     help='Input kmer files (npz with counts)')
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
 parser.add_argument("--histogram", help="Text output file for histogram (count of kmers by frequency)")
+parser.add_argument("-f", "--filter", action='store_true', help="Try to determine cutoffs")
 parser.add_argument("-m", "--max", type=int, help="Max frequence for kmer spectrum plot")
 parser.add_argument("-r", "--ref", help="Reference kmer file for comparison")
 args = parser.parse_args()
@@ -48,6 +49,11 @@ if args.ref:
         errors.append(fp + fn)
     print 'Min errors:', min(errors)
     plt.semilogy(freq, errors, label='total errors')
+
+
+if args.filter:
+    thresholds = kset.spectrumFilter()
+    print 'Kmer spectrum thresholds:', thresholds
 
 plt.xlabel("Kmer Frequency")
 plt.ylabel("Number of Kmers")

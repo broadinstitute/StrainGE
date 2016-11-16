@@ -196,28 +196,6 @@ class KmerSet:
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
 
-    # def hashKmers(self, kmers):
-    #     hashed = kmerizer.hash_kmers(self.k, kmers)
-    #     hashed.sort()
-    #     return hashed
-    #
-    # def unHashKmers(self, kmers):
-    #     # un-do the hash function; this trival one self-reverses
-    #     unhashed = kmerizer.unhash_kmers(self.k, kmers)
-    #     unhashed.sort()
-    #     return unhashed
-    #
-    # def minHashBruce(self, nkmers = 10000):
-    #     self.fingerprint = self.hashKmers(self.kmers)[:nkmers]
-    #     self.fingerprint = self.unHashKmers(self.fingerprint)
-    #     return self.fingerprint
-    #
-    # def minHashFNV(self, nkmers = 10000):
-    #     order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
-    #     self.fingerprint = self.kmers[order]
-    #     self.fingerprint.sort()
-    #     return self.fingerprint
-
     def minHash(self, frac = 0.002):
         nkmers = int(round(self.kmers.size * frac))
         order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
@@ -241,23 +219,26 @@ class KmerSet:
         maxIndex = 0
         haveMin = False
         haveMax = False
+        lastFreq = 0
         for i in xrange(freq.size):
             count = counts[i]
-            if freq[i] != i + 1 or (haveMax and count > counts[maxIndex] * maxCopyNumber):
+            zero = freq[i] > lastFreq + 1
+            if haveMax and (zero or freq[i] > freq[maxIndex] * maxCopyNumber):
                 break
             if haveMin:
                 if count > counts[maxIndex]:
                     maxIndex = i
                 if count < counts[maxIndex] * (1 - delta):
                     haveMax = True
-            elif count > counts[minIndex] * (1 + delta):
+            elif count > 1000 and count > counts[minIndex] * (1 + delta):
                 haveMin = True
-            elif count < counts[minIndex]:
+            elif zero or count < counts[minIndex]:
                 minIndex = i
                 maxIndex = i
             elif counts[i] < counts[minIndex]:
                 minIndex = maxIndex = i
-            #print i, freq[i], count, haveMin, freq[minIndex], haveMax, freq[maxIndex]
+            lastFreq = freq[i]
+            #print i, freq[i], zero, count, haveMin, freq[minIndex], haveMax, freq[maxIndex]
         if minIndex and maxIndex and counts[maxIndex] > counts[minIndex] * (1 + delta):
             return (freq[minIndex], freq[maxIndex], freq[i-1])
         return None

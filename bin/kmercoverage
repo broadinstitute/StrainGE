@@ -9,10 +9,10 @@ import kmerizer
 import time
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
+parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
                     action="store_true")
-parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
-parser.add_argument("--output", help="output text file")
+parser.add_argument("-s", "--sample", help="Compare similarity of this vs the other strains instead of all vs all")
+parser.add_argument("-o", "--output", help="output text file")
 parser.add_argument('strains', nargs='+',
                     help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()

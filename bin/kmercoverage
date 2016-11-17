@@ -24,6 +24,7 @@ print "Scoring strains"
 results = []
 
 for s in args.strains:
+    name = kmertools.nameFromPath(s)
     t0 = time.time()
     mask = (1 << 32) - 1
     kset = kmertools.kmerSetFromFile(s)
@@ -47,9 +48,9 @@ for s in args.strains:
     mergedCounts = mergedCounts[inBoth]
     covered = float(mergedCounts.size) / float(strainKmers.size)
     coverage = float(mergedCounts.sum()) / float(genomicCounts.sum())
-    result = (s, covered, coverage)
+    result = (name, covered, coverage)
     results.append(result)
-    print s, "covered: %.3f coverage: %.2f score: %.2f" % (covered, coverage, covered * coverage)
+    print name, "covered: %.3f coverage: %.2f score: %.2f" % (covered, coverage, covered * coverage)
 
 results.sort(lambda a, b: cmp(b[1]*b[2], a[1]*a[2]))
 

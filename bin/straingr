@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+import sys
+import argparse
+import pysam
+import kmertools
+
+# globals
+min_qual = 0
+min_mq = 0
+
+class Pileup:
+    def __init__(self, pileups):
+        self.pileups = pileups
+
+
+def process_pileup(pileups, refbase):
+    mqtotal = 0
+    qtotal = 0
+    for pileup in pileups:
+        alignment = pileup.alignment
+
+        mq = alignment.mapping_quality
+        if mq < min_mq:
+            continue
+
+        proper = alignment.is_proper_pair
+        if not proper:
+            continue
+
+        pos = pileup.query_position_or_next
+        qual = alignment.query_qualities[pos]
+        if qual < min_qual:
+            continue
+
+        base = alignment.query_sequence[pos]
+        qstart = alignment.query_alignment_start
+        qend = alignment.query_alignment_end
+        if base != refbase:
+            print mq, proper, base, qual, pos, qstart, qend
+
+
+
+def process_scaffold(bam, scaffold, refseq):
+    """Scan the pileups for each locus in the scaffold"""
+    print "Processing", scaffold
+    n = 0
+    for column in bam.pileup(scaffold):
+        refpos = column.reference_pos
+        refbase = refseq[refpos]
+        print "Ref:", column.reference_name, refpos, refbase, column.nsegments
+        process_pileup(column.pileups, refseq[refpos])
+    return None
+
+
+##################################
+### Main
+##################################
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--verbose", help="increase output verbosity",
+                    action="store_true")
+parser.add_argument("--minqual", type=int, help='minimum base quality score to consider')
+parser.add_argument("--minmq", type=int, help='minimum read mapping quality score to consider')
+parser.add_argument('reference', help='reference FASTA file')
+parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)')
+args = parser.parse_args()
+
+# set globals
+min_qual = args.minqual
+min_mq = args.minmq
+
+print "Loading reference genome"
+reference = {scaffold.name: scaffold.seq for scaffold in kmertools.openSeqFile(args.reference)}
+print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
+
+print "Scanning BAM file"
+bam = pysam.AlignmentFile(args.bam, "rb")
+for scaffold in bam.references:
+    process_scaffold(bam, scaffold, reference[scaffold])

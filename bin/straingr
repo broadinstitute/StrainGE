@@ -25,8 +25,7 @@ class Pileup:
         self.ref_qual = 0
         self.ref_mq = 0
         # reads with other than reference base; list of tuples (base, qual, mq)
-        self.others = []
-        self.dels = []
+        self.others = None
 
         refbase = scaffold[pos]
         for read in pileup_reads:
@@ -56,10 +55,6 @@ class Pileup:
             self.bad += 1
             return
 
-        if read.is_del:
-            self.dels.append(mq)
-            return
-
         pos = read.query_position_or_next
         qual = alignment.query_qualities[pos]
         if qual < min_qual:
@@ -76,14 +71,34 @@ class Pileup:
         self.mq_total += mq
         self.qual_total += qual
 
+        if read.is_del:
+            self.add_other("del", qual, mq)
+            return
+
         if base == refbase:
             self.ref_count += 1
             self.ref_qual += qual
             self.ref_mq += mq
         else:
-            self.others.append((base, qual, mq))
+            self.add_other(base, qual, mq)
             if verbose:
                 print base, qual, mq
+
+    def add_other(self, base, bq, mq):
+        if not self.others:
+            self.others = {}
+        if base in self.others:
+            (count, qsum, mqsum) = self.others[base]
+        else:
+            count = 0
+            qsum = 0
+            mqsum = 0
+        count += 1
+        qsum += bq
+        mqsum += mq
+        self.others[base] = (count, qsum, mqsum)
+
+
 
     def covered(self):
         """Does this pileup have enough data to consider this locus covered?"""
@@ -116,7 +131,7 @@ def pct(numerator, denominator):
 
 def process_scaffold(bam, scaffold, refseq):
     """Scan the pileups for each locus in the scaffold"""
-    print "Processing", scaffold
+    print "Processing", scaffold, len(refseq)
     confirmed = 0
     covered = 0
     snps = 0
@@ -141,9 +156,9 @@ def process_scaffold(bam, scaffold, refseq):
     else:
         snp_rate = None
     total = len(refseq)
-    print "covered: %d %.1f" % (covered, pct(covered, total))
-    print "confirmed: %d %.1f" % (confirmed, pct(confirmed, covered))
-    print "snps: %d %.2f" % (snps, pct(snps, covered))
+    print "covered: %d %.1f%%" % (covered, pct(covered, total))
+    print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
+    print "snps: %d %.3f%%" % (snps, pct(snps, covered))
     if snps:
         print "snp rate: %.0f" % (float(covered) / float(snps),)
 

@@ -5,17 +5,20 @@ import pysam
 import kmertools
 
 # globals
-min_qual = 0
-min_mq = 0
-min_confirm = 0
-bases = "ACGT"
+min_qual = None
+min_mq = None
+min_confirm = None
+consensus = None
 verbose = False
 
+bases = "ACGT"
 
 class Pileup:
-    def __init__(self, refbase, pileup_reads = []):
-        self.refbase = refbase
+    def __init__(self, scaffold, pos, pileup_reads = []):
+        self.scaffold = scaffold
+        self.pos = pos
         self.count = 0
+        self.bad = 0
         self.mq_total = 0
         self.qual_total = 0
         self.ref_count = 0
@@ -24,19 +27,33 @@ class Pileup:
         # reads with other than reference base; list of tuples (base, qual, mq)
         self.others = []
         self.dels = []
-        for read in pileup_reads:
-            self.add_read(read)
 
-    def add_read(self, read):
+        refbase = scaffold[pos]
+        for read in pileup_reads:
+            self.add_read(read, refbase)
+
+    def add_read(self, read, refbase):
         """Add a pysam.PileupRead object to this pileup"""
         alignment = read.alignment
 
         mq = alignment.mapping_quality
         if mq < min_mq:
+            self.bad += 1
             return
 
         proper = alignment.is_proper_pair
         if not proper:
+            self.bad += 1
+            return
+
+        if alignment.query_alignment_length != alignment.query_length:
+            # alignment is clipped
+            self.bad += 1
+            return
+
+        tlen = alignment.template_length
+        if abs(tlen) < alignment.query_length:
+            self.bad += 1
             return
 
         if read.is_del:
@@ -46,18 +63,20 @@ class Pileup:
         pos = read.query_position_or_next
         qual = alignment.query_qualities[pos]
         if qual < min_qual:
+            self.bad += 1
             return
 
         base = alignment.query_sequence[pos]
         index = bases.find(base)
         if index < 0:
+            self.bad += 1
             return
 
         self.count += 1
         self.mq_total += mq
         self.qual_total += qual
 
-        if base == self.refbase:
+        if base == refbase:
             self.ref_count += 1
             self.ref_qual += qual
             self.ref_mq += mq
@@ -68,12 +87,23 @@ class Pileup:
 
     def covered(self):
         """Does this pileup have enough data to consider this locus covered?"""
-        return self.qual_total >= min_confirm
+        return self.qual_total >= min_confirm and self.count > self.bad
+
+    def ref_fraction(self):
+        return float(self.ref_qual) / float(self.qual_total)
 
     def confirmed(self):
         """Does this pileup confirm the reference"""
         return self.ref_qual >= min_confirm and \
-               (self.ref_qual == self.qual_total or float(self.ref_qual)/float(self.qual_total) >= .9)
+               (self.ref_qual == self.qual_total or self.ref_fraction() > 0.9)
+
+    def base_call(self):
+        """Call another base"""
+        rf = self.ref_fraction()
+        if rf < 0.1:
+            print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
+            return True
+        return False
 
     def __str__(self):
         return "<Pileup n=%d rc=%d rq=%d/%d>" % (self.count, self.ref_count, self.ref_qual, self.qual_total)
@@ -84,21 +114,28 @@ def process_scaffold(bam, scaffold, refseq):
     print "Processing", scaffold
     confirmed = 0
     covered = 0
+    snps = 0
     pileups = []
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
-        refbase = refseq[refpos]
         if verbose:
+            refbase = refseq[refpos]
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
-        pileup = Pileup(refseq[refpos], column.pileups)
+        pileup = Pileup(refseq, refpos, column.pileups)
         if pileup.covered():
             covered += 1
-        if pileup.confirmed():
-            confirmed += 1
+            if pileup.confirmed():
+                confirmed += 1
+            elif pileup.base_call():
+                snps += 1
         if verbose:
             print pileup, pileup.confirmed()
         pileups.append(pileup)
-    print confirmed, "confirmed,", covered, "covered,", len(refseq), "total"
+    if snps:
+        snp_rate = int(round(float(covered) / float(snps)))
+    else:
+        snp_rate = None
+    print confirmed, "confirmed,", covered, "covered,", snps, "SNPs,", len(refseq), "total, 1 / ", snp_rate, "SNP rate"
 
 
 ##################################
@@ -110,6 +147,7 @@ parser.add_argument("--verbose", help="increase output verbosity", action="store
 parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
 parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
+parser.add_argument("--consensus", type=float, default=0.9, help='minimum pileup quality sum to confirm reference')
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)')
 args = parser.parse_args()
@@ -119,6 +157,7 @@ verbose = args.verbose
 min_qual = args.minqual
 min_mq = args.minmq
 min_confirm = args.minconfirm
+consensus = args.consensus
 
 print "Loading reference genome"
 reference = {scaffold.name: scaffold.seq for scaffold in kmertools.openSeqFile(args.reference)}

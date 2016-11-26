@@ -109,6 +109,11 @@ class Pileup:
         return "<Pileup n=%d rc=%d rq=%d/%d>" % (self.count, self.ref_count, self.ref_qual, self.qual_total)
 
 
+def pct(numerator, denominator):
+    if denominator:
+        return 100.0 * numerator / denominator
+    return 0.0
+
 def process_scaffold(bam, scaffold, refseq):
     """Scan the pileups for each locus in the scaffold"""
     print "Processing", scaffold
@@ -135,7 +140,12 @@ def process_scaffold(bam, scaffold, refseq):
         snp_rate = int(round(float(covered) / float(snps)))
     else:
         snp_rate = None
-    print confirmed, "confirmed,", covered, "covered,", snps, "SNPs,", len(refseq), "total, 1 / ", snp_rate, "SNP rate"
+    total = len(refseq)
+    print "covered: %d %.1f" % (covered, pct(covered, total))
+    print "confirmed: %d %.1f" % (confirmed, pct(confirmed, covered))
+    print "snps: %d %.2f" % (snps, pct(snps, covered))
+    if snps:
+        print "snp rate: %.0f" % (float(covered) / float(snps),)
 
 
 ##################################

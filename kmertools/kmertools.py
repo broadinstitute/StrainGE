@@ -80,7 +80,7 @@ def loadFingerprint(fileName):
         return loadHdf5(fileName, "fingerprint")
 
 def nameFromPath(filePath):
-    return os.path.basename(filePath).split(".")[0]
+    return os.path.splitext(os.path.basename(filePath))[0]
 
 
 def kmerSetFromNpz(filePath, k):

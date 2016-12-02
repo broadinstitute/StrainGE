@@ -112,7 +112,7 @@ def getScore(nodePair, scores):
         node1, node2 = nodePair
         k1 = node1.kmers
         k2 = node2.kmers
-        score = kmertools.similarityScore(k1, k2)
+        score = kmertools.similarityScore(k1, k2, args.simscore)
         scores[nodePair] = score
     return score
 
@@ -137,7 +137,7 @@ def newTreeNode(children):
 
 
 def buildTree(tree, scores):
-    pairScores = similarityScores(tree, scores)
+    pairScores = similarityScores(tree, scores, args.simscore)
     closePair, score = pairScores[0]
     newNode = newTreeNode(list(closePair))
     newTree = [x for x in tree if x not in closePair]
@@ -298,7 +298,8 @@ parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
-parser.add_argument("--scoring", help="scoring method", choices=["all", "unique", "weighted"], default="all")
+parser.add_argument("--samplescore", help="sample matching scoring method", choices=["all", "unique", "weighted"], default="all")
+parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize"], default="jaccard")
 parser.add_argument('genomes', nargs='*',
                     help='kmerized genome hdf5 or npz files')
 args = parser.parse_args()

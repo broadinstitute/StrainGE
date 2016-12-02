@@ -119,11 +119,21 @@ def kmerSetFromFile(filePath, k = DEFAULT_K):
         return kmerSetFromHdf5(filePath)
 
 
-def similarityScore(kmers1, kmers2):
+def similarityScore(kmers1, kmers2, scoring="jaccard"):
     """Compute Jaccard similarity index"""
-    intersection = kmerizer.count_common(kmers1, kmers2)
-    # Use Jaccard similarity index
-    score = float(intersection) / float(kmers1.size + kmers2.size - intersection)
+    # count of kmers in common
+    intersection = float(kmerizer.count_common(kmers1, kmers2))
+    if scoring == "jaccard":
+        # Use Jaccard similarity index
+        score = intersection / (kmers1.size + kmers2.size - intersection)
+    elif scoring == "minsize":
+        # Use intersection / min_size (proper subset scores 1.0)
+        score = intersection / min(kmers1.size, kmers2.size)
+    elif scoring == "maxsize":
+        # Use intersection / max_size (proper subset scores min/max)
+        score = intersection / max(kmers1.size, kmers2.size)
+    else:
+        assert scoring in ("jaccard", "minsize", "maxsize"), "unknown scoring method"
     return score
 
 

@@ -125,6 +125,7 @@ class Pileup:
 
 
 def pct(numerator, denominator):
+    """Makes into a percent"""
     if denominator:
         return 100.0 * numerator / denominator
     return 0.0

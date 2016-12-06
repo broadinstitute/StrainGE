@@ -14,7 +14,18 @@ verbose = False
 bases = "ACGT"
 
 class Pileup:
+    """
+    Class to process pileup information; that is,
+    all the alignment information corresponding
+    to a given reference coordinate.
+    """
+
     def __init__(self, scaffold, pos, pileup_reads = []):
+        """
+        :param scaffold: reference sequence
+        :param pos: coordinate in reference (0-based)
+        :param pileup_reads: pileup objects from pysam
+        """
         self.scaffold = scaffold
         self.pos = pos
         self.count = 0
@@ -35,47 +46,51 @@ class Pileup:
         """Add a pysam.PileupRead object to this pileup"""
         alignment = read.alignment
 
+        # check for decent mapping quality
         mq = alignment.mapping_quality
         if mq < min_mq:
             self.bad += 1
             return
 
-        proper = alignment.is_proper_pair
-        if not proper:
+        # if this is a paired read, make sure the pairs are properly aligned
+        if (not alignment.is_paired) or (not alignment.is_proper_pair):
             self.bad += 1
             return
 
+        # restrict ourselves to full-length alignments (not clipped)
         if alignment.query_alignment_length != alignment.query_length:
             # alignment is clipped
             self.bad += 1
             return
 
+        # check that inferred insert size is at least read length
         tlen = alignment.template_length
         if abs(tlen) < alignment.query_length:
             self.bad += 1
             return
 
+        # get base quality (note this is next base if deletion)
         pos = read.query_position_or_next
         qual = alignment.query_qualities[pos]
         if qual < min_qual:
             self.bad += 1
             return
 
+        # base call must be real base (e.g., not N)
         base = alignment.query_sequence[pos]
         index = bases.find(base)
         if index < 0:
             self.bad += 1
             return
 
+        # We're good! Update the pileup stats...
         self.count += 1
         self.mq_total += mq
         self.qual_total += qual
 
         if read.is_del:
             self.add_other("del", qual, mq)
-            return
-
-        if base == refbase:
+        elif base == refbase:
             self.ref_count += 1
             self.ref_qual += qual
             self.ref_mq += mq
@@ -85,6 +100,13 @@ class Pileup:
                 print base, qual, mq
 
     def add_other(self, base, bq, mq):
+        """
+        Keep information about bases in pileup which differ from reference.
+        :param base: alternate base or 'del' for deletion
+        :param bq: base quality
+        :param mq: mapping quality
+        :return:
+        """
         if not self.others:
             self.others = {}
         if base in self.others:
@@ -105,23 +127,26 @@ class Pileup:
         return self.qual_total >= min_confirm and self.count > self.bad
 
     def ref_fraction(self):
+        """Fraction of evidence which supports reference base"""
         return float(self.ref_qual) / float(self.qual_total)
 
     def confirmed(self):
-        """Does this pileup confirm the reference"""
+        """Does this pileup confirm the reference?"""
         return self.ref_qual >= min_confirm and \
-               (self.ref_qual == self.qual_total or self.ref_fraction() > 0.9)
+               (self.ref_qual == self.qual_total or self.ref_fraction() > consensus)
 
     def base_call(self):
-        """Call another base"""
+        """Call another base...just print out stats for now"""
         rf = self.ref_fraction()
-        if rf < 0.1:
+        if rf < (1.0 - consensus):
             print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
             return True
         return False
 
     def __str__(self):
-        return "<Pileup n=%d rc=%d rq=%d/%d>" % (self.count, self.ref_count, self.ref_qual, self.qual_total)
+        return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
+                                                                      self.ref_qual, self.qual_total,
+                                                                      self.ref_mq, self.mq_total, str(self.others))
 
 
 def pct(numerator, denominator):
@@ -132,17 +157,25 @@ def pct(numerator, denominator):
 
 def process_scaffold(bam, scaffold, refseq):
     """Scan the pileups for each locus in the scaffold"""
-    print "Processing", scaffold, len(refseq)
+    length = len(refseq)
+    print "Processing", scaffold, length
     confirmed = 0
     covered = 0
     snps = 0
+    goodcoverage = 0
+    badcoverage = 0
+
+    #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
+
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
+        pileup = Pileup(refseq, refpos, column.pileups)
         if verbose:
             refbase = refseq[refpos]
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
-        pileup = Pileup(refseq, refpos, column.pileups)
+        goodcoverage += pileup.count
+        badcoverage += pileup.bad
         if pileup.covered():
             covered += 1
             if pileup.confirmed():
@@ -156,7 +189,8 @@ def process_scaffold(bam, scaffold, refseq):
         snp_rate = int(round(float(covered) / float(snps)))
     else:
         snp_rate = None
-    total = len(refseq)
+    total = length
+    print "Good coverage: %.1f of %.1f" % (float(goodcoverage) / length, float(goodcoverage + badcoverage) / length)
     print "covered: %d %.1f%%" % (covered, pct(covered, total))
     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
     print "snps: %d %.3f%%" % (snps, pct(snps, covered))

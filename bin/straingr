@@ -141,9 +141,11 @@ class Pileup:
         if rf < (1.0 - consensus):
             print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
             if len(self.others) == 1:
+                print "SNP confirmed %s" % self.others.keys()[0]
                 return self.others.keys()[0]
             base = max(self.others.keys(), key = lambda x: self.others[x])
             if self.others[base] >= consensus * self.count:
+                print "SNP confirmed %s" % base
                 return base # 90% of reads match SNP
             #return True
         return False

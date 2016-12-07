@@ -140,7 +140,12 @@ class Pileup:
         rf = self.ref_fraction()
         if rf < (1.0 - consensus):
             print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
-            return True
+            if len(self.others) == 1:
+                return self.others.keys()[0]
+            base = max(self.others.keys(), key = lambda x: self.others[x])
+            if self.others[base] >= 0.9 * self.count:
+                return base # 90% of reads match SNP
+            #return True
         return False
 
     def __str__(self):
@@ -207,7 +212,7 @@ parser.add_argument("--verbose", help="increase output verbosity", action="store
 parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
 parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
-parser.add_argument("--consensus", type=float, default=0.9, help='minimum pileup quality sum to confirm reference')
+parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference')
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)')
 args = parser.parse_args()

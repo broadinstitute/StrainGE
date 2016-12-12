@@ -105,20 +105,20 @@ class KmerTreeNode:
 
 
 
-def getScore(nodePair, scores):
+def getScore(nodePair, scores, simscore="jaccard"):
     if nodePair in scores:
         score = scores[nodePair]
     else:
         node1, node2 = nodePair
         k1 = node1.kmers
         k2 = node2.kmers
-        score = kmertools.similarityScore(k1, k2, args.simscore)
+        score = kmertools.similarityScore(k1, k2, simscore)
         scores[nodePair] = score
     return score
 
-def similarityScores(tree, scores):
+def similarityScores(tree, scores, simscore="jaccard"):
     # calculate the intersection stats of kmers for all tree node pairs
-    pairScores = [(pair, getScore(pair, scores)) for pair in combinations(tree, 2)]
+    pairScores = [(pair, getScore(pair, scores, simscore)) for pair in combinations(tree, 2)]
     pairScores.sort(lambda a, b: cmp(b[1], a[1]))
     return pairScores
 
@@ -136,8 +136,8 @@ def newTreeNode(children):
     return node
 
 
-def buildTree(tree, scores):
-    pairScores = similarityScores(tree, scores, args.simscore)
+def buildTree(tree, scores, simscore="jaccard"):
+    pairScores = similarityScores(tree, scores, simscore)
     closePair, score = pairScores[0]
     newNode = newTreeNode(list(closePair))
     newTree = [x for x in tree if x not in closePair]
@@ -315,7 +315,7 @@ else:
     nleaves = len(nodes)
     print 'Loaded', nleaves, 'genomes'
     while len(nodes) > 1:
-        nodes = buildTree(nodes, scores)
+        nodes = buildTree(nodes, scores, args.simscore)
         print len(nodes)
         sys.stdout.flush()
     tree = nodes[0]

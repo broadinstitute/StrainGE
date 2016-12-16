@@ -6,7 +6,7 @@ import csv
 from subprocess import call
 
 def load_assemblies():
-    # fetch bacteria assembly_summary.txt file
+    """fetch bacteria assembly_summary.txt file from NCBI refseq"""
     summary = "assembly_summary.txt"
     #urllib.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
     with open(summary, 'r') as sum:
@@ -19,18 +19,51 @@ def assembly_filter(ass):
     if (ass['version_status'] == "latest" and ass['assembly_level'] == 'Complete Genome') \
         or ass['refseq_category'] == "reference genome":
         name = ass['organism_name'].lower()
-        if name.startswith("escherichia") or name.startswith("shigella"):
+        if name.startswith("escherichia coli") or name.startswith("shigella"):
             return True
     return False
 
 def rsync_assembly(ass):
     uri = ass['ftp_path'].replace("ftp:", "rsync:")
+    dirname = uri.split('/')[-1]
+    if os.path.exists(dirname):
+        return
     command = ["rsync", "-av", uri, "."]
     print "Running", ' '.join(command)
-    call(command)
+    #call(command)
+    return dirname
+
 
 def link_assembly(ass):
     """Create a link to assembly using descriptive strain name"""
+    name = assembly_name(ass)
+    print 'Link to', name
+
+def assembly_name(ass):
+    """Generate a name representing the name and suitable for use as a filename"""
+    org = ass['organism_name']
+    strain = ass['infraspecific_name']
+    isolate = ass['isolate']
+
+    org = org.replace("Escherichia", "E")
+    org = org.replace("Shigella", "S")
+    strain = strain.replace("strain=", "")
+    name = org
+    if strain and name.find(strain) < 0:
+        name += "_" + strain
+    if isolate and name.find(isolate) < 0:
+        name += "_" + isolate
+    name = name.replace(".", "")
+    name = name.replace("/", "-")
+    name = name.replace("(", "")
+    name = name.replace(")", "")
+    name = name.replace("'", "")
+    name = name.replace(";", "-")
+    name = name.replace(":", "-")
+    name = name.replace(" ", "_")
+    name = name.replace("K-12_K-12", "K-12")
+    # print (org, strain, isolate), name
+    return name
 
 ###################################
 # MAIN

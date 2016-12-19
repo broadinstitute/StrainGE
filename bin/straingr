@@ -3,6 +3,7 @@ import sys
 import argparse
 import pysam
 import kmertools
+from datetime import date
 
 # globals
 min_qual = None
@@ -12,6 +13,14 @@ consensus = None
 verbose = False
 
 bases = "ACGT"
+
+vcf_header = \
+"""##fileformat=VCFv4.0
+##fileDate={date}
+##source=StrainGR
+##reference={ref}
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{samples}
+"""
 
 class Pileup:
     """
@@ -141,12 +150,13 @@ class Pileup:
         if rf < (1.0 - consensus):
             print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
             if len(self.others) == 1:
-                print "SNP confirmed %s" % self.others.keys()[0]
-                return self.others.keys()[0]
+                print "Only SNP found is %s" % self.others.keys()[0]
+                return self.others.keys()[0], self.others.values()[0]
+            # get SNP with highest proportion if >1 SNP
             base = max(self.others.keys(), key = lambda x: self.others[x])
             if self.others[base] >= consensus * self.count:
                 print "SNP confirmed %s" % base
-                return base # 90% of reads match SNP
+                return base, self.others[base] # 90% of reads match SNP
             #return True
         return False
 
@@ -174,6 +184,7 @@ def process_scaffold(bam, scaffold, refseq):
 
     #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
+    snpcalls = {}
 
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
@@ -187,8 +198,10 @@ def process_scaffold(bam, scaffold, refseq):
             covered += 1
             if pileup.confirmed():
                 confirmed += 1
-            elif pileup.base_call():
+            snpcall, snp = pileup.base_call()
+            if snpcall:
                 snps += 1
+                snpcalls[refpos] = (refbase, snpcall, snp)
         if verbose:
             print pileup, pileup.confirmed()
         pileups.append(pileup)
@@ -203,7 +216,20 @@ def process_scaffold(bam, scaffold, refseq):
     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
     if snps:
         print "snp rate: %.0f" % (float(covered) / float(snps),)
+    return pileups, snpcalls
 
+def write_vcf(snps={}, output=None, date=date.today(), reference=None, sample=None):
+    """Write SNPs to a VCF file"""
+    # TODO: this is hacked together...
+    # Should just rewrite base calling with VCF output in mind
+    with open(output, 'wb') as w:
+        w.write(vcf_header.format(date=date, ref=reference, sample=sample))
+        for scaffold in snps:
+            for pos in snps[scaffold]:
+                ref = snps[scaffold][pos][0]
+                snp = snps[scaffold][pos][1]
+                qual = snps[scaffold][pos][2][1]
+                w.write("{scaffold}\t{pos}\t.\t{ref}\t{alt}\t{qual}\tPASS\t.\n".format(scaffold=scaffold, pos=pos+1, ref=ref, snp=snp, qual=qual))
 
 ##################################
 ### Main
@@ -216,7 +242,8 @@ parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping q
 parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference')
 parser.add_argument('reference', help='reference FASTA file')
-parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)')
+parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)') # TODO: maybe allow more than one BAM file???
+parser.add_argument('vcf', help='vcf file to record SNPs found')
 args = parser.parse_args()
 
 # set global options
@@ -232,5 +259,18 @@ print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), '
 
 print "Scanning BAM file"
 bam = pysam.AlignmentFile(args.bam, "rb")
+snps = {}
 for scaffold in bam.references:
-    process_scaffold(bam, scaffold, reference[scaffold])
+    try:
+        pileups, snpcalls = process_scaffold(bam, scaffold, reference[scaffold])
+        snps[scaffold] = snpcalls
+    except KeyboardInterrupt:
+        break
+    except Exception as e:
+        print e
+        continue
+
+if snps:
+    write_vcf(snps, args.vcf, date=date.today(), reference=args.reference, sample=args.bam)
+else:
+    print "No SNPs found."

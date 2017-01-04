@@ -327,7 +327,7 @@ if args.dedupe:
 if args.sample:
     print 'Scoring sample'
     sampleKmers = kmertools.loadKmers(args.sample)
-    scoreSample(tree, sampleKmers, args.scoring)
+    scoreSample(tree, sampleKmers, args.samplescore)
 else:
     sampleKmers = None
 

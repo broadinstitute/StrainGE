@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys
+import os
 import urllib
 import csv
 from subprocess import call
@@ -8,7 +8,9 @@ from subprocess import call
 def load_assemblies():
     """fetch bacteria assembly_summary.txt file from NCBI refseq"""
     summary = "assembly_summary.txt"
-    #urllib.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
+    if not os.path.exists(summary):
+        print("Fetching assembly file")
+        urllib.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
     with open(summary, 'r') as sum:
         sum.readline()
         assemblies =[row for row in csv.DictReader(sum, delimiter='\t')]
@@ -25,19 +27,30 @@ def assembly_filter(ass):
 
 def rsync_assembly(ass):
     uri = ass['ftp_path'].replace("ftp:", "rsync:")
-    dirname = uri.split('/')[-1]
+    dirname = assembly_dir(ass)
     if os.path.exists(dirname):
         return
     command = ["rsync", "-av", uri, "."]
     print "Running", ' '.join(command)
-    #call(command)
+    call(command)
     return dirname
-
 
 def link_assembly(ass):
     """Create a link to assembly using descriptive strain name"""
-    name = assembly_name(ass)
-    print 'Link to', name
+    dirname = assembly_dir(ass)
+    source = os.path.join(dirname, dirname + "_genomic.fna.gz")
+    if os.path.exists(source):
+        dest = os.path.join("assemblies", assembly_name(ass) + ".fasta.gz")
+        if not os.path.exists("assemblies"):
+            os.mkdir("assemblies")
+        if not os.path.exists(dest):
+            print 'Link from', source, 'to', dest
+            os.symlink(os.path.join("..", source), dest)
+
+def assembly_dir(ass):
+    return ass['ftp_path'].split('/')[-1]
+
+assembly_names = set()
 
 def assembly_name(ass):
     """Generate a name representing the name and suitable for use as a filename"""
@@ -62,6 +75,9 @@ def assembly_name(ass):
     name = name.replace(":", "-")
     name = name.replace(" ", "_")
     name = name.replace("K-12_K-12", "K-12")
+    if name in assembly_names:
+        name += "_" + ass['# assembly_accession'].split('.')[0]
+    assembly_names.add(name)
     # print (org, strain, isolate), name
     return name
 
@@ -69,7 +85,6 @@ def assembly_name(ass):
 # MAIN
 ###################################
 
-print("Fetching assembly file")
 assemblies = load_assemblies()
 print len(assemblies), "assemblies"
 

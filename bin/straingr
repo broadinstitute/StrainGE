@@ -155,9 +155,9 @@ class Pileup:
             # get SNP with highest proportion if >1 SNP
             base = max(self.others.keys(), key = lambda x: self.others[x])
             if self.others[base] >= consensus * self.count:
+                # 90% of reads match SNP
                 print "SNP confirmed %s" % base
-                return base, self.others[base] # 90% of reads match SNP
-            #return True
+                return base, self.others[base] 
         return False
 
     def __str__(self):

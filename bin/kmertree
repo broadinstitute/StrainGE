@@ -27,6 +27,8 @@ class KmerTreeNode:
         self.counts = counts
         self.children = children
         self.score = None
+        self.common = None
+        self.denominator = None
 
     def isLeaf(self):
         return not self.children
@@ -59,6 +61,29 @@ class KmerTreeNode:
             childGroup = h5node.create_group(child.name)
             child.saveHdf5(childGroup, compress=compress)
 
+    def saveSampleHdf5(self, h5node, compress = True):
+        if compress is True:
+            compress = "gzip"
+        h5node.attrs["type"] = np.string_("SampleTreeNode")
+        h5node.attrs["name"] = np.string_(self.name)
+        
+        if self.score is not None:
+            h5node.attrs["score"] = self.score
+        else:
+            h5node.attrs["score"] = 0
+        
+        if self.denominator is not None:
+            h5node.attrs["denominator"] = self.denominator
+        else:
+            h5node.attrs["denominator"] = 0
+        
+        if self.common is not None:
+            h5node.create_dataset("common", data=self.common, compression=compress)
+        
+        for child in self.children:
+            childGroup = h5node.create_group(child.name)
+            child.saveSampleHdf5(childGroup, compress=compress)
+
     def saveText(self, outfile):
         header = ["%", self.name] + [child.name for child in self.children]
         print >>outfile, "\t".join(header)
@@ -75,14 +100,15 @@ class KmerTreeNode:
     def computeScoreWeighted(self, kmers):
         """Score this node vs a set of kmers"""
         weights = 1.0 / self.counts
-        total = weights.sum()
-        if total > 0:
+        self.denominator = weights.sum()
+        if self.denominator > 0:
             #common = np.in1d(self.kmers, kmers, assume_unique = True)
             #score = weights[common].sum()
             #self.score = score / total
 
             subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
-            self.score = (1.0 / subCounts).sum()  / total
+            self.score = (1.0 / subCounts).sum()  / self.denominator
+            self.common = kmerizer.count_common(self.kmers, kmers) # same as regular score for kmers
         else:
             self.score = 0
 
@@ -90,16 +116,25 @@ class KmerTreeNode:
         """Score this node vs a set of kmers"""
         uniqueKmers = self.kmers[self.counts == 1]
         if uniqueKmers.size > 0:
-            common = kmerizer.count_common(uniqueKmers, kmers)
-            self.score = float(common) / float(uniqueKmers.size)
+            self.common = kmerizer.count_common(uniqueKmers, kmers)
+            self.denominator = float(uniqueKmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common) / self.denominator
+            else:
+                self.score = 0
+            
         else:
             self.score = 0
 
     def computeScore(self, kmers):
         """Score this node vs a set of kmers"""
         if self.kmers.size > 0:
-            common = kmerizer.count_common(self.kmers, kmers)
-            self.score = float(common) / float(self.kmers.size)
+            self.common = kmerizer.count_common(self.kmers, kmers)
+            self.denominator = float(self.kmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common) / self.denominator
+            else:
+                self.score = 0 
         else:
             self.score = 0
 
@@ -280,6 +315,8 @@ def scoreSample(tree, sampleKmers, scoring):
         tree.computeScore(sampleKmers)
     for child in tree.children:
         scoreSample(child, sampleKmers, scoring)
+    
+    
 
 ###
 ### Main
@@ -297,7 +334,8 @@ parser.add_argument("--input", help="HDF5 tree input file")
 parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
-parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
+parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample")
+parser.add_argument("--sampleout", help="HDF5 sample scoring output file")
 parser.add_argument("--samplescore", help="sample matching scoring method", choices=["all", "unique", "weighted"], default="all")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize"], default="jaccard")
 parser.add_argument('genomes', nargs='*',
@@ -328,6 +366,10 @@ if args.sample:
     print 'Scoring sample'
     sampleKmers = kmertools.loadKmers(args.sample)
     scoreSample(tree, sampleKmers, args.samplescore)
+    if args.sampleout:
+        print 'Output sample scores to', args.sampleout
+        with h5py.File(args.sampleout, 'w') as h5:
+            tree.saveSampleHdf5(h5, compress = True)
 else:
     sampleKmers = None
 

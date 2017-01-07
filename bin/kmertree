@@ -64,7 +64,7 @@ class KmerTreeNode:
     def saveSampleHdf5(self, h5node, compress = True):
         if compress is True:
             compress = "gzip"
-        h5node.attrs["type"] = np.string_("SampleTreeNode")
+        h5node.attrs["type"] = np.string_("SampleScoreNode")
         h5node.attrs["name"] = np.string_(self.name)
         
         if self.score is not None:
@@ -107,8 +107,8 @@ class KmerTreeNode:
             #self.score = score / total
 
             subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
-            self.score = (1.0 / subCounts).sum()  / self.denominator
-            self.common = kmerizer.count_common(self.kmers, kmers) # same as regular score for kmers
+            self.score = (1.0 / subCounts).sum() / self.denominator
+            self.common = np.intersect1d(self.kmers, kmers, assume_unique = True)  # same as regular score for kmers
         else:
             self.score = 0
 
@@ -116,23 +116,23 @@ class KmerTreeNode:
         """Score this node vs a set of kmers"""
         uniqueKmers = self.kmers[self.counts == 1]
         if uniqueKmers.size > 0:
-            self.common = kmerizer.count_common(uniqueKmers, kmers)
+            self.common = np.intersect1d(uniqueKmers, kmers, assume_unique = True)
             self.denominator = float(uniqueKmers.size)
             if self.denominator > 0:
-                self.score = float(self.common) / self.denominator
+                self.score = float(self.common.size) / self.denominator
             else:
                 self.score = 0
-            
         else:
             self.score = 0
 
     def computeScore(self, kmers):
         """Score this node vs a set of kmers"""
         if self.kmers.size > 0:
-            self.common = kmerizer.count_common(self.kmers, kmers)
+            #self.common = np.intersect1d(self.kmers, kmers, assume_unique = True)
+            self.common = kmerizer.intersect_counts(self.kmers, self.kmers, kmers)
             self.denominator = float(self.kmers.size)
             if self.denominator > 0:
-                self.score = float(self.common) / self.denominator
+                self.score = float(self.common.size) / self.denominator
             else:
                 self.score = 0 
         else:

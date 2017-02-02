@@ -31,7 +31,7 @@ vcf_header = \
 ##FILTER<ID=nc,Description="No consensus SNP">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
-vcf_row = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:f}\t{FILTER}\tDP={DP:d};BQ={BQ:d};MQ={MQ:d};AF={AF};SBQ={SBQ};SMQ={SMQ}\n"
+vcf_row = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:f}\t{FILTER}\tDP={DP:d};BQ={BQ:f};MQ={MQ:f};AF={AF};SBQ={SBQ};SMQ={SMQ}\n"
 
 class Pileup:
     """

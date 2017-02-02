@@ -312,9 +312,10 @@ parser.add_argument("--minqual", type=int, default=5, help='minimum base quality
 parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
 parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference')
+parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')
-parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)') # TODO: maybe allow more than one BAM file???
-parser.add_argument('vcf', nargs='?', help='vcf file to record SNPs found')
+parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
+#parser.add_argument('vcf', nargs='?', help='vcf file to record SNPs found')
 args = parser.parse_args()
 
 # set global options
@@ -328,21 +329,22 @@ print "Loading reference genome"
 reference = {scaffold.name: scaffold.seq for scaffold in kmertools.openSeqFile(args.reference)}
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
-print "Scanning BAM file"
-bam = pysam.AlignmentFile(args.bam, "rb")
+for file in args.bam:
+    print "Scanning BAM file: %s" % file
+    bam = pysam.AlignmentFile(file, "rb")
 
-all_pileups = []
-for scaffold in bam.references:
-    try:
-        pileups = process_scaffold(bam, scaffold, reference[scaffold])
-        all_pileups.extend(pileups)
-    except KeyboardInterrupt:
-        break
-    except Exception as e:
-        print e
-        continue
+    all_pileups = []
+    for scaffold in bam.references:
+        try:
+            pileups = process_scaffold(bam, scaffold, reference[scaffold])
+            all_pileups.extend(pileups)
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print e
+            continue
 
-if args.vcf:
-    write_vcf(all_pileups, args.vcf, date=date.today(), reference=args.reference)
-else:
-    print "No SNPs found."
+    if args.vcf:
+        write_vcf(all_pileups, args.vcf, date=date.today(), reference=args.reference)
+    else:
+        print "No SNPs found."

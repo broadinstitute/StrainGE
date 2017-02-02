@@ -352,5 +352,5 @@ for file in args.bam:
     if not all_pileups:
         print "Error: no pileups for %s" % file
         continue
-    if args.vcf:
-        write_vcf(all_pileups, args.vcf, date=date.today(), reference=args.reference)
+    if args.out:
+        write_vcf(all_pileups, args.out, date=date.today(), reference=args.reference)

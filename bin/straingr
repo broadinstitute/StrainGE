@@ -31,7 +31,7 @@ vcf_header = \
 ##FILTER<ID=nc,Description="No consensus SNP">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
-vcf_row = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:f}\t{FILTER}\tDP={DP:d};BQ={BQ:f};MQ={MQ:f};AF={AF};SBQ={SBQ};SMQ={SMQ}\n"
+vcf_row = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};BQ={BQ:.0f};MQ={MQ:.0f};AF={AF};SBQ={SBQ};SMQ={SMQ}\n"
 
 class Pileup:
     """
@@ -270,9 +270,9 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                     af += ','
                     sbq += ','
                     smq += ','
-                af += ("%.4f" % (temp[0]/total)).rstrip('0').rstrip('.')
-                sbq += str(rms(temp[1]))
-                smq += str(rms(temp[2]))
+                af += format(temp[0]/total, ".3f").rstrip('0').rstrip('.')
+                sbq += format(rms(temp[1]), ".0f")
+                smq += format(rms(temp[2]), ".0f")
             
             QUAL = rms(QUAL)
             BQ = rms(pileup.quals)

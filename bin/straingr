@@ -302,6 +302,24 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                                    SMQ=smq,
                                   ))
 
+
+def process_bamfile(reference, bamfile):
+    """Process a bamfile
+    """
+    print "Scanning BAM file: %s" % bamfile
+    bam = pysam.AlignmentFile(bamfile, "rb")
+    all_pileups = []
+    for scaffold in bam.references:
+        try:
+            pileups = process_scaffold(bam, scaffold, reference[scaffold])
+            all_pileups.extend(pileups)
+        except KeyboardInterrupt:
+            raise e
+        except Exception as e:
+            print "Error in straingr: %s" % e
+            continue
+    return all_pileups
+
 ##################################
 ### Main
 ##################################
@@ -330,21 +348,9 @@ reference = {scaffold.name: scaffold.seq for scaffold in kmertools.openSeqFile(a
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
 for file in args.bam:
-    print "Scanning BAM file: %s" % file
-    bam = pysam.AlignmentFile(file, "rb")
-
-    all_pileups = []
-    for scaffold in bam.references:
-        try:
-            pileups = process_scaffold(bam, scaffold, reference[scaffold])
-            all_pileups.extend(pileups)
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print e
-            continue
-
+    all_pileups = process_bamfile(reference, file)
+    if not all_pileups:
+        print "Error: no pileups for %s" % file
+        continue
     if args.vcf:
         write_vcf(all_pileups, args.vcf, date=date.today(), reference=args.reference)
-    else:
-        print "No SNPs found."

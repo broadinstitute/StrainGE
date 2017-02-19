@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-import sys
 import argparse
+import math
 import pysam
 import kmertools
 
@@ -8,6 +8,7 @@ import kmertools
 min_qual = None
 min_mq = None
 min_confirm = None
+min_gap = None
 consensus = None
 verbose = False
 
@@ -45,6 +46,9 @@ class Pileup:
     def add_read(self, read, refbase):
         """Add a pysam.PileupRead object to this pileup"""
         alignment = read.alignment
+
+        #if self.pos == 107450:
+        #    print "107450:", refbase, read, alignment.mapping_quality, self
 
         # check for decent mapping quality
         mq = alignment.mapping_quality
@@ -168,6 +172,10 @@ def process_scaffold(bam, scaffold, refseq):
     #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
 
+    last_covered = -1
+
+    gaps = []
+
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
         pileup = Pileup(refseq, refpos, column.pileups)
@@ -182,6 +190,11 @@ def process_scaffold(bam, scaffold, refseq):
                 confirmed += 1
             elif pileup.base_call():
                 snps += 1
+            if refpos - last_covered > min_gap:
+                gap = (last_covered + 1, refpos - last_covered)
+                print "Coverage gap:", gap[0], gap[1]
+                gaps.append(gap)
+            last_covered = refpos
         if verbose:
             print pileup, pileup.confirmed()
         pileups.append(pileup)
@@ -190,13 +203,21 @@ def process_scaffold(bam, scaffold, refseq):
     else:
         snp_rate = None
     total = length
-    print "Good coverage: %.1f of %.1f" % (float(goodcoverage) / length, float(goodcoverage + badcoverage) / length)
+    coverage = float(goodcoverage) / float(length)
+    total_coverage = float(goodcoverage + badcoverage) / length
+    pct_good = total_coverage and 100.0 * coverage / total_coverage
+    mixed = covered - (confirmed + snps)
+    print "good coverage: %.1f of %.1f %.1f%%" % (coverage, total_coverage, pct_good)
     print "covered: %d %.1f%%" % (covered, pct(covered, total))
     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
     if snps:
         print "snp rate: %.0f" % (float(covered) / float(snps),)
-
+    print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
+    if mixed:
+        mixed_rate = float(covered) / float(mixed)
+        print "mixed rate: %.0f Q%.0f" % (mixed_rate, math.log10(mixed_rate) * 10.0)
+    print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
 
 ##################################
 ### Main
@@ -204,9 +225,10 @@ def process_scaffold(bam, scaffold, refseq):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
-parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
-parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
+parser.add_argument("--minqual", type=int, default=3, help='minimum base quality score to consider')
+parser.add_argument("--minmq", type=int, default=0, help='minimum read mapping quality score to consider')
+parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference')
+parser.add_argument("--mingap", type=int, default=1000, help='minimum contiguous uncovered region to flag')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum pileup quality sum to confirm reference')
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)')
@@ -217,6 +239,7 @@ verbose = args.verbose
 min_qual = args.minqual
 min_mq = args.minmq
 min_confirm = args.minconfirm
+min_gap = args.mingap
 consensus = args.consensus
 
 print "Loading reference genome"

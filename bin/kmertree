@@ -99,16 +99,11 @@ class KmerTreeNode:
 
     def computeScoreWeighted(self, kmers):
         """Score this node vs a set of kmers"""
-        weights = 1.0 / self.counts
+        weights = 1.0 / (self.counts * self.counts)
         self.denominator = weights.sum()
         if self.denominator > 0:
-            #common = np.in1d(self.kmers, kmers, assume_unique = True)
-            #score = weights[common].sum()
-            #self.score = score / total
-
             subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
-            self.score = (1.0 / subCounts).sum() / self.denominator
-            #self.common = np.intersect1d(self.kmers, kmers, assume_unique = True)  # same as regular score for kmers
+            self.score = (1.0 / (subCounts * subCounts)).sum() / self.denominator
             self.common = kmerizer.intersect(self.kmers, kmers)
         else:
             self.score = 0

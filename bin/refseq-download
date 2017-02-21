@@ -8,9 +8,8 @@ from subprocess import call
 def load_assemblies():
     """fetch bacteria assembly_summary.txt file from NCBI refseq"""
     summary = "assembly_summary.txt"
-    if not os.path.exists(summary):
-        print("Fetching assembly file")
-        urllib.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
+    print("Fetching assembly file")
+    urllib.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
     with open(summary, 'r') as sum:
         sum.readline()
         assemblies =[row for row in csv.DictReader(sum, delimiter='\t')]

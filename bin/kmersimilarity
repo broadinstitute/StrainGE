@@ -46,7 +46,7 @@ else:
         else:
             scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
 
-if fraction:
+if args.fraction:
     scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1]))
 else:
     scores.sort(lambda a, b: cmp(b[2], a[2]))

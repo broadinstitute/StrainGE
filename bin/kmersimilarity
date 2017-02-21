@@ -58,7 +58,7 @@ else:
 csvwriter = csv.writer(output, delimiter="\t", lineterminator="\n")
 
 if args.fraction:
-    for name1, name2, (numerator, denomintor in scores:
+    for name1, name2, (numerator, denomintor) in scores:
         csvwriter.writerow((name1, name2, "%.5f" % numerator, "%.5f" % denomintor))
 else:
     for name1, name2, score in scores:

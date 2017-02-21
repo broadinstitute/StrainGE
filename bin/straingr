@@ -321,11 +321,19 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                     QUAL += pileup.others[_snp][1]
                     snp_count += pileup.others[_snp][0]
                 # qual is RMS of all SNPs... is this right?
-                QUAL = sqrt(float(QUAL)/snp_count)
+                
+                if snp_count:
+                    QUAL = sqrt(float(QUAL)/snp_count)
+                else:
+                    QUAL = 0
                 FILTER="amb"
             
-            BQ = sqrt(float(pileup.qual_ss)/pileup.count)
-            MQ = sqrt(float(pileup.mq_ss)/pileup.count)
+            if pileup.count:
+                BQ = sqrt(float(pileup.qual_ss)/pileup.count)
+                MQ = sqrt(float(pileup.mq_ss)/pileup.count)
+            else:
+                BQ = 0
+                MQ = 0
             
             w.write(vcf_row.format(CHROM=pileup.chrom,
                                    POS=pileup.pos,

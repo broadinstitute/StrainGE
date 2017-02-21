@@ -284,15 +284,14 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
     with open(output, 'wb') as w:
         w.write(vcf_header.format(date=date, ref=reference))
         for pileup in pileups:
-            
+            af = ''
+            sbq = ''
+            smq = ''
             if pileup.others:
                 snp = pileup.base_call()
-                
                 sorted_alt = pileup.sort_alts()
                 ALT = ','.join(sorted_alt)
-                af = ''
-                sbq = ''
-                smq = ''
+                
                 for alt in sorted_alt:
                     temp = pileup.others[alt]
                     if af:

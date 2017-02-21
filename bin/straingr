@@ -198,7 +198,7 @@ class Pileup:
         #return max(self.others.keys(), key = lambda snp: (sqrt(float(self.others[snp][1])/self.others[snp][0])+sqrt(float(self.others[snp][2])/self.others[snp][0]), self.others[snp][0], snp))
     
     def sort_alts(self):
-        return sorted(self.others.keys(), key = lambda x: (-sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0]), -self.others[snp][0], snp))
+        return sorted(self.others.keys(), key = lambda snp: (-sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0]), -self.others[snp][0], snp))
     
     def base_call(self):
         """Call another base...just print out stats for now"""

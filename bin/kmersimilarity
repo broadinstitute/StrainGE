@@ -12,6 +12,7 @@ parser.add_argument("--fingerprint", help="use minhash fingerprint instead of fu
 parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
 parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize"], default="jaccard")
+parser.add_argument("--fraction", action="store_true", help="Output numerator and denomintor in fraction instead of calculating score")
 parser.add_argument('strains', nargs='+',
                     help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
@@ -26,8 +27,12 @@ if args.sample:
     name = kmertools.nameFromPath(args.sample)
     print >>sys.stderr, 'Computing similarity of', name, 'vs. strains'
     kmers = loader(args.sample)
-    scores = [(name, kmertools.nameFromPath(strain), kmertools.similarityScore(kmers, loader(strain), args.simscore))
-              for strain in args.strains]
+    if args.fraction:
+        scores = [(name, kmertools.nameFromPath(strain), kmertools.similarityNumeratorDenominator(kmers, loader(strain), args.simscore))
+                    for strain in args.strains]
+    else:
+        scores = [(name, kmertools.nameFromPath(strain), kmertools.similarityScore(kmers, loader(strain), args.simscore))
+                    for strain in args.strains]
 else:
     print >>sys.stderr, 'Computing pairwise similarity'
     strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
@@ -36,9 +41,15 @@ else:
         strain1, strain2 = pair
         s1name, s1kmers = strain1
         s2name, s2kmers = strain2
-        scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
+        if args.fraction:
+            scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
+        else:
+            scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
 
-scores.sort(lambda a, b: cmp(b[2], a[2]))
+if fraction:
+    scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1])
+else:
+    scores.sort(lambda a, b: cmp(b[2], a[2]))
 
 if args.similarity:
     output = open(args.similarity, 'w')
@@ -46,6 +57,9 @@ else:
     output = sys.stdout
 csvwriter = csv.writer(output, delimiter="\t", lineterminator="\n")
 
-
-for name1, name2, score in scores:
-    csvwriter.writerow((name1, name2, "%.5f" % score))
+if args.fraction:
+    for name1, name2, (numerator, denomintor in scores:
+        csvwriter.writerow((name1, name2, "%.5f" % numerator, "%.5f" % denomintor))
+else:
+    for name1, name2, score in scores:
+        csvwriter.writerow((name1, name2, "%.5f" % score))

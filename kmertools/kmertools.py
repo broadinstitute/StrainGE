@@ -137,6 +137,24 @@ def similarityScore(kmers1, kmers2, scoring="jaccard"):
     return score
 
 
+def similarityNumeratorDenominator(kmers1, kmers2, scoring="jaccard"):
+    """Compute Jaccard similarity index"""
+    # count of kmers in common
+    intersection = float(kmerizer.count_common(kmers1, kmers2))
+    if scoring == "jaccard":
+        # Use Jaccard similarity index
+        denom = (kmers1.size + kmers2.size - intersection)
+    elif scoring == "minsize":
+        # Use intersection / min_size (proper subset scores 1.0)
+        denom = min(kmers1.size, kmers2.size)
+    elif scoring == "maxsize":
+        # Use intersection / max_size (proper subset scores min/max)
+        denom = max(kmers1.size, kmers2.size)
+    else:
+        assert scoring in ("jaccard", "minsize", "maxsize"), "unknown scoring method"
+    return intersection, denom
+
+
 class KmerSet:
     """
     Holds array of kmers and their associated counts & stats.

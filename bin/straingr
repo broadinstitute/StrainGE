@@ -31,7 +31,19 @@ vcf_header = \
 ##FILTER<ID=amb,Description="Ambiguous SNP call">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
-vcf_row = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};BQ={BQ:.0f};MQ={MQ:.0f};AF={AF};SBQ={SBQ};SMQ={SMQ}\n"
+
+vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};BQ={BQ:.0f};MQ={MQ:.0f}"
+def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, BQ, MQ, AF=None, SBQ=None, SMQ=None):
+    string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP, BQ=BQ, MQ=MQ)
+    if AF:
+        string += ";AF={}".format(AF)
+    if SBQ:
+        string += ";SBQ={}".format(SBQ)
+    if SMQ:
+        string += ";SMQ={}".format(SMQ)
+    
+    return string+"\n"
+    
 
 class Pileup:
     """
@@ -338,7 +350,8 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                 BQ = 0
                 MQ = 0
             
-            w.write(vcf_row.format(CHROM=pileup.chrom,
+            
+            w.write(vcf_row(CHROM=pileup.chrom,
                                    POS=pileup.pos,
                                    ID='.',
                                    REF=pileup.refbase,

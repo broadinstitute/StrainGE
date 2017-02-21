@@ -27,8 +27,7 @@ vcf_header = \
 ##INFO=<ID=SBQ,Number=.,Type=Integer,Description="SNP base quality">
 ##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
 ##FILTER=<ID=cv,Description="Coverage too low">
-##FILTER=<ID=rc,Description="Reference confirmed">
-##FILTER<ID=nc,Description="No consensus SNP">
+##FILTER<ID=amb,Description="Ambiguous SNP call">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
 vcf_row = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};BQ={BQ:.0f};MQ={MQ:.0f};AF={AF};SBQ={SBQ};SMQ={SMQ}\n"
@@ -52,12 +51,14 @@ class Pileup:
         self.count = 0
         self.bad = 0
         self.mq_total = 0
-        self.mqs = []
+        self.mq_ss = 0
         self.qual_total = 0
-        self.quals = []
+        self.qual_ss = 0
         self.ref_count = 0
         self.ref_qual = 0
+        self.ref_qual_ss = 0
         self.ref_mq = 0
+        self.ref_mq_ss = 0
         # reads with other than reference base; list of tuples (base, qual, mq)
         self.others = {}
 
@@ -111,17 +112,20 @@ class Pileup:
 
         # We're good! Update the pileup stats...
         self.count += 1
+        self.mq_ss += mq**2
         self.mq_total += mq
-        self.mqs.append(mq)
+        self.qual_ss += qual**2
         self.qual_total += qual
-        self.quals.append(qual)
 
         if read.is_del:
             self.add_other("del", qual, mq)
         elif base == self.refbase:
             self.ref_count += 1
-            self.ref_qual += qual
+            self.ref_qual_ss += qual**2
+            self.ref_qual = += qual
+            self.ref_mq_ss += mq**2
             self.ref_mq += mq
+            
         else:
             self.add_other(base, qual, mq)
             if verbose:
@@ -138,26 +142,24 @@ class Pileup:
         if not self.others:
             self.others = {}
         if base in self.others:
-            (count, qsum, mqsum) = self.others[base]
+            (count, qss, mqss) = self.others[base]
         else:
             count = 0
-            qsum = []
-            mqsum = []
+            qss = 0
+            mqss = 0
         count += 1
-        qsum.append(bq)
-        mqsum.append(mq)
-        self.others[base] = (count, qsum, mqsum)
-
-
+        qss += bq**2
+        mqss += mq**2
+        self.others[base] = (count, qss, mqss)
 
     def covered(self):
         """Does this pileup have enough data to consider this locus covered?"""
-        return self.qual_total >= min_confirm and self.count > self.bad
+        return self.ref_qual >= min_confirm and self.count > self.bad
 
     def ref_fraction(self):
         """Fraction of evidence which supports reference base"""
         if self.qual_total:
-            return float(self.ref_qual) / float(self.qual_total)
+            return self.ref_qual / self.qual_total
         else:
             return 0
 
@@ -165,6 +167,37 @@ class Pileup:
         """Does this pileup confirm the reference?"""
         return self.ref_qual >= min_confirm and \
                (self.ref_qual == self.qual_total or self.ref_fraction() > consensus)
+    
+    def _get_best_snp(self):
+        """Returns the SNP with the highest sum of RMS base quality and mapping quality, if two are qual, return higher count. All else equal, alphabetical."""
+        best_snp = None
+        best_score = 0
+        best_count = 0
+        if len(self.others) == 1:
+            return self.others.keys()[0]
+        for snp in self.others:
+            # score is just sum of RMS(BQ) and RMS(MQ)
+            score = sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0])
+            count = self.others[snp][0]
+            if score > best_score:
+                best_snp = snp
+                best_score = score
+                best_count = count
+            elif score == best_score:
+                if count > best_count:
+                    best_snp = snp
+                    best_score = score
+                    best_count = count
+                elif count == best_count:
+                    if verbose: print "Warning: multiple SNPs have same score and count!"
+                    return False
+        
+        return best_snp
+        
+        #return max(self.others.keys(), key = lambda snp: (sqrt(float(self.others[snp][1])/self.others[snp][0])+sqrt(float(self.others[snp][2])/self.others[snp][0]), self.others[snp][0], snp))
+    
+    def sort_alts(self):
+        return sorted(self.others.keys(), key = lambda x: (-sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0]), -self.others[snp][0], snp))
     
     def base_call(self):
         """Call another base...just print out stats for now"""
@@ -174,14 +207,10 @@ class Pileup:
             
             if len(self.others) == 0:
                 if verbose: print "No evidence of SNPs"
-                
-            elif len(self.others) == 1:
-                if verbose: print "Only SNP found is %s" % self.others.keys()[0]
-                return True
             else:
                 # get SNP with highest proportion if >1 SNP
-                base = max(self.others.keys(), key = lambda x: (self.others[x][0], rms(self.others[x][1]), rms(self.others[x][2])))
-                if self.others[base][0] >= consensus * self.count:
+                base = self._get_best_snp()
+                if base and self.others[base][0] >= consensus * self.count and self.others[base][1]:
                     # 90% of reads match SNP
                     if verbose: print "SNP confirmed %s" % base
                     return base
@@ -195,6 +224,8 @@ class Pileup:
         return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
                                                                       self.ref_qual, self.qual_total,
                                                                       self.ref_mq, self.mq_total, str(self.others))
+
+
 
 
 def pct(numerator, denominator):
@@ -243,49 +274,57 @@ def process_scaffold(bam, scaffold, refseq):
     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
     if snps:
-        print "snp rate: %.0f" % (float(covered) / float(snps),)
+        print "snp rate: %.0f" % (float(covered) / float(snps))
     return pileups
 
-def rms(numbers):
-    return sqrt(mean([x**2 for x in numbers]))
 
 def write_vcf(pileups, output=None, date=date.today(), reference=None):
     """Write SNPs to a VCF file"""
     with open(output, 'wb') as w:
         w.write(vcf_header.format(date=date, ref=reference))
         for pileup in pileups:
-            if not pileup.others:
-                continue
-            sorted_alt = sorted(pileup.others.keys(), key = lambda x: -pileup.others[x][0])
-            ALT = ','.join(sorted_alt)
-            total = float(pileup.count)
-            af = ''
-            sbq = ''
-            smq = ''
-            QUAL = []
-            for alt in sorted_alt:
-                temp = pileup.others[alt]
-                QUAL.extend(pileup.others[alt][1])
-                if af:
-                    af += ','
-                    sbq += ','
-                    smq += ','
-                af += format(temp[0]/total, ".3f").rstrip('0').rstrip('.')
-                sbq += format(rms(temp[1]), ".0f")
-                smq += format(rms(temp[2]), ".0f")
             
-            QUAL = rms(QUAL)
-            BQ = rms(pileup.quals)
-            MQ = rms(pileup.mqs)
+            if pileup.others:
+                snp = pileup.base_call()
+                
+                sorted_alt = pileup.sort_alts()
+                ALT = ','.join(sorted_alt)
+                af = ''
+                sbq = ''
+                smq = ''
+                for alt in sorted_alt:
+                    temp = pileup.others[alt]
+                    if af:
+                        af += ','
+                        sbq += ','
+                        smq += ','
+                    af += format(float(temp[0])/pileup.count, ".3f").rstrip('0').rstrip('.')
+                    sbq += format(sqrt(float(temp[1])/temp[0]), ".0f")
+                    smq += format(sqrt(float(temp[2])/temp[0]), ".0f")
+            else:
+                ALT = '.'
+                snp = None
             
             if not pileup.covered():
                 FILTER="cv"
             elif pileup.confirmed():
-                FILTER="rc"
-            elif not pileup.base_call():
-                FILTER="nc"
-            else:
+                QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
                 FILTER="PASS"
+            elif snp:
+                QUAL = sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
+                FILTER="PASS"
+            else:
+                QUAL = 0
+                snp_count = 0
+                for _snp in pileup.others:
+                    QUAL += pileup.others[_snp][1]
+                    snp_count += pileup.others[_snp][0]
+                # qual is RMS of all SNPs... is this right?
+                QUAL = sqrt(float(QUAL)/snp_count)
+                FILTER="amb"
+            
+            BQ = sqrt(float(pileup.qual_ss)/pileup.count)
+            MQ = sqrt(float(pileup.mq_ss)/pileup.count)
             
             w.write(vcf_row.format(CHROM=pileup.chrom,
                                    POS=pileup.pos,
@@ -328,8 +367,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
-parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
-parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference')
+parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')

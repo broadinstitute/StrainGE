@@ -123,7 +123,7 @@ class Pileup:
         elif base == self.refbase:
             self.ref_count += 1
             self.ref_qual_ss += qual**2
-            self.ref_qual = += qual
+            self.ref_qual += qual
             self.ref_mq_ss += mq**2
             self.ref_mq += mq
             

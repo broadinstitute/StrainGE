@@ -308,6 +308,10 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
             
             if not pileup.covered():
                 FILTER="cv"
+                if pileup.ref_count:
+                    QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
+                else:
+                    QUAL = 0
             elif pileup.confirmed():
                 QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
                 FILTER="PASS"

@@ -132,8 +132,11 @@ def similarityScore(kmers1, kmers2, scoring="jaccard"):
     elif scoring == "maxsize":
         # Use intersection / max_size (proper subset scores min/max)
         score = intersection / max(kmers1.size, kmers2.size)
+    elif scoring == "reference":
+        # Use intersection / size of reference (useful for comparing reads to assembled references)
+        score = intersection / kmers2.size
     else:
-        assert scoring in ("jaccard", "minsize", "maxsize"), "unknown scoring method"
+        assert scoring in ("jaccard", "minsize", "maxsize", "reference"), "unknown scoring method"
     return score
 
 
@@ -150,6 +153,9 @@ def similarityNumeratorDenominator(kmers1, kmers2, scoring="jaccard"):
     elif scoring == "maxsize":
         # Use intersection / max_size (proper subset scores min/max)
         denom = max(kmers1.size, kmers2.size)
+    elif scoring == "reference":
+        # Use intersection / size of reference (useful for comparing reads to assembled references)
+        denom = kmers2.size
     else:
         assert scoring in ("jaccard", "minsize", "maxsize"), "unknown scoring method"
     return intersection, denom

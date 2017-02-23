@@ -136,6 +136,37 @@ kmerizer_count_common_internal(kmer_t *kmers1, count_t size1, kmer_t *kmers2, co
   return kcount;
 }
 
+/*
+ * Walk thhrough two sorted kmer arrays and identify intersection. When there is a common kmer at kmers1[k1] and
+ * kmers2[k2], take source1[k1] and append it to dest. This gives some flexibility in how we use it, e.g., to take
+ * a counts array at intersecting indexes rather than the kmers themselves. This relies on count_t and kmer_t being
+ * the same size!  --bruce
+ */
+int
+kmerizer_intersect_internal(kmer_t *k1, count_t k1size, kmer_t *k2, count_t k2size, kmer_t *source1, kmer_t *dest) {
+  int kcount, i1, i2;
+
+  /* walk through sorted arrays in parallel */
+  for (kcount = 0, i1 = 0, i2 = 0; i1 < k1size && i2 < k2size; ) {
+    kmer_t kmer1 = k1[i1];
+    kmer_t kmer2 = k2[i2];
+    /*printf("count=%d i1=%d i2=%d k1=%lx k2=%lx c1=%d c2=%d\n", kcount, i1, i2, kmer1, kmer2, c1[i1], c2[i2]);*/
+    if (kmer1 == kmer2) {
+      /* in both */
+      dest[kcount] = source1[i1];
+      ++i1;
+      ++kcount;
+    } else if (kmer1 < kmer2) {
+      /* only in kmers1 */
+      ++i1;
+    } else {
+      /* only in kmers2 */
+      ++i2;
+    }
+  }
+  return kcount;
+}
+
 static PyObject *
 kmerizer_count_common(PyObject *self, PyObject *args)
 {
@@ -212,6 +243,33 @@ kmerizer_merge_counts(PyObject *self, PyObject *args)
   return Py_BuildValue("(NN)", kmersOut, countsOut);
 }
 
+static PyObject *
+kmerizer_intersect(PyObject *self, PyObject *args)
+{
+  PyObject *kmers1, *kmers2;
+
+  if (!PyArg_ParseTuple(args, "OO", &kmers1, &kmers2))
+    return NULL;
+
+  npy_intp k1size = *PyArray_DIMS(kmers1);
+  npy_intp k2size = *PyArray_DIMS(kmers2);
+
+  kmer_t *k1 = PyArray_GETPTR1(kmers1, 0);
+  kmer_t *k2 = PyArray_GETPTR1(kmers2, 0);
+
+  int kcount = kmerizer_count_common_internal(k1, k1size, k2, k2size);
+
+  /* allocate output array */
+  npy_intp dim = kcount;
+
+  PyObject *kmersOut = PyArray_SimpleNew(1, &dim, NPY_ULONG);
+  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
+
+  kmerizer_intersect_internal(k1, k1size, k2, k2size, k1, kout);
+
+  return Py_BuildValue("N", kmersOut);
+}
+
 
 static PyObject *
 kmerizer_intersect_counts(PyObject *self, PyObject *args)
@@ -228,9 +286,7 @@ kmerizer_intersect_counts(PyObject *self, PyObject *args)
   kmer_t *k2 = PyArray_GETPTR1(kmers2, 0);
   count_t *c1 = PyArray_GETPTR1(count1, 0);
 
-  int kcount, i1, i2;;
-
-  kcount = kmerizer_count_common_internal(k1, k1size, k2, k2size);
+  int kcount = kmerizer_count_common_internal(k1, k1size, k2, k2size);
 
   /* allocate output array */
   npy_intp dim = kcount;
@@ -238,24 +294,8 @@ kmerizer_intersect_counts(PyObject *self, PyObject *args)
   PyObject *countsOut = PyArray_SimpleNew(1, &dim, NPY_LONG);
   count_t *cout = PyArray_GETPTR1(countsOut, 0);
 
-  /* walk through sorted arrays in parallel */
-  for (kcount = 0, i1 = 0, i2 = 0; i1 < k1size && i2 < k2size; ) {
-    kmer_t kmer1 = k1[i1];
-    kmer_t kmer2 = k2[i2];
-    /*printf("count=%d i1=%d i2=%d k1=%lx k2=%lx c1=%d c2=%d\n", kcount, i1, i2, kmer1, kmer2, c1[i1], c2[i2]);*/
-    if (kmer1 == kmer2) {
-      /* in both */
-      cout[kcount] = c1[i1];
-      ++i1;
-      ++kcount;
-    } else if (kmer1 < kmer2) {
-      /* only in kmers1 */
-      ++i1;
-    } else {
-      /* only in kmers2 */
-      ++i2;
-    }
-  }
+  kmerizer_intersect_internal(k1, k1size, k2, k2size, (kmer_t *) c1, (kmer_t *) cout);
+
   return Py_BuildValue("N", countsOut);
 }
 
@@ -303,10 +343,12 @@ static PyMethodDef KmerizerMethods[] = {
        "Kmerize sequence into existing numpy array."},
       {"merge_counts",  kmerizer_merge_counts, METH_VARARGS,
        "Merge and sum  two sets of kmer and count arrays."},
-      {"intersect_counts",  kmerizer_intersect_counts, METH_VARARGS,
-       "Return count array for intersection of kmer arrays."},
       {"count_common",  kmerizer_count_common, METH_VARARGS,
        "Count common elements in two sorted kmer arrays."},
+      {"intersect",  kmerizer_intersect, METH_VARARGS,
+       "Return intersection of two sorted kmer arrays."},
+      {"intersect_counts",  kmerizer_intersect_counts, METH_VARARGS,
+       "Return count array for intersection of kmer arrays."},
       {"fnvhash_kmers",  kmerizer_fnvhash_kmers, METH_VARARGS,
        "Hash kmers using FNV1a hash algorithm."},
       {NULL, NULL, 0, NULL}        /* Sentinel */

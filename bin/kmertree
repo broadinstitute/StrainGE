@@ -27,6 +27,8 @@ class KmerTreeNode:
         self.counts = counts
         self.children = children
         self.score = None
+        self.common = None
+        self.denominator = None
 
     def isLeaf(self):
         return not self.children
@@ -59,6 +61,29 @@ class KmerTreeNode:
             childGroup = h5node.create_group(child.name)
             child.saveHdf5(childGroup, compress=compress)
 
+    def saveSampleHdf5(self, h5node, compress = True):
+        if compress is True:
+            compress = "gzip"
+        h5node.attrs["type"] = np.string_("SampleScoreNode")
+        h5node.attrs["name"] = np.string_(self.name)
+        
+        if self.score is not None:
+            h5node.attrs["score"] = self.score
+        else:
+            h5node.attrs["score"] = 0
+        
+        if self.denominator is not None:
+            h5node.attrs["denominator"] = self.denominator
+        else:
+            h5node.attrs["denominator"] = 0
+        
+        if self.common is not None:
+            h5node.create_dataset("common", data=self.common, compression=compress)
+        
+        for child in self.children:
+            childGroup = h5node.create_group(child.name)
+            child.saveSampleHdf5(childGroup, compress=compress)
+
     def saveText(self, outfile):
         header = ["%", self.name] + [child.name for child in self.children]
         print >>outfile, "\t".join(header)
@@ -75,14 +100,16 @@ class KmerTreeNode:
     def computeScoreWeighted(self, kmers):
         """Score this node vs a set of kmers"""
         weights = 1.0 / self.counts
-        total = weights.sum()
-        if total > 0:
+        self.denominator = weights.sum()
+        if self.denominator > 0:
             #common = np.in1d(self.kmers, kmers, assume_unique = True)
             #score = weights[common].sum()
             #self.score = score / total
 
             subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
-            self.score = (1.0 / subCounts).sum()  / total
+            self.score = (1.0 / subCounts).sum() / self.denominator
+            #self.common = np.intersect1d(self.kmers, kmers, assume_unique = True)  # same as regular score for kmers
+            self.common = kmerizer.intersect(self.kmers, kmers)
         else:
             self.score = 0
 
@@ -90,35 +117,45 @@ class KmerTreeNode:
         """Score this node vs a set of kmers"""
         uniqueKmers = self.kmers[self.counts == 1]
         if uniqueKmers.size > 0:
-            common = kmerizer.count_common(uniqueKmers, kmers)
-            self.score = float(common) / float(uniqueKmers.size)
+            #self.common = np.intersect1d(uniqueKmers, kmers, assume_unique = True)
+            self.common = kmerizer.intersect(uniqueKmers, kmers)
+            self.denominator = float(uniqueKmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common.size) / self.denominator
+            else:
+                self.score = 0
         else:
             self.score = 0
 
     def computeScore(self, kmers):
         """Score this node vs a set of kmers"""
         if self.kmers.size > 0:
-            common = kmerizer.count_common(self.kmers, kmers)
-            self.score = float(common) / float(self.kmers.size)
+            #self.common = np.intersect1d(self.kmers, kmers, assume_unique = True)
+            self.common = kmerizer.intersect(self.kmers, kmers)
+            self.denominator = float(self.kmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common.size) / self.denominator
+            else:
+                self.score = 0 
         else:
             self.score = 0
 
 
 
-def getScore(nodePair, scores):
+def getScore(nodePair, scores, simscore="jaccard"):
     if nodePair in scores:
         score = scores[nodePair]
     else:
         node1, node2 = nodePair
         k1 = node1.kmers
         k2 = node2.kmers
-        score = kmertools.similarityScore(k1, k2, args.simscore)
+        score = kmertools.similarityScore(k1, k2, simscore)
         scores[nodePair] = score
     return score
 
-def similarityScores(tree, scores):
+def similarityScores(tree, scores, simscore="jaccard"):
     # calculate the intersection stats of kmers for all tree node pairs
-    pairScores = [(pair, getScore(pair, scores)) for pair in combinations(tree, 2)]
+    pairScores = [(pair, getScore(pair, scores, simscore)) for pair in combinations(tree, 2)]
     pairScores.sort(lambda a, b: cmp(b[1], a[1]))
     return pairScores
 
@@ -136,8 +173,8 @@ def newTreeNode(children):
     return node
 
 
-def buildTree(tree, scores):
-    pairScores = similarityScores(tree, scores, args.simscore)
+def buildTree(tree, scores, simscore="jaccard"):
+    pairScores = similarityScores(tree, scores, simscore)
     closePair, score = pairScores[0]
     newNode = newTreeNode(list(closePair))
     newTree = [x for x in tree if x not in closePair]
@@ -280,6 +317,8 @@ def scoreSample(tree, sampleKmers, scoring):
         tree.computeScore(sampleKmers)
     for child in tree.children:
         scoreSample(child, sampleKmers, scoring)
+    
+    
 
 ###
 ### Main
@@ -297,7 +336,12 @@ parser.add_argument("--input", help="HDF5 tree input file")
 parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
+<<<<<<< HEAD
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample hdf5")
+=======
+parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample")
+parser.add_argument("--sampleout", help="HDF5 sample scoring output file")
+>>>>>>> master
 parser.add_argument("--samplescore", help="sample matching scoring method", choices=["all", "unique", "weighted"], default="all")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize"], default="jaccard")
 parser.add_argument('genomes', nargs='*',
@@ -315,7 +359,7 @@ else:
     nleaves = len(nodes)
     print 'Loaded', nleaves, 'genomes'
     while len(nodes) > 1:
-        nodes = buildTree(nodes, scores)
+        nodes = buildTree(nodes, scores, args.simscore)
         print len(nodes)
         sys.stdout.flush()
     tree = nodes[0]
@@ -327,7 +371,11 @@ if args.dedupe:
 if args.sample:
     print 'Scoring sample'
     sampleKmers = kmertools.loadKmers(args.sample)
-    scoreSample(tree, sampleKmers, args.scoring)
+    scoreSample(tree, sampleKmers, args.samplescore)
+    if args.sampleout:
+        print 'Output sample scores to', args.sampleout
+        with h5py.File(args.sampleout, 'w') as h5:
+            tree.saveSampleHdf5(h5, compress = True)
 else:
     sampleKmers = None
 

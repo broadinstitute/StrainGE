@@ -1,8 +1,11 @@
 #!/usr/bin/env python
+"""StrainGR"""
 import sys
 import argparse
 import pysam
 import kmertools
+from numpy import sqrt
+from datetime import date
 
 # globals
 min_qual = None
@@ -13,6 +16,35 @@ verbose = False
 
 bases = "ACGT"
 
+vcf_header = \
+"""##fileformat=VCFv4.0
+##fileDate={date}
+##source=StrainGR
+##reference={ref}
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
+##INFO=<ID=BQ,Number=1,Type=Integer,Description="RMS base quality">
+##INFO=<ID=MQ,Number=1,Type=Integer,Description="RMS mapping quality">
+##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
+##INFO=<ID=SBQ,Number=.,Type=Integer,Description="SNP base quality">
+##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
+##FILTER=<ID=cv,Description="Coverage too low">
+##FILTER<ID=amb,Description="Ambiguous SNP call">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
+"""
+
+vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};BQ={BQ:.0f};MQ={MQ:.0f}"
+def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, BQ, MQ, AF=None, SBQ=None, SMQ=None):
+    string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP, BQ=BQ, MQ=MQ)
+    if AF:
+        string += ";AF={}".format(AF)
+    if SBQ:
+        string += ";SBQ={}".format(SBQ)
+    if SMQ:
+        string += ";SMQ={}".format(SMQ)
+    
+    return string+"\n"
+    
+
 class Pileup:
     """
     Class to process pileup information; that is,
@@ -20,29 +52,37 @@ class Pileup:
     to a given reference coordinate.
     """
 
-    def __init__(self, scaffold, pos, pileup_reads = []):
+    def __init__(self, chrom, scaffold, pos, pileup_reads = []):
         """
         :param scaffold: reference sequence
         :param pos: coordinate in reference (0-based)
         :param pileup_reads: pileup objects from pysam
         """
+        self.chrom = chrom
         self.scaffold = scaffold
         self.pos = pos
         self.count = 0
         self.bad = 0
         self.mq_total = 0
+        self.mq_ss = 0
         self.qual_total = 0
+        self.qual_ss = 0
         self.ref_count = 0
         self.ref_qual = 0
+        self.ref_qual_ss = 0
         self.ref_mq = 0
+        self.ref_mq_ss = 0
         # reads with other than reference base; list of tuples (base, qual, mq)
-        self.others = None
+        self.others = {}
 
-        refbase = scaffold[pos]
+        self.refbase = scaffold[pos]
+        if not pileup_reads:
+            print "No reads for pileup"
+            return
         for read in pileup_reads:
-            self.add_read(read, refbase)
+            self.add_read(read)
 
-    def add_read(self, read, refbase):
+    def add_read(self, read):
         """Add a pysam.PileupRead object to this pileup"""
         alignment = read.alignment
 
@@ -85,15 +125,20 @@ class Pileup:
 
         # We're good! Update the pileup stats...
         self.count += 1
+        self.mq_ss += mq**2
         self.mq_total += mq
+        self.qual_ss += qual**2
         self.qual_total += qual
 
         if read.is_del:
             self.add_other("del", qual, mq)
-        elif base == refbase:
+        elif base == self.refbase:
             self.ref_count += 1
+            self.ref_qual_ss += qual**2
             self.ref_qual += qual
+            self.ref_mq_ss += mq**2
             self.ref_mq += mq
+            
         else:
             self.add_other(base, qual, mq)
             if verbose:
@@ -110,43 +155,90 @@ class Pileup:
         if not self.others:
             self.others = {}
         if base in self.others:
-            (count, qsum, mqsum) = self.others[base]
+            (count, qss, mqss) = self.others[base]
         else:
             count = 0
-            qsum = 0
-            mqsum = 0
+            qss = 0
+            mqss = 0
         count += 1
-        qsum += bq
-        mqsum += mq
-        self.others[base] = (count, qsum, mqsum)
-
-
+        qss += bq**2
+        mqss += mq**2
+        self.others[base] = (count, qss, mqss)
 
     def covered(self):
         """Does this pileup have enough data to consider this locus covered?"""
-        return self.qual_total >= min_confirm and self.count > self.bad
+        return self.ref_qual >= min_confirm and self.count > self.bad
 
     def ref_fraction(self):
         """Fraction of evidence which supports reference base"""
-        return float(self.ref_qual) / float(self.qual_total)
+        if self.qual_total:
+            return self.ref_qual / self.qual_total
+        else:
+            return 0
 
     def confirmed(self):
         """Does this pileup confirm the reference?"""
         return self.ref_qual >= min_confirm and \
                (self.ref_qual == self.qual_total or self.ref_fraction() > consensus)
-
+    
+    def _get_best_snp(self):
+        """Returns the SNP with the highest sum of RMS base quality and mapping quality, if two are qual, return higher count. All else equal, alphabetical."""
+        best_snp = None
+        best_score = 0
+        best_count = 0
+        if len(self.others) == 1:
+            return self.others.keys()[0]
+        for snp in self.others:
+            # score is just sum of RMS(BQ) and RMS(MQ)
+            score = sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0])
+            count = self.others[snp][0]
+            if score > best_score:
+                best_snp = snp
+                best_score = score
+                best_count = count
+            elif score == best_score:
+                if count > best_count:
+                    best_snp = snp
+                    best_score = score
+                    best_count = count
+                elif count == best_count:
+                    if verbose: print "Warning: multiple SNPs have same score and count!"
+                    return False
+        
+        return best_snp
+        
+        #return max(self.others.keys(), key = lambda snp: (sqrt(float(self.others[snp][1])/self.others[snp][0])+sqrt(float(self.others[snp][2])/self.others[snp][0]), self.others[snp][0], snp))
+    
+    def sort_alts(self):
+        return sorted(self.others.keys(), key = lambda snp: (-sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0]), -self.others[snp][0], snp))
+    
     def base_call(self):
         """Call another base...just print out stats for now"""
         rf = self.ref_fraction()
-        if rf < (1.0 - consensus):
-            print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
-            return True
+        if rf < consensus:
+            if verbose: print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
+            
+            if len(self.others) == 0:
+                if verbose: print "No evidence of SNPs"
+            else:
+                # get SNP with highest proportion if >1 SNP
+                base = self._get_best_snp()
+                if base and self.others[base][0] >= consensus * self.count and self.others[base][1]:
+                    # 90% of reads match SNP
+                    if verbose: print "SNP confirmed %s" % base
+                    return base
+                else:
+                    # no consensus
+                    if verbose: print "No confirmed SNP"
+        
         return False
 
     def __str__(self):
         return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
                                                                       self.ref_qual, self.qual_total,
                                                                       self.ref_mq, self.mq_total, str(self.others))
+
+
 
 
 def pct(numerator, denominator):
@@ -167,10 +259,10 @@ def process_scaffold(bam, scaffold, refseq):
 
     #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
-
+    
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
-        pileup = Pileup(refseq, refpos, column.pileups)
+        pileup = Pileup(column.reference_name, refseq, refpos, column.pileups)
         if verbose:
             refbase = refseq[refpos]
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
@@ -180,7 +272,7 @@ def process_scaffold(bam, scaffold, refseq):
             covered += 1
             if pileup.confirmed():
                 confirmed += 1
-            elif pileup.base_call():
+            if pileup.others:
                 snps += 1
         if verbose:
             print pileup, pileup.confirmed()
@@ -195,8 +287,102 @@ def process_scaffold(bam, scaffold, refseq):
     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
     if snps:
-        print "snp rate: %.0f" % (float(covered) / float(snps),)
+        print "snp rate: %.0f" % (float(covered) / float(snps))
+    return pileups
 
+
+def write_vcf(pileups, output=None, date=date.today(), reference=None):
+    """Write SNPs to a VCF file"""
+    with open(output, 'wb') as w:
+        w.write(vcf_header.format(date=date, ref=reference))
+        for pileup in pileups:
+            af = ''
+            sbq = ''
+            smq = ''
+            if pileup.others:
+                snp = pileup.base_call()
+                sorted_alt = pileup.sort_alts()
+                ALT = ','.join(sorted_alt)
+                
+                for alt in sorted_alt:
+                    temp = pileup.others[alt]
+                    if af:
+                        af += ','
+                        sbq += ','
+                        smq += ','
+                    af += format(float(temp[0])/pileup.count, ".3f").rstrip('0').rstrip('.')
+                    sbq += format(sqrt(float(temp[1])/temp[0]), ".0f")
+                    smq += format(sqrt(float(temp[2])/temp[0]), ".0f")
+            else:
+                ALT = '.'
+                snp = None
+            
+            if not pileup.covered():
+                FILTER="cv"
+                if pileup.ref_count:
+                    QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
+                else:
+                    QUAL = 0
+            elif pileup.confirmed():
+                QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
+                FILTER="PASS"
+            elif snp:
+                QUAL = sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
+                FILTER="PASS"
+            else:
+                QUAL = 0
+                snp_count = 0
+                for _snp in pileup.others:
+                    QUAL += pileup.others[_snp][1]
+                    snp_count += pileup.others[_snp][0]
+                # qual is RMS of all SNPs... is this right?
+                
+                if snp_count:
+                    QUAL = sqrt(float(QUAL)/snp_count)
+                else:
+                    QUAL = 0
+                FILTER="amb"
+            
+            if pileup.count:
+                BQ = sqrt(float(pileup.qual_ss)/pileup.count)
+                MQ = sqrt(float(pileup.mq_ss)/pileup.count)
+            else:
+                BQ = 0
+                MQ = 0
+            
+            
+            w.write(vcf_row(CHROM=pileup.chrom,
+                                   POS=pileup.pos,
+                                   ID='.',
+                                   REF=pileup.refbase,
+                                   ALT=ALT,
+                                   QUAL=QUAL,
+                                   FILTER=FILTER,
+                                   DP=pileup.count,
+                                   BQ=BQ,
+                                   MQ=MQ,
+                                   AF=af,
+                                   SBQ=sbq,
+                                   SMQ=smq,
+                                  ))
+
+
+def process_bamfile(reference, bamfile):
+    """Process a bamfile
+    """
+    print "Scanning BAM file: %s" % bamfile
+    bam = pysam.AlignmentFile(bamfile, "rb")
+    all_pileups = []
+    for scaffold in bam.references:
+        try:
+            pileups = process_scaffold(bam, scaffold, reference[scaffold])
+            all_pileups.extend(pileups)
+        except KeyboardInterrupt:
+            raise e
+        except Exception as e:
+            print "Error in straingr: %s" % e
+            continue
+    return all_pileups
 
 ##################################
 ### Main
@@ -206,10 +392,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
-parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference')
-parser.add_argument("--consensus", type=float, default=0.9, help='minimum pileup quality sum to confirm reference')
+parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
+parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')
-parser.add_argument('bam', help='bam file of reads aligned to reference (sorted & indexed)')
+parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
+#parser.add_argument('vcf', nargs='?', help='vcf file to record SNPs found')
 args = parser.parse_args()
 
 # set global options
@@ -223,7 +411,10 @@ print "Loading reference genome"
 reference = {scaffold.name: scaffold.seq for scaffold in kmertools.openSeqFile(args.reference)}
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
-print "Scanning BAM file"
-bam = pysam.AlignmentFile(args.bam, "rb")
-for scaffold in bam.references:
-    process_scaffold(bam, scaffold, reference[scaffold])
+for file in args.bam:
+    all_pileups = process_bamfile(reference, file)
+    if not all_pileups:
+        print "Error: no pileups for %s" % file
+        continue
+    if args.out:
+        write_vcf(all_pileups, args.out, date=date.today(), reference=args.reference)

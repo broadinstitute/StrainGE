@@ -408,7 +408,8 @@ min_confirm = args.minconfirm
 consensus = args.consensus
 
 print "Loading reference genome"
-reference = {scaffold.name: scaffold.seq for scaffold in kmertools.openSeqFile(args.reference)}
+# add upper to fix lower case reference genomes
+reference = {scaffold.name: scaffold.seq.upper() for scaffold in kmertools.openSeqFile(args.reference)}
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
 for file in args.bam:

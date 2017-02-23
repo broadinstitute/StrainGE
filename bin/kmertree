@@ -297,7 +297,7 @@ parser.add_argument("--input", help="HDF5 tree input file")
 parser.add_argument("--output", help="HDF5 tree output file")
 parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
-parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample npz")
+parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample hdf5")
 parser.add_argument("--samplescore", help="sample matching scoring method", choices=["all", "unique", "weighted"], default="all")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize"], default="jaccard")
 parser.add_argument('genomes', nargs='*',

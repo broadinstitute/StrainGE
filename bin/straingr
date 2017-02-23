@@ -4,7 +4,7 @@ import sys
 import argparse
 import pysam
 import kmertools
-from numpy import sqrt, mean
+from numpy import sqrt
 from datetime import date
 
 # globals

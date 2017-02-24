@@ -155,15 +155,19 @@ class Pileup:
         if not self.others:
             self.others = {}
         if base in self.others:
-            (count, qss, mqss) = self.others[base]
+            (count, qss, mqss, qual, mapqual) = self.others[base]
         else:
             count = 0
+            qual = 0
+            mapqual = 0
             qss = 0
             mqss = 0
         count += 1
+        qual += bq
+        mapqual += mq
         qss += bq**2
         mqss += mq**2
-        self.others[base] = (count, qss, mqss)
+        self.others[base] = (count, qss, mqss, qual, mapqual)
 
     def covered(self):
         """Does this pileup have enough data to consider this locus covered?"""
@@ -223,7 +227,7 @@ class Pileup:
             else:
                 # get SNP with highest proportion if >1 SNP
                 base = self._get_best_snp()
-                if base and self.others[base][0] >= consensus * self.count and self.others[base][1]:
+                if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
                     # 90% of reads match SNP
                     if verbose: print "SNP confirmed %s" % base
                     return base
@@ -397,7 +401,6 @@ parser.add_argument("--consensus", type=float, default=0.9, help='minimum fracti
 parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
-#parser.add_argument('vcf', nargs='?', help='vcf file to record SNPs found')
 args = parser.parse_args()
 
 # set global options

@@ -202,6 +202,12 @@ class KmerSet:
         if verbose:
             self.printStats()
 
+    def mergeKmerSet(self, other):
+        """Create new KmerSet by merging this with another"""
+        newSet = KmerSet(self.k)
+        newSet.kmers, newSet.counts = kmerizer.merge_counts(self.kmers, self.counts, other.kmers, other.counts)
+        return newSet
+
     def printStats(self):
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
             'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)

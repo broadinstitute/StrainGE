@@ -22,6 +22,7 @@ vcf_header = \
 ##source=StrainGR
 ##reference={ref}
 ##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
+##INFO=<ID=RF,Number=1,Type=Float,Description="Reference Fraction">
 ##INFO=<ID=BQ,Number=1,Type=Integer,Description="RMS base quality">
 ##INFO=<ID=MQ,Number=1,Type=Integer,Description="RMS mapping quality">
 ##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
@@ -32,9 +33,9 @@ vcf_header = \
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
 
-vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};BQ={BQ:.0f};MQ={MQ:.0f}"
-def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, BQ, MQ, AF=None, SBQ=None, SMQ=None):
-    string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP, BQ=BQ, MQ=MQ)
+vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};RF={RF:g};BQ={BQ:.0f};MQ={MQ:.0f}"
+def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ=None, SMQ=None):
+    string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP, RF=RF, BQ=BQ, MQ=MQ)
     if AF:
         string += ";AF={}".format(AF)
     if SBQ:
@@ -235,7 +236,7 @@ class Pileup:
                     # no consensus
                     if verbose: print "No confirmed SNP"
         
-        return False
+        return None
 
     def __str__(self):
         return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
@@ -363,6 +364,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                                    QUAL=QUAL,
                                    FILTER=FILTER,
                                    DP=pileup.count,
+                                   RF=pileup.ref_fraction(),
                                    BQ=BQ,
                                    MQ=MQ,
                                    AF=af,

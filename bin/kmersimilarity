@@ -45,9 +45,9 @@ else:
         s1name, s1kmers = strain1
         s2name, s2kmers = strain2
         if args.fraction:
-            scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
-        else:
             scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
+        else:
+            scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
 
 if args.fraction:
     #scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1]))

@@ -177,7 +177,7 @@ class Pileup:
     def ref_fraction(self):
         """Fraction of evidence which supports reference base"""
         if self.qual_total:
-            return self.ref_qual / self.qual_total
+            return float(self.ref_qual) / self.qual_total
         else:
             return 0
 
@@ -398,7 +398,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
-parser.add_argument("--minconfirm", type=int, default=30, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')

@@ -1,5 +1,4 @@
 import os
-import time
 import gzip
 import h5py
 import bz2
@@ -129,11 +128,14 @@ def similarityScore(kmers1, kmers2, scoring="jaccard"):
     elif scoring == "minsize":
         # Use intersection / min_size (proper subset scores 1.0)
         score = intersection / min(kmers1.size, kmers2.size)
+    elif scoring == "meansize":
+        # Use mean size in denominator (used in Mash)
+        score = intersection / ((kmers1.size + kmers2.size) / 2.0)
     elif scoring == "maxsize":
         # Use intersection / max_size (proper subset scores min/max)
         score = intersection / max(kmers1.size, kmers2.size)
     else:
-        assert scoring in ("jaccard", "minsize", "maxsize"), "unknown scoring method"
+        assert scoring in ("jaccard", "minsize", "maxsize", "meansize"), "unknown scoring method"
     return score
 
 

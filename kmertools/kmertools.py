@@ -1,5 +1,4 @@
 import os
-import time
 import gzip
 import h5py
 import bz2
@@ -129,6 +128,9 @@ def similarityScore(kmers1, kmers2, scoring="jaccard"):
     elif scoring == "minsize":
         # Use intersection / min_size (proper subset scores 1.0)
         score = intersection / min(kmers1.size, kmers2.size)
+    elif scoring == "meansize":
+        # Use mean size in denominator (used in Mash)
+        score = intersection / ((kmers1.size + kmers2.size) / 2.0)
     elif scoring == "maxsize":
         # Use intersection / max_size (proper subset scores min/max)
         score = intersection / max(kmers1.size, kmers2.size)
@@ -136,7 +138,7 @@ def similarityScore(kmers1, kmers2, scoring="jaccard"):
         # Use intersection / size of reference (useful for comparing reads to assembled references)
         score = intersection / kmers2.size
     else:
-        assert scoring in ("jaccard", "minsize", "maxsize", "reference"), "unknown scoring method"
+        assert scoring in ("jaccard", "minsize", "maxsize", "meansize", "reference"), "unknown scoring method"
     return score
 
 
@@ -225,6 +227,12 @@ class KmerSet:
 
         if verbose:
             self.printStats()
+
+    def mergeKmerSet(self, other):
+        """Create new KmerSet by merging this with another"""
+        newSet = KmerSet(self.k)
+        newSet.kmers, newSet.counts = kmerizer.merge_counts(self.kmers, self.counts, other.kmers, other.counts)
+        return newSet
 
     def printStats(self):
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \

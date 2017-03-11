@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+import argparse
+import h5py
+import numpy as np
+import kmertools
+import kmerizer
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
+parser.add_argument("--input", "-i", help="Input hdf5 files with per-strain unique kmers")
+parser.add_argument("--output", "-o", help="Output hdf5 files with per-strain unique kmers")
+parser.add_argument("--sampleout", help="Sample score output file (tsv)")
+parser.add_argument("--K", "-k", type=int, default=kmertools.DEFAULT_K, help="kmer size")
+parser.add_argument('strains', nargs='*', help='kmerized strain hdf5 or npz files')
+args = parser.parse_args()
+
+output = None
+if args.output:
+    output = h5py.File(args.output, 'w')
+    output.attrs["type"] = np.string_("UniqueKmers")
+    output.attrs["k"] = args.K;
+
+
+def panUnique(files):
+    """ Find kmers unique across pan-genome """
+    mergedSet = None
+    for f in files:
+        print 'Merging', f
+        kset = kmertools.kmerSetFromFile(f, args.K)
+        if not mergedSet:
+            mergedSet = kset
+        else:
+            mergedSet = mergedSet.mergeKmerSet(kset)
+    return mergedSet.kmers[mergedSet.counts == 1]
+
+
+def uniqueInStrain(strainFile, singletons):
+    kset = kmertools.kmerSetFromFile(strainFile)
+    return kmerizer.intersect(kset.kmers, singletons)
+
+
+def findUnique(merged, single):
+    counts = kmerizer.intersect_counts(merged.kmers, merged.counts, single.kmers)
+
+def formatResult(result):
+    (strain, nunique, nucounts, covered, coverRate, coverage) = result
+
+
+# dist to hold strain:unique arrays
+strainUnique = {}
+
+if args.input:
+    print 'Loading', args.input
+    with h5py.File(args.input, 'r') as h5:
+        for strain in h5:
+            strainUnique[strain] = np.array(h5[strain])
+else:
+    print "Finding singletons"
+    singletons = panUnique(args.strains)
+    print len(singletons)
+
+    for strain in args.strains:
+        name = kmertools.nameFromPath(strain)
+        unique = uniqueInStrain(strain, singletons)
+        if output:
+            print name, len(unique)
+            output.create_dataset(name, data=unique, compression="gzip")
+            strainUnique[name] = unique
+
+if args.sample:
+    print "Loading sample"
+    sample = kmertools.kmerSetFromFile(args.sample)
+    results = []
+
+    print "Finding unique in strains"
+    for strain, unique in strainUnique.iteritems():
+        nunique = len(unique)
+        ucounts = kmerizer.intersect_counts(sample.kmers, sample.counts, unique)
+        nucounts = len(ucounts)
+        total = sum(ucounts)
+        covered = float(nucounts) / nunique
+        if nucounts:
+            coverRate = float(total) / nucounts
+            coverage = float(total) / nunique
+        else:
+            coverRate = 0
+            coverage = 0
+
+        result = (strain, nunique, nucounts, covered, coverRate, coverage)
+        results.append(result)
+        print "\t".join([str(r) for r in result])
+
+    if args.sampleout:
+        results.sort(lambda a, b: cmp(b[3], a[3]))
+        with open(args.sampleout, 'w') as sampleout:
+            for result in results:
+                print >>sampleout, "\t".join([str(r) for r in result])
+
+
+
+
+
+
+

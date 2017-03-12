@@ -97,16 +97,25 @@ class KmerTreeNode:
         for child in self.children:
             child.saveText(outfile)
 
-    def computeScoreWeighted(self, kmers):
+    def computeScoreWeighted(self, kmers, returnn = False):
         """Score this node vs a set of kmers"""
         weights = 1.0 / (self.counts * self.counts)
-        self.denominator = weights.sum()
-        if self.denominator > 0:
+        denominator = weights.sum()
+        if denominator > 0:
             subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
-            self.score = (1.0 / (subCounts * subCounts)).sum() / self.denominator
-            self.common = kmerizer.intersect(self.kmers, kmers)
+            score = (1.0 / (subCounts * subCounts)).sum() / denominator
+            common = kmerizer.intersect(self.kmers, kmers)
         else:
-            self.score = 0
+            score = 0
+            common = None
+        
+        if returnn == True:
+            return (score)
+        else:
+            self.denominator = denominator
+            self.common = common
+            self.score = score
+
 
     def computeScoreUnique(self, kmers):
         """Score this node vs a set of kmers"""
@@ -135,6 +144,36 @@ class KmerTreeNode:
         else:
             self.score = 0
 
+    def computeScoreadj(self, kmers):
+        """Score this node vs a set of kmers"""
+        uniqueKmers = self.kmers[self.counts == 1]
+        if uniqueKmers.size > 0:
+            self.common = kmerizer.intersect(uniqueKmers, kmers)
+            self.denominator = float(uniqueKmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common.size) / self.denominator
+            else:
+                self.score = 0
+        else:
+            actualscore = self.computeScoreWeighted(kmers, returnn = True)
+
+            if (actualscore > .97): #arbitrary threshold needs to be properly chosen and correcte for
+                self.score = actualscore
+            else:
+                randscores = self.randscore(kmers)                    
+                if  ( ( sum (actualscore <= randscores) / float(randscores.size) ) >= .05):
+                    self.score = 0
+                else:
+                    self.score = actualscore
+    
+    def randscore(self, kmers, n = 300): #n is number of iterations needs to be properly chosen
+        intnum = kmerizer.intersect(self.kmers, kmers).size
+        res = []
+        for iter in range(1,n): 
+            randsamp = random.sample(self.kmers, intnum)
+            randsamp = np.sort(np.asarray(randsamp))
+            res.append(self.computeScoreWeighted(randsamp, returnn = True))
+        return (np.asarray(res))
 
 
 def getScore(nodePair, scores, simscore="jaccard"):
@@ -308,6 +347,8 @@ def scoreSample(tree, sampleKmers, scoring):
         tree.computeScoreUnique(sampleKmers)
     elif scoring == "weighted":
         tree.computeScoreWeighted(sampleKmers)
+    elif scoring == "combo":
+        tree.computeScoreadj(sampleKmers)
     else:
         tree.computeScore(sampleKmers)
     for child in tree.children:
@@ -333,7 +374,7 @@ parser.add_argument("--text", help="Text output file")
 parser.add_argument("--dot", help="File to receive graphviz dot-style tree graph")
 parser.add_argument("--sample", help="test coverage of tree vs kmers in this sample hdf5")
 parser.add_argument("--sampleout", help="HDF5 sample scoring output file")
-parser.add_argument("--samplescore", help="sample matching scoring method", choices=["all", "unique", "weighted"], default="all")
+parser.add_argument("--samplescore", help="sample matching scoring method", choices=["all", "unique", "weighted", 'combo'], default="all")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize"], default="jaccard")
 parser.add_argument('genomes', nargs='*',
                     help='kmerized genome hdf5 or npz files')

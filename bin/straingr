@@ -272,7 +272,7 @@ def process_scaffold(bam, scaffold, refseq):
             covered += 1
             if pileup.confirmed():
                 confirmed += 1
-            if pileup.others:
+            if pileup.base_call():
                 snps += 1
         if verbose:
             print pileup, pileup.confirmed()
@@ -299,8 +299,41 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
             af = ''
             sbq = ''
             smq = ''
-            if pileup.others:
+            ALT = "."
+            
+            # not enough reads to say anything
+            if not pileup.covered():
+                FILTER = "cv"
+                if pileup.ref_count:
+                    QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
+                else:
+                    QUAL = 0
+            
+            # reference has been confirmed
+            elif pileup.confirmed():
+                QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
+                FILTER="PASS"
+            
+            # reference not confirmed and there are other alleles
+            elif pileup.others:
                 snp = pileup.base_call()
+                # confirmed a snp
+                if snp:
+                    QUAL = sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
+                    FILTER="PASS"
+                
+                # ambiguous call
+                else:
+                    QUAL = 0
+                    snp_count = 0
+                    for _snp in pileup.others:
+                        QUAL += pileup.others[_snp][1]
+                        snp_count += pileup.others[_snp][0]
+                    # qual is RMS of all SNPs... is this right?
+                    # perhaps qual of reference is better, but not sure
+                    QUAL = sqrt(float(QUAL)/snp_count)
+                    FILTER="amb"
+                
                 sorted_alt = pileup.sort_alts()
                 ALT = ','.join(sorted_alt)
                 
@@ -313,35 +346,8 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                     af += format(float(temp[0])/pileup.count, ".3f").rstrip('0').rstrip('.')
                     sbq += format(sqrt(float(temp[1])/temp[0]), ".0f")
                     smq += format(sqrt(float(temp[2])/temp[0]), ".0f")
-            else:
-                ALT = '.'
-                snp = None
             
-            if not pileup.covered():
-                FILTER="cv"
-                if pileup.ref_count:
-                    QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
-                else:
-                    QUAL = 0
-            elif pileup.confirmed():
-                QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
-                FILTER="PASS"
-            elif snp:
-                QUAL = sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
-                FILTER="PASS"
-            else:
-                QUAL = 0
-                snp_count = 0
-                for _snp in pileup.others:
-                    QUAL += pileup.others[_snp][1]
-                    snp_count += pileup.others[_snp][0]
-                # qual is RMS of all SNPs... is this right?
-                
-                if snp_count:
-                    QUAL = sqrt(float(QUAL)/snp_count)
-                else:
-                    QUAL = 0
-                FILTER="amb"
+            # else should not have any cases...
             
             if pileup.count:
                 BQ = sqrt(float(pileup.qual_ss)/pileup.count)

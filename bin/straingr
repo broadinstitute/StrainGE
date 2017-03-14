@@ -345,7 +345,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                     FILTER="PASS"
                     ALT = snp
                     af = format(float(pileup.others[snp][0])/pileup.count, ".3f").rstrip('0').rstrip('.')
-                    sbq = format(QUAL), ".0f")
+                    sbq = format(QUAL, ".0f")
                     smq = format(sqrt(float(pileup.others[snp][2])/pileup.others[snp][0]), ".0f")
                 
                 # ambiguous call

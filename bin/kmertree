@@ -161,7 +161,7 @@ def newTreeNode(children):
     :param children: child nodes
     :return: the new node
     """
-    intersection = reduce(lambda x, y: np.intersect1d(x.kmers, y.kmers, assume_unique=True), children)
+    intersection = reduce(lambda x, y: kmerizer.intersect(x.kmers, y.kmers), children)
     node = KmerTreeNode(intersection, children=children)
     for child in children:
         child.kmers = np.setdiff1d(child.kmers, intersection, assume_unique=True)
@@ -176,7 +176,6 @@ def buildTree(tree, scores, simscore="jaccard"):
     newTree.append(newNode)
     print "%.5f" % score,
     return newTree
-
 
 
 def graphTree(graph, tree, parentNode):
@@ -208,10 +207,11 @@ def gatherKmers(node):
         return [kmers for child in node.children for kmers in gatherKmers(child)] + [node.kmers]
 
 def dedupeTree(tree):
-    def dedupe(node, unique):
-        node.kmers = np.intersect1d(node.kmers, unique, assume_unique=True)
+    def dedupe(node):
+        node.kmers = node.kmers[node.counts == 1]
+        node.counts = None
         for child in node.children:
-            dedupe(child, unique)
+            dedupe(child)
         return
 
     def simplifyTree(node, parent = None):
@@ -223,18 +223,10 @@ def dedupeTree(tree):
         grandChildren = [grandChild for child in deadChildren for grandChild in child.children]
         for child in deadChildren:
             node.children.remove(child)
-        print node.name, node.children, grandChildren
+        #print node.name, node.children, grandChildren
         node.children += grandChildren
 
-    print 'Deduping:',
-    kmerList = gatherKmers(tree)
-    allKmers = np.concatenate(kmerList)
-    print allKmers.size, 'kmers,',
-    distinctKmers = np.unique(allKmers, return_counts = True)
-    print distinctKmers[0].size, 'distinct,',
-    uniqueKmers = distinctKmers[0][distinctKmers[1] == 1]
-    print uniqueKmers.size, 'unique'
-    dedupe(tree, uniqueKmers)
+    dedupe(tree)
     simplifyTree(tree)
 
 
@@ -357,6 +349,7 @@ else:
     countTree(tree)
 
 if args.dedupe:
+    print 'Deduping tree'
     dedupeTree(tree)
 
 if args.sample:

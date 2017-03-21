@@ -1,7 +1,8 @@
 import os
 import gzip
-import h5py
 import bz2
+import h5py
+import pysam
 from Bio import SeqIO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -33,6 +34,18 @@ def openSeqFile(fileName):
     """
 
     components = fileName.split('.')
+
+    if "bam" in components:
+        file = pysam.AlignmentFile(fileName, "rb", check_header=False, check_sq=False)
+
+        # generator for sequences in bam
+        def bamSequences():
+            for read in file.fetch(until_eof=True):
+                if not read.is_qcfail:
+                    yield read
+
+        return bamSequences()
+
     if "bz2" in components:
         file = bz2.BZ2File(fileName, 'r')
     elif "gz" in components:
@@ -194,7 +207,7 @@ class KmerSet:
 
         for seq in seqFile:
             nSeqs += 1
-            seqLength = len(seq)
+            seqLength = len(seq.seq)
             nBases += seqLength
             if nKmers + seqLength > batchSize:
                 self.processBatch(batch, nSeqs, nBases, nKmers, verbose)

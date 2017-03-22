@@ -173,23 +173,23 @@ class KmerTreeNode:
     def computeScoreAdjusted(self, kmers):
         """Score this node vs a set of kmers"""
         uniqueKmers = self.kmers[self.counts == 1]
-        if uniqueKmers.size > 0:
+        if uniqueKmers.size >= 1000:
             self.computeScoreUnique(kmers)
         else:
             self.computeScoreWeighted(kmers)
-            # if (self.score < .9): #arbitrary threshold needs to be properly chosen and corrected for
-                # randscores = self.computeRandomScore(kmers)                    
-                # if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
-                    # self.score = 0 # assign no score since p >= .05
+            if self.kmers.size < 10000:
+                randscores = self.computeRandomScore(kmers)                    
+                if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
+                    self.score = 0 # assign no score since p >= .05
     
     def computeRandomScore(self, kmers, n = 100): #n is number of iterations needs to be properly chosen
         n_kmers = kmerizer.count_common(self.kmers, kmers)
         res = []
         for i in xrange(n): 
             # randomly sample, keep order
-            sampled = random.sample(xrange(len(kmers)), n_kmers)
-            #randsamp = [kmer for i, kmer in enumerate(kmers) if i in sampled]
-            randsamp = [kmers[i] for i in sampled]
+            sampled = np.asarray(random.sample(xrange(kmers.size), n_kmers))
+            sampled.sort()
+            randsamp = kmers[sampled]
             res.append(self.computeScoreWeighted(randsamp, returnn = True))
         return (np.asarray(res))
 
@@ -275,7 +275,6 @@ def rank_and_reduce_paths(paths, min_score=0.1):
             reduced.append(path)
     
     # rerank
-    
     final = []
     for path in sorted(reduced, key = lambda path: (len(path[0]), sum(path[1])), reverse=True):
         if not final:
@@ -288,7 +287,6 @@ def rank_and_reduce_paths(paths, min_score=0.1):
                 break
         else:
             final.append(path)
-    
     
     return final
 

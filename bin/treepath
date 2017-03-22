@@ -173,7 +173,7 @@ class KmerTreeNode:
     def computeScoreAdjusted(self, kmers):
         """Score this node vs a set of kmers"""
         uniqueKmers = self.kmers[self.counts == 1]
-        if uniqueKmers.size >= 1000:
+        if uniqueKmers.size >= 1000 or uniqueKmers.size == self.kmers.size:
             self.computeScoreUnique(kmers)
         else:
             self.computeScoreWeighted(kmers)

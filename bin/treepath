@@ -188,7 +188,8 @@ class KmerTreeNode:
         for i in xrange(n): 
             # randomly sample, keep order
             sampled = random.sample(xrange(len(self.kmers)), n_kmers)
-            randsamp = [kmer for i, kmer in enumerate(kmers) if i in sampled]
+            #randsamp = [kmer for i, kmer in enumerate(kmers) if i in sampled]
+            randsamp = [self.kmers[i] for i in sampled]
             res.append(self.computeScoreWeighted(randsamp, returnn = True))
         return (np.asarray(res))
 

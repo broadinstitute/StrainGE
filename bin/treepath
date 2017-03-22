@@ -186,8 +186,9 @@ class KmerTreeNode:
         n_kmers = kmerizer.count_common(self.kmers, kmers)
         res = []
         for i in xrange(n): 
-            randsamp = random.sample(self.kmers, n_kmers)
-            randsamp = np.sort(np.asarray(randsamp))
+            # randomly sample, keep order
+            sampled = random.sample(xrange(len(self.kmers)), n_kmers)
+            randsamp = [kmer for i, kmer in enumerate(kmers) if i in sampled]
             res.append(self.computeScoreWeighted(randsamp, returnn = True))
         return (np.asarray(res))
 

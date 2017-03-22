@@ -129,6 +129,8 @@ class KmerTreeNode:
     
     def computeScoreWeighted(self, kmers, returnn=False):
         """Score this node vs a set of kmers"""
+        if self.counts == None:
+            raise Exception("Unique tree? Counts are missing from node!")
         weights = 1.0 / (self.counts * self.counts)
         self.denominator = weights.sum()
         if self.denominator > 0:
@@ -145,7 +147,7 @@ class KmerTreeNode:
 
     def computeScoreUnique(self, kmers):
         """Score this node vs a set of kmers"""
-        if self.counts:
+        if self.counts is not None:
             uniqueKmers = self.kmers[self.counts == 1]
         else:
             uniqueKmers = self.kmers
@@ -175,7 +177,7 @@ class KmerTreeNode:
     
     def computeScoreAdjusted(self, kmers):
         """Score this node vs a set of kmers"""
-        if self.counts:
+        if self.counts is not None:
             uniqueKmers = self.kmers[self.counts == 1]
         else:
             uniqueKmers = self.kmers

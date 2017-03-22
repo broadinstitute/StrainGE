@@ -229,8 +229,9 @@ class Pileup:
             else:
                 # get SNP with highest proportion if >1 SNP
                 base = self._get_best_snp()
-                if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
-                    # 90% of reads match SNP
+                #if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
+                if base and (float(self.others[base][3]) / self.qual_total) >= consensus and self.others[base][3] >= min_confirm:
+                    # 90% of base quality matches SNP
                     if verbose: print "SNP confirmed %s" % base
                     return base
                 else:

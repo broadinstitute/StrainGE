@@ -573,8 +573,8 @@ def saveText(pathScores, out, random_score = None):
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbose", help="increase output verbosity",
                     action="store_true")
-parser.add_argument("input", nargs=1, help="HDF5 tree input file")
-parser.add_argument("sample", nargs='?', help="test path in tree vs kmers in this sample hdf5")
+parser.add_argument("input", help="HDF5 tree input file")
+parser.add_argument("sample", help="test path in tree vs kmers in this sample hdf5")
 parser.add_argument("-o", "--out", help="Text output file")
 parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'], default='adjusted')
 parser.add_argument("-r", "--random", help='Calculate paths in random trees to estimate significance of path scores')

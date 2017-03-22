@@ -145,7 +145,10 @@ class KmerTreeNode:
 
     def computeScoreUnique(self, kmers):
         """Score this node vs a set of kmers"""
-        uniqueKmers = self.kmers[self.counts == 1]
+        if self.counts:
+            uniqueKmers = self.kmers[self.counts == 1]
+        else:
+            uniqueKmers = self.kmers
         if uniqueKmers.size > 0:
             #self.common = np.intersect1d(uniqueKmers, kmers, assume_unique = True)
             self.common = kmerizer.intersect(uniqueKmers, kmers)
@@ -172,7 +175,10 @@ class KmerTreeNode:
     
     def computeScoreAdjusted(self, kmers):
         """Score this node vs a set of kmers"""
-        uniqueKmers = self.kmers[self.counts == 1]
+        if self.counts:
+            uniqueKmers = self.kmers[self.counts == 1]
+        else:
+            uniqueKmers = self.kmers
         if uniqueKmers.size >= 1000 or uniqueKmers.size == self.kmers.size:
             self.computeScoreUnique(kmers)
         else:

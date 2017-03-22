@@ -1,0 +1,620 @@
+#!/usr/bin/env python
+"""Path scoring tool"""
+import h5py
+import kmertools
+import argparse
+import kmerizer
+import numpy as np
+from itertools import chain, imap
+import random
+
+class RandomTreeNode:
+    def __init__(self, tree=None, root = None):
+        self.score = None
+        self.name = None
+        self.children = []
+        
+        if not root:
+            root = self
+            root.all_scores = []
+        if tree:
+            self.name = tree.name
+            root.all_scores.append(tree.score)
+            for child in tree.children:
+                self.children.append(RandomTreeNode(child, root))
+        
+
+    def isLeaf(self):
+        return not self.children
+        
+    def randomize(self, root = None):
+        if not root:
+            root = self
+            root.i = 0
+            random.shuffle(root.all_scores)
+            
+        
+        self.score = root.all_scores[root.i]
+        root.i += 1
+        for child in self.children:
+            child.randomize(root)
+            
+        
+        
+
+class KmerTreeNode:
+    """Class to recursively hold tree representation"""
+    def __init__(self, kmers, name = None, children = [], counts = None, parent = None):
+        global treeNodeCount
+        if name:
+            self.name = name
+        else:
+            treeNodeCount += 1
+            self.name = "node-" + str(treeNodeCount)
+        self.kmers = kmers
+        self.counts = counts
+        self.parent = parent
+        self.children = children
+        self.score = None
+        self.common = None
+        self.denominator = None
+        
+    def isLeaf(self):
+        return not self.children
+
+    def label(self):
+        s = ""
+        if self.counts is not None:
+            s += str((self.counts == 1).sum()) + "/"
+        s += str(self.kmers.size)
+        s += "\n" + self.name
+        return s
+
+    def nwk(self):
+        if self.isLeaf():
+            return self.name
+        else:
+            return "(" + ",".join([c.nwk() for c in self.children]) + ")"
+
+    def saveHdf5(self, h5node, compress = True):
+        if compress is True:
+            compress = "gzip"
+        h5node.attrs["type"] = np.string_("KmerTreeNode")
+        h5node.attrs["name"] = np.string_(self.name)
+        #h5.attrs["k"] = self.k;
+        if self.kmers is not None:
+            h5node.create_dataset("kmers", data=self.kmers, compression=compress)
+        if self.counts is not None:
+            h5node.create_dataset("counts", data=self.counts, compression=compress)
+        for child in self.children:
+            childGroup = h5node.create_group(child.name)
+            child.saveHdf5(childGroup, compress=compress)
+
+    def saveSampleHdf5(self, h5node, compress = True):
+        if compress is True:
+            compress = "gzip"
+        h5node.attrs["type"] = np.string_("SampleScoreNode")
+        h5node.attrs["name"] = np.string_(self.name)
+        
+        if self.score is not None:
+            h5node.attrs["score"] = self.score
+        else:
+            h5node.attrs["score"] = 0
+        
+        if self.denominator is not None:
+            h5node.attrs["denominator"] = self.denominator
+        else:
+            h5node.attrs["denominator"] = 0
+        
+        if self.common is not None:
+            h5node.create_dataset("common", data=self.common, compression=compress)
+        
+        for child in self.children:
+            childGroup = h5node.create_group(child.name)
+            child.saveSampleHdf5(childGroup, compress=compress)
+
+    def saveText(self, outfile):
+        header = ["%", self.name] + [child.name for child in self.children]
+        print >>outfile, "\t".join(header)
+
+        if self.counts is None:
+            for i in xrange(self.kmers.size):
+                    print >> outfile, kmertools.kmerString(args.K, int(self.kmers[i]))
+        else:
+            for i in xrange(self.kmers.size):
+                print >> outfile, "%s\t%d" % (kmertools.kmerString(args.K, int(self.kmers[i])), self.counts[i])
+        for child in self.children:
+            child.saveText(outfile)
+    
+    
+    def computeScoreWeighted(self, kmers, returnn=False):
+        """Score this node vs a set of kmers"""
+        weights = 1.0 / (self.counts * self.counts)
+        self.denominator = weights.sum()
+        if self.denominator > 0:
+            subCounts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
+            if returnn:
+                return (1.0 / (subCounts * subCounts)).sum() / self.denominator
+            self.score = (1.0 / (subCounts * subCounts)).sum() / self.denominator
+            self.common = kmerizer.intersect(self.kmers, kmers)
+        else:
+            if returnn:
+                return 0
+            self.score = 0
+        
+
+    def computeScoreUnique(self, kmers):
+        """Score this node vs a set of kmers"""
+        uniqueKmers = self.kmers[self.counts == 1]
+        if uniqueKmers.size > 0:
+            #self.common = np.intersect1d(uniqueKmers, kmers, assume_unique = True)
+            self.common = kmerizer.intersect(uniqueKmers, kmers)
+            self.denominator = float(uniqueKmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common.size) / self.denominator
+            else:
+                self.score = 0
+        else:
+            self.score = 0
+
+    def computeScore(self, kmers):
+        """Score this node vs a set of kmers"""
+        if self.kmers.size > 0:
+            #self.common = np.intersect1d(self.kmers, kmers, assume_unique = True)
+            self.common = kmerizer.intersect(self.kmers, kmers)
+            self.denominator = float(self.kmers.size)
+            if self.denominator > 0:
+                self.score = float(self.common.size) / self.denominator
+            else:
+                self.score = 0 
+        else:
+            self.score = 0
+        
+    def computeScoreAdjusted(self, kmers):
+        """Score this node vs a set of kmers"""
+        uniqueKmers = self.kmers[self.counts == 1]
+        if uniqueKmers.size > 0:
+            self.computeScoreUnique(kmers)
+        else:
+            self.computeScoreWeighted(kmers)
+            if (self.score < .9): #arbitrary threshold needs to be properly chosen and corrected for
+                randscores = self.computeRandomScore(kmers)                    
+                if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
+                    self.score = 0 # assign no score since p >= .05
+    
+    def computeRandomScore(self, kmers, n = 100): #n is number of iterations needs to be properly chosen
+        n_kmers = kmerizer.count_common(self.kmers, kmers)
+        res = []
+        for i in xrange(n): 
+            randsamp = random.sample(self.kmers, n_kmers)
+            randsamp = np.sort(np.asarray(randsamp))
+            res.append(self.computeScoreWeighted(randsamp, returnn = True))
+        return (np.asarray(res))
+
+
+def treeFromHdf5(h5node, parent = None):
+    assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
+    name = h5node.attrs["name"]
+    children = []
+    kmers = None
+    counts = None
+    for key, value in h5node.items():
+        if key == "kmers":
+            kmers = np.array(value)
+        elif key == "counts":
+            counts = np.array(value)
+        else:
+            children.append(value)
+    node = KmerTreeNode(kmers, name = name, counts = counts, parent = parent)
+    node.children = [treeFromHdf5(child, node) for child in children]
+    return node
+
+
+def scoreSample(tree, sampleKmers, scoring='adjusted'):
+    if scoring == 'adjusted':
+        tree.computeScoreAdjusted(sampleKmers)
+    elif scoring == "unique":
+        tree.computeScoreUnique(sampleKmers)
+    elif scoring == "weighted":
+        tree.computeScoreWeighted(sampleKmers)
+    else:
+        tree.computeScore(sampleKmers)
+    for child in tree.children:
+        scoreSample(child, sampleKmers, scoring)
+
+#########################
+#### Tim's functions ####
+#########################
+
+def get_significant_paths_cutoff(tree, n=100):
+    
+    random_scores = []
+    random_tree = RandomTreeNode(tree)
+    for i in xrange(n):
+        random_tree.randomize()
+        scores = get_path_scores(random_tree)
+        random_scores.extend([float(sum(x[1]))/len(x[1]) for x in scores])
+    
+    return numpy.percentile(random_scores, 95)
+    
+
+
+def get_path_scores(tree, scores=None, leaves=False):
+    """Iterate through all children in tree and compile path scores"""
+    if not tree:
+        return [[], []]
+    if not scores:
+        scores = []
+    name = tree.name
+    scores.append(tree.score)
+    paths = []
+    if not leaves or tree.isLeaf():
+        paths.append([[name], scores[:], tree.children])
+    for child in tree.children:
+        for path in get_path_scores(child, scores[:], leaves=leaves):
+            paths.append([[name]+path[0], path[1], path[2]])
+    
+    return paths
+
+
+def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
+    keep = []
+    for path in paths:
+        min_node_count = int(min_nodes * len(path[1]))
+        if min_node_count == 0:
+            min_node_count = 1
+        if len([x for x in path[1] if x >= min_score]) >= min_node_count:
+            keep.append(path)
+    
+    return keep
+
+
+def rank_and_reduce_paths(paths, min_score=0.1):
+    ranked = sorted(paths, key = lambda path: (float(sum(path[1]))/len(path[1]), len([x for x in path[1] if x >= min_score])), reverse=True)
+    
+    reduced = []
+    for path in ranked:
+        if not reduced:
+            reduced.append(path)
+            continue
+            
+        pathset = set(path[0])
+        for higher_rank in sorted(reduced, key = lambda path: (len(path[0]), sum(path[1])), reverse=True):
+            if pathset.issuperset(higher_rank[0]):
+                n = len(pathset.intersection(higher_rank[0]))
+                if any([x >= min_score for x in path[1][n:]]):
+                    reduced.append(path)
+                break
+        else:
+            reduced.append(path)
+    
+    # rerank
+    
+    final = []
+    for path in sorted(reduced, key = lambda path: (len(path[0]), sum(path[1])), reverse=True):
+        if not final:
+            final.append(path)
+            continue
+        
+        pathset = set(path[0])
+        for higher_rank in final:
+            if pathset.issubset(higher_rank[0]):
+                break
+        else:
+            final.append(path)
+    
+    
+    return final
+
+
+def recurse_through_children(tree):
+    answer = []
+    if tree.isLeaf():
+        answer.append([tree.name, tree.score])
+    else:
+        for child in tree.children:
+            answer.extend(recurse_through_children(child))
+    
+    return answer
+
+def get_strains(children):
+    if not children:
+        return []
+    strains = []
+    for child in children:
+        strains.extend(recurse_through_children(child))
+    return strains
+
+def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, verbose=False):
+    """Score kmers of sample to paths in a tree"""
+    
+    scores = {}
+    nodes = {}
+    paths = filter_paths(get_path_scores(tree, [], False), min_nodes, min_score)
+    ranked = rank_and_reduce_paths(paths, min_score)
+    
+    if verbose:
+        for path in ranked:
+            if not path[2]:
+                print "Path is complete!",
+                print '|'.join(path[0]), ":", float(sum(path[1]))/len(path[1])
+            else:
+                print "Path is incomplete!",
+                print '|'.join(path[0]), ":", float(sum(path[1]))/len(path[1])
+                print "Children nodes..."
+                strains = get_strains(path[2])
+                for strain in sorted(strains, key = lambda x: x[1], reverse=True):
+                    print strain[0], ':', strain[1]
+            
+    
+    for path in ranked:
+        name = '|'.join(path[0])
+        score = float(sum(path[1]))/len(path[1])
+        scores[name] = (score, sorted(get_strains(path[2]), key = lambda strain: strain[1], reverse=True))
+    
+    return scores
+
+
+def get_p_value_on_scores(tree, n=1000):
+    random_tree = RandomTreeNode(tree, root=None)
+    random_scores = []
+    for i in xrange(n):
+        random_tree.randomize(None)
+        rand_scores = scorePathsInSample(random_tree)
+        if rand_scores:
+            random_scores.append(np.mean([x[0] for x in rand_scores.values()]))
+        else:
+            random_scores.append(0)
+    
+    return np.percentile(random_scores, 95)
+    
+
+
+
+################################
+#### End of Tim's functions ####
+################################
+
+
+###############################
+#### Christine's functions ####
+###############################
+
+
+def loadLeafNode(fileName, fingerprint):
+    name = kmertools.nameFromPath(fileName)
+    kset = kmertools.KmerSet()
+    if args.fingerprint:
+        kset.kmers = kmertools.loadFingerprint(arg)
+    else:
+        kset.kmers = kmertools.loadKmers(arg)
+    return KmerTreeNode(kset.kmers, name=name)
+
+
+def getcompletepaths(node, complete, sampleKmers, scoring="adjusted"):
+
+    if scoring == "unique":
+        node.computeScoreUnique(sampleKmers)
+    elif scoring == "weighted":
+        node.computeScoreWeighted(sampleKmers)
+    elif scoring == "adjusted":
+        node.computeScoreAdjusted(sampleKmers)
+    elif scoring == "all":
+        node.computeScore(sampleKmers)
+
+    if node.score > 0:
+        if node.isLeaf():
+            complete.append(node.name)
+        else:
+            for children in node.children:
+                getcompletepaths(children, complete, sampleKmers, scoring)
+    return (complete)
+    
+
+#gets supported paths of already scored tree   
+def getsupportedpath(node, currentscore=[], scoredict={}, thresh=0.7):
+    cs = copy.deepcopy(currentscore)
+    cs.append(node.score)
+
+    if node.isLeaf():
+        node.pathscore = sum(cs)/len(cs)
+        results = isleafthere(node, thresh, cs) #runs function that checks if path is suitable
+        
+        if results is not None:
+            scoredict.update(results) #saves results in dict of results
+    else:
+        for child in node.children:
+            getsupportedpath(child, cs, scoredict, thresh)
+      
+    return scoredict  
+
+#checks if path passes suitablity threshold
+def isleafthere(node, thresh, scorelist):
+    
+    nodethresh = int(round(len(scorelist) * thresh)) #needs to have at least this many nodes consecutively with a score
+    isgood = all(i > 0.1 for i in scorelist[0:nodethresh]) #low thresh of 0.1 for the node to be supported)
+    
+   
+    if isgood:
+         #finds last node in path node is supported.
+         
+        firstabove = next(((idx, score) for idx,score in enumerate(scorelist[len(scorelist): nodethresh-1: -1]) if score > 0.1), None)
+        limit =  len(scorelist) - nodethresh 
+        
+        if firstabove is None:
+            lastsupport = getparent(node, len(scorelist) - nodethresh)
+        elif firstabove[0] == 0:
+            #if the leafnode is the last supported, then returns the node name along with 
+            #other nodes that shouldn't be considered
+            thisnode = node
+            nixlist = []
+            for i in range(0,limit):
+                if thisnode.parent is not None:
+                    nixlist.append(thisnode.parent.name)
+                    thisnode = thisnode.parent
+            return ({node.name:nixlist}) 
+        else: 
+            lastsupport = getparent(node, firstabove[0])
+      
+        chilren = getchildren(lastsupport, [], limit , 0)
+        
+        #returns the node of last support and all the children passing a limit/distance threshold of that node
+        return ({lastsupport.name:chilren})
+    
+    else:
+        return (None)
+
+
+#returns the parent node from a given amount of steps 
+def getparent(node, amountup = 1):
+    thisnode = node
+    i = 0
+    while i!=amountup:
+        thisnode = thisnode.parent
+        i += 1
+    return (thisnode)
+    
+#returns the desired node (whichnode just the name) from a tree
+def getnode(node, whichnode, correct = None):
+    cs = correct
+    if node.name == whichnode:
+        return node
+    else:
+        for child in node.children:
+            res = getnode(child, whichnode, cs)
+            if res is not None:
+                return res
+
+#returns all the children of a node within a given limit of steps down
+def getchildren(node, childrenlist, limit, steps):
+    children = childrenlist
+    for child in node.children:
+        stepnum = steps
+        if child.isLeaf():
+            children.append(child.name)
+        else:
+            if stepnum != limit:
+                stepnum += 1
+                getchildren(child, children, limit, stepnum)  
+    return (children)
+    
+
+def processres(res, tree):
+    
+    for key in res.keys():
+        if "node" in key:
+            if key in sum(res.values(), []):
+                del res[key]
+            else:
+                thenode = getnode(tree, key)
+                step = 0
+                while step < 2:
+                    thenode = thenode.parent
+                    if thenode.name in sum(res.values(), []):
+                        del res[key]
+                        step = 2
+                    else:
+                        step += 1
+    
+    finaldict = {}
+    for key in res.keys():
+        if "node" in key:
+            finaldict[key] = dict()
+            for child in res[key]:
+                thenode = getnode(tree, child)
+                finaldict[key][child] = thenode.pathscore
+        else:
+            thenode = getnode(tree, key)
+            finaldict[key] = thenode.pathscore
+        
+    return finaldict
+    
+   
+def pathdetection(tree, thresh):
+    posspaths = getsupportedpath(tree, thresh=thresh)
+    cleanedpaths = processres(posspaths, tree)
+    return cleanedpaths
+
+######################################
+#### End of Christine's functions ####
+######################################
+
+def saveText(pathScores, out, random_score = None):
+    """Save path scores to text file"""
+    with open(out, 'wb') as w:
+        w.write("Path,Score,Complete,Significant,Strains\n")
+        for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -pathScores[x][0])):
+            if not pathScores[path][1]:
+                complete = 'complete'
+                strains = ""
+            else:
+                complete = 'incomplete'
+                strains = ""
+                for strain in pathScores[path][1]:
+                    if strains: strains += " "
+                    strains += "%s:%.3f" % (strain[0], strain[1])
+            
+            if random_score:
+                if pathScores[path][0] > random_score:
+                    significance = 'True'
+                else:
+                    significance = 'False'
+            else:
+                significance = "NA"
+            
+            w.write("%s,%.3f,%s,%s,%s\n" % (path, pathScores[path][0], complete, significance, strains))
+    
+
+
+###
+### Main
+###
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-v", "--verbose", help="increase output verbosity",
+                    action="store_true")
+parser.add_argument("input", nargs=1, help="HDF5 tree input file")
+parser.add_argument("sample", nargs='?', help="test path in tree vs kmers in this sample hdf5")
+parser.add_argument("-o", "--out", help="Text output file")
+parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'], default='adjusted')
+parser.add_argument("-r", "--random", help='Calculate paths in random trees to estimate significance of path scores')
+args = parser.parse_args()
+
+
+with h5py.File(args.input, 'r') as h5:
+    tree = treeFromHdf5(h5)
+
+if args.sample:
+    sampleKmers = kmertools.loadKmers(args.sample)
+    scoreSample(tree, sampleKmers, args.method)
+
+if args.random:
+    print "Estimating minimum path score for p < 0.05..."
+    random_score = get_p_value_on_scores(tree)
+    print "For this tree, path score must be > %.3f for p < 0.05" % random_score
+
+print "Scoring paths in tree..."
+pathScores = scorePathsInSample(tree, verbose=args.verbose)
+
+for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -pathScores[x][0])):
+    print path,
+    if pathScores[path][1]:
+        print "incomplete",
+    else:
+        print "complete",
+    
+    if args.random:
+        if pathScores[path][0] > random_score:
+            print "significant",
+        else:
+            print "p > 0.05",
+    
+    print "%.3f" % pathScores[path][0]
+
+
+if args.out:
+    if args.random:
+        saveText(pathScores, args.out, random_score)
+    else:
+        saveText(pathScores, args.out)
+

@@ -581,12 +581,15 @@ parser.add_argument("-r", "--random", action='store_true', help='Calculate paths
 args = parser.parse_args()
 
 
+print "Loading tree file:", args.input
 with h5py.File(args.input, 'r') as h5:
     tree = treeFromHdf5(h5)
 
-if args.sample:
-    sampleKmers = kmertools.loadKmers(args.sample)
-    scoreSample(tree, sampleKmers, args.method)
+print "Loading kmers from sample:", args.sample
+sampleKmers = kmertools.loadKmers(args.sample)
+
+print "Scoring sample kmers using:", args.method
+scoreSample(tree, sampleKmers, args.method)
 
 if args.random:
     print "Estimating minimum path score for p < 0.05..."
@@ -613,6 +616,7 @@ for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -path
 
 
 if args.out:
+    print "Output path results to:", args.out
     if args.random:
         saveText(pathScores, args.out, random_score)
     else:

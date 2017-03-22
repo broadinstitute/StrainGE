@@ -348,7 +348,7 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, n=1000):
         random_tree.randomize(None)
         rand_scores = scorePathsInSample(random_tree, min_nodes, min_score)
         if rand_scores:
-            random_scores.append(np.mean([x[0] for x in rand_scores.values()]))
+            random_scores.append(max([x[0] for x in rand_scores.values()]))
         else:
             random_scores.append(0)
     

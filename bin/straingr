@@ -3,6 +3,7 @@
 import argparse
 import math
 import pysam
+import numpy as np
 import kmertools
 from numpy import sqrt
 from datetime import date
@@ -30,6 +31,7 @@ vcf_header = \
 ##INFO=<ID=SBQ,Number=.,Type=Integer,Description="SNP base quality">
 ##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
 ##FILTER=<ID=cv,Description="Coverage too low">
+##FILTER=<ID=hc,Description="Coverage abnormally high">
 ##FILTER<ID=amb,Description="Ambiguous SNP call">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
@@ -74,6 +76,7 @@ class Pileup:
         self.ref_qual_ss = 0
         self.ref_mq = 0
         self.ref_mq_ss = 0
+        self.hc = False
         # reads with other than reference base; list of tuples (base, qual, mq)
         self.others = {}
 
@@ -239,7 +242,11 @@ class Pileup:
                     if verbose: print "No confirmed SNP"
         
         return None
-
+    
+    def high_coverage(self, high):
+        """Flag pileup for too much coverage"""
+        self.hc = self.count > high
+    
     def __str__(self):
         return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
                                                                       self.ref_qual, self.qual_total,
@@ -310,7 +317,16 @@ def process_scaffold(bam, scaffold, refseq):
         mixed_rate = float(covered) / float(mixed)
         print "mixed rate: %.0f Q%.0f" % (mixed_rate, math.log10(mixed_rate) * 10.0)
     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
-
+    
+    if coverage >= 2:
+        # threshold is 95%ile of poissons distribution at average coverage
+        threshold = int(np.percentile(np.random.poisson(int(coverage), length), 95))
+    else:
+        # at lower coverages, just set it to 3
+        threshold = 3
+    for pileup in pileups:
+        pileup.high_coverage(threshold)
+    
     return pileups
 
 
@@ -327,6 +343,13 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
             # not enough reads to say anything
             if not pileup.covered():
                 FILTER = "cv"
+                if pileup.ref_count:
+                    QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
+                else:
+                    QUAL = 0
+            
+            if pileup.hc:
+                FILTER = "hc"
                 if pileup.ref_count:
                     QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
                 else:

@@ -160,7 +160,7 @@ class KmerTreeNode:
             self.computeScoreUnique(kmers)
         else:
             self.computeScoreWeighted(kmers)
-            if self.kmers.size < calc_p:
+            if self.score > 0 and self.kmers.size < calc_p:
                 randscores = self.computeRandomScore(kmers)                    
                 if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
                     self.score = 0 # assign no score since p >= .05
@@ -257,9 +257,9 @@ def rank_and_reduce_paths(paths, min_score=0.1):
         else:
             reduced.append(path)
     
-    # rerank
+    # rerank on complete, then on length of path, then on path score
     final = []
-    for path in sorted(reduced, key = lambda path: (len(path[0]), sum(path[1])), reverse=True):
+    for path in sorted(reduced, key = lambda path: (len(path[2]) == 0, len(path[0]), sum(path[1])), reverse=True):
         if not final:
             final.append(path)
             continue
@@ -271,7 +271,8 @@ def rank_and_reduce_paths(paths, min_score=0.1):
         else:
             final.append(path)
     
-    return final
+    # return sorted complete paths first, then by average node score
+    return sorted(final, key = lambda path: (len(path[2]) == 0, float(sum(path[1]))/len(path[1])))
 
 
 def recurse_through_children(tree):

@@ -208,25 +208,29 @@ def scoreSample(tree, sampleKmers, scoring='adjusted', min_unique=100, calc_p=10
         scoreSample(child, sampleKmers, scoring)
 
 
-def get_path_scores(tree, scores=None, leaves=False):
+def get_path_scores(tree, scores=None, leaves=False, min_score=0.1, max_gap=None):
     """Iterate through all children in tree and compile path scores"""
     if not tree:
-        return [[], []]
+        return [[], [], []]
     if not scores:
         scores = []
+         
     name = tree.name
     scores.append(tree.score)
     paths = []
-    if not leaves or tree.isLeaf():
-        paths.append([[name], scores[:], tree.children])
-    for child in tree.children:
-        for path in get_path_scores(child, scores[:], leaves=leaves):
-            paths.append([[name]+path[0], path[1], path[2]])
+    if max_gap == None or min_score <= 0 or any([x >= min_score for x in scores[-max_gap:]]):
+        if not leaves or tree.isLeaf():
+            paths.append([[name], scores[:], tree.children])
+        for child in tree.children:
+            for path in get_path_scores(child, scores[:], leaves=leaves, min_score=min_score, max_gap=max_gap):
+                paths.append([[name]+path[0], path[1], path[2]])
     
     return paths
 
 
 def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
+    if min_nodes <= 0 or min_scores <= 0:
+        return paths
     keep = []
     for path in paths:
         min_node_count = int(min_nodes * len(path[1]))
@@ -251,7 +255,7 @@ def rank_and_reduce_paths(paths, min_score=0.1):
         for higher_rank in sorted(reduced, key = lambda path: (len(path[0]), sum(path[1])), reverse=True):
             if pathset.issuperset(higher_rank[0]):
                 n = len(pathset.intersection(higher_rank[0]))
-                if any([x >= min_score for x in path[1][n:]]):
+                if min_score <= 0 or any([x >= min_score for x in path[1][n:]]):
                     reduced.append(path)
                 break
         else:
@@ -295,12 +299,12 @@ def get_strains(children):
     return strains
 
 
-def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, verbose=False):
+def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None, verbose=False):
     """Score kmers of sample to paths in a tree"""
     
     scores = {}
     nodes = {}
-    paths = filter_paths(get_path_scores(tree, [], False), min_nodes, min_score)
+    paths = filter_paths(get_path_scores(tree, [], False, min_score, max_gap), min_nodes, min_score)
     ranked = rank_and_reduce_paths(paths, min_score)
     
     if verbose:
@@ -327,12 +331,12 @@ def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, verbose=False):
     return scores
 
 
-def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, n=1000):
+def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=1000):
     random_tree = RandomTreeNode(tree, root=None)
     random_scores = []
     for i in xrange(n):
         random_tree.randomize(None)
-        rand_scores = scorePathsInSample(random_tree, min_nodes, min_score)
+        rand_scores = scorePathsInSample(random_tree, min_nodes, min_score, max_gap)
         if rand_scores:
             random_scores.append(max([x[0] for x in rand_scores.values()]))
         else:
@@ -383,6 +387,7 @@ parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers p
 parser.add_argument("-p", "--calc_p", help="Calculate p value for nodes fewer than this many kmers (default: 1000)", type=int, default=1000)
 parser.add_argument("-n", "--min_nodes", type=float, default=0.7, help="fraction of nodes required in a path (default: 0.7)")
 parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
+parser.add_argument("-g", "--max_gap", type=int, help="Short circuit path detection if this many nodes are below min_score (default: disabled)")
 parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
 args = parser.parse_args()
 
@@ -399,11 +404,11 @@ scoreSample(tree, sampleKmers, args.method, args.min_unique, args.calc_p)
 
 if args.random:
     print "Estimating minimum path score for p < 0.05..."
-    random_score = get_p_value_on_scores(tree, args.min_nodes, args.min_score)
+    random_score = get_p_value_on_scores(tree, args.min_nodes, args.min_score, args.max_gap)
     print "For this tree, path score must be > %.3f for p < 0.05" % random_score
 
 print "Scoring paths in tree..."
-pathScores = scorePathsInSample(tree, args.min_nodes, args.min_score, verbose=args.verbose)
+pathScores = scorePathsInSample(tree, args.min_nodes, args.min_score, args.max_gap, verbose=args.verbose)
 
 for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -pathScores[x][0])):
     print path,

@@ -318,12 +318,12 @@ def process_scaffold(bam, scaffold, refseq):
         print "mixed rate: %.0f Q%.0f" % (mixed_rate, math.log10(mixed_rate) * 10.0)
     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
     
-    if coverage >= 2:
+    if coverage >= 3:
         # threshold is 95%ile of poissons distribution at average coverage
-        threshold = int(np.percentile(np.random.poisson(int(coverage), length), 95))
+        threshold = int(np.percentile(np.random.poisson(int(coverage), 1000), 95))
     else:
-        # at lower coverages, just set it to 3
-        threshold = 3
+        # at lower coverages, just set it to 6
+        threshold = 6
     for pileup in pileups:
         pileup.high_coverage(threshold)
     

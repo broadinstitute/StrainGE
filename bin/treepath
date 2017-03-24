@@ -332,9 +332,11 @@ def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, verbose=False):
             if not path[2]:
                 print "Path is complete!",
                 print '|'.join(path[0]), ":", float(sum(path[1]))/len(path[1])
+                print ' | '.join(['%.3f' % x for x in path[1])
             else:
                 print "Path is incomplete!",
                 print '|'.join(path[0]), ":", float(sum(path[1]))/len(path[1])
+                print ' | '.join(['%.3f' % x for x in path[1])
                 print "Children nodes..."
                 strains = get_strains(path[2])
                 for strain in sorted(strains, key = lambda x: x[1], reverse=True):

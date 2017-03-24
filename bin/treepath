@@ -69,27 +69,15 @@ class KmerTreeNode:
         s += str(self.kmers.size)
         s += "\n" + self.name
         return s
-
-    def nwk(self):
-        if self.isLeaf():
-            return self.name
-        else:
-            return "(" + ",".join([c.nwk() for c in self.children]) + ")"
-
-    def saveHdf5(self, h5node, compress = True):
-        if compress is True:
-            compress = "gzip"
-        h5node.attrs["type"] = np.string_("KmerTreeNode")
-        h5node.attrs["name"] = np.string_(self.name)
-        #h5.attrs["k"] = self.k;
-        if self.kmers is not None:
-            h5node.create_dataset("kmers", data=self.kmers, compression=compress)
-        if self.counts is not None:
-            h5node.create_dataset("counts", data=self.counts, compression=compress)
+    
+    def uniqueKmersPerNode(self):
+        sizes = []
+        sizes.append(self.kmers[self.counts==1].size)
         for child in self.children:
-            childGroup = h5node.create_group(child.name)
-            child.saveHdf5(childGroup, compress=compress)
-
+            sizes.extend(uniqueKmersPerNode(child))
+        
+        return sizes
+    
     def saveSampleHdf5(self, h5node, compress = True):
         if compress is True:
             compress = "gzip"
@@ -112,19 +100,6 @@ class KmerTreeNode:
         for child in self.children:
             childGroup = h5node.create_group(child.name)
             child.saveSampleHdf5(childGroup, compress=compress)
-
-    def saveText(self, outfile):
-        header = ["%", self.name] + [child.name for child in self.children]
-        print >>outfile, "\t".join(header)
-
-        if self.counts is None:
-            for i in xrange(self.kmers.size):
-                    print >> outfile, kmertools.kmerString(args.K, int(self.kmers[i]))
-        else:
-            for i in xrange(self.kmers.size):
-                print >> outfile, "%s\t%d" % (kmertools.kmerString(args.K, int(self.kmers[i])), self.counts[i])
-        for child in self.children:
-            child.saveText(outfile)
     
     
     def computeScoreWeighted(self, kmers, returnn=False):
@@ -175,17 +150,17 @@ class KmerTreeNode:
         else:
             self.score = 0
     
-    def computeScoreAdjusted(self, kmers):
+    def computeScoreAdjusted(self, kmers, min_unique=100, calc_p=1000):
         """Score this node vs a set of kmers"""
         if self.counts is not None:
             uniqueKmers = self.kmers[self.counts == 1]
         else:
             uniqueKmers = self.kmers
-        if uniqueKmers.size >= 1000 or uniqueKmers.size == self.kmers.size:
+        if uniqueKmers.size >= min_unique or uniqueKmers.size == self.kmers.size:
             self.computeScoreUnique(kmers)
         else:
             self.computeScoreWeighted(kmers)
-            if self.kmers.size < 10000:
+            if self.kmers.size < calc_p:
                 randscores = self.computeRandomScore(kmers)                    
                 if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
                     self.score = 0 # assign no score since p >= .05
@@ -220,9 +195,9 @@ def treeFromHdf5(h5node, parent = None):
     return node
 
 
-def scoreSample(tree, sampleKmers, scoring='adjusted'):
+def scoreSample(tree, sampleKmers, scoring='adjusted', min_unique=100, calc_p=1000):
     if scoring == 'adjusted':
-        tree.computeScoreAdjusted(sampleKmers)
+        tree.computeScoreAdjusted(sampleKmers, min_unique, calc_p)
     elif scoring == "unique":
         tree.computeScoreUnique(sampleKmers)
     elif scoring == "weighted":
@@ -403,6 +378,8 @@ parser.add_argument("input", help="HDF5 tree input file")
 parser.add_argument("sample", help="test path in tree vs kmers in this sample hdf5")
 parser.add_argument("-o", "--out", help="Text output file")
 parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'], default='adjusted')
+parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers per node to use unique score (default: 100)", type=int, default=100)
+parser.add_argument("-p", "--calc_p", help="Calculate p value for nodes fewer than this many kmers (default: 1000)", type=int, default=1000)
 parser.add_argument("-n", "--min_nodes", type=float, default=0.7, help="fraction of nodes required in a path (default: 0.7)")
 parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
 parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
@@ -417,7 +394,7 @@ print "Loading kmers from sample:", args.sample
 sampleKmers = kmertools.loadKmers(args.sample)
 
 print "Scoring sample kmers using:", args.method
-scoreSample(tree, sampleKmers, args.method)
+scoreSample(tree, sampleKmers, args.method, args.min_unique, args.calc_p)
 
 if args.random:
     print "Estimating minimum path score for p < 0.05..."

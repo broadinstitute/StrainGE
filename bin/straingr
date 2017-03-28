@@ -124,7 +124,7 @@ class Pileup:
             self.bad += 1
             return
 
-# check for decent mapping quality
+        # check for decent mapping quality
         mq = alignment.mapping_quality
         if mq < min_mq:
             self.unmapped += 1
@@ -477,7 +477,7 @@ parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping q
 parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--mingap", type=int, default=2000, help='minimum contiguous uncovered region to flag')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
-parser.add_argument('-o', '--out', help="Output VCF file")
+#parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
 args = parser.parse_args()
@@ -500,5 +500,7 @@ for file in args.bam:
     if not all_pileups:
         print "Error: no pileups for %s" % file
         continue
-    if args.out:
-        write_vcf(all_pileups, args.out, date=date.today(), reference=args.reference)
+    #if args.out:
+    vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
+    print "Writing to vcf file: %s" % vcf_out
+    write_vcf(all_pileups, vcf_out, date=date.today(), reference=args.reference)

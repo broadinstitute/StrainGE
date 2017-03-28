@@ -466,8 +466,8 @@ def process_bamfile(reference, bamfile):
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
 
-parser.add_argument("--minqual", type=int, default=3, help='minimum base quality score to consider')
-parser.add_argument("--minmq", type=int, default=0, help='minimum read mapping quality score to consider')
+parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
+parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
 parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--mingap", type=int, default=2000, help='minimum contiguous uncovered region to flag')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')

@@ -33,6 +33,7 @@ vcf_header = \
 ##FILTER=<ID=cv,Description="Coverage too low">
 ##FILTER=<ID=hc,Description="Coverage abnormally high">
 ##FILTER<ID=amb,Description="Ambiguous SNP call">
+##FILTER=<ID=um,Description="Unmappable position">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
 
@@ -181,11 +182,11 @@ class Pileup:
         #return self.ref_qual >= min_confirm and self.count > self.bad
         
         # this seems better...
-        return self.qual_total >= min_confirm and self.count > self.bad
+        return self.qual_total >= min_confirm and self.count > (self.bad + self.unmapped)
 
     def unmappable(self):
         """Good quality sequence, but can't be mapped"""
-        return self.qual_total >= min_confirm and self.unmapped > self.bad
+        return self.unmapped > self.bad
 
     def ref_fraction(self):
         """Fraction of evidence which supports reference base"""
@@ -336,11 +337,11 @@ def process_scaffold(bam, scaffold, refseq):
     print "unmappable: %d %.1f%%" % (unmapped, pct(unmapped, total))
     
     if coverage > 3:
-        # threshold is 99%ile of poissons distribution at average coverage
-        threshold = int(np.percentile(np.random.poisson(int(coverage), 1000), 99))
+        # threshold is 99.9%ile of poissons distribution at average coverage
+        threshold = int(np.percentile(np.random.poisson(int(coverage), 1000), 99.9))
     else:
-        # at lower coverages, just set it to 8
-        threshold = 8
+        # at lower coverages, just set it to 10
+        threshold = 10
     for pileup in pileups:
         pileup.high_coverage(threshold)
     
@@ -359,12 +360,16 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
             
             # not enough reads to say anything
             if not pileup.covered():
-                FILTER = "cv"
+                if pileup.unmappable():
+                    FILTER = 'um'
+                else:
+                    FILTER = "cv"
                 if pileup.ref_count:
                     QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
                 else:
                     QUAL = 0
             
+            # too many reads!
             elif pileup.hc:
                 FILTER = "hc"
                 if pileup.ref_count:

@@ -348,7 +348,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                 else:
                     QUAL = 0
             
-            if pileup.hc:
+            elif pileup.hc:
                 FILTER = "hc"
                 if pileup.ref_count:
                     QUAL = sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)

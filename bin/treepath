@@ -290,7 +290,7 @@ def get_strains(tree):
         answer.append([tree.name, tree.score])
     else:
         for child in tree.children:
-            answer.extend(recurse_through_children(child))
+            answer.extend(get_strains(child))
     
     return answer
 
@@ -303,26 +303,17 @@ def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None, ver
     paths = filter_paths(get_path_scores(tree, [], False, min_score, max_gap), min_nodes, min_score)
     ranked = rank_and_reduce_paths(paths, min_score)
     
-    if verbose:
-        for path in ranked:
-            if not path[2]:
-                print "Path is complete!",
-                print '|'.join(path[0]), ":", float(sum(path[1]))/len(path[1])
-                print ' | '.join(['%.3f' % x for x in path[1]])
-            else:
-                print "Path is incomplete!",
-                print '|'.join(path[0]), ":", float(sum(path[1]))/len(path[1])
-                print ' | '.join(['%.3f' % x for x in path[1]])
-                print "Children nodes..."
-                strains = get_strains(path[2])
-                for strain in sorted(strains, key = lambda x: x[1], reverse=True):
-                    print strain[0], ':', strain[1]
-            
-    
     for path in ranked:
         name = '|'.join(path[0])
         score = (float(sum(path[1]))/len(path[1]), sum(path[1]))
         scores[name] = (score, sorted(get_strains(path[2]), key = lambda strain: strain[1], reverse=True))
+        if verbose:
+            print name, ':', score
+            print ' | '.join(['%.3f' % x for x in path[1]])
+            if path[2].isLeaf():
+                print 'Complete!'
+            else:
+                print scores[name][1]
     
     return scores
 

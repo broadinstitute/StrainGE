@@ -66,6 +66,7 @@ class Pileup:
         self.scaffold = scaffold
         self.pos = pos
         self.count = 0
+        self.unmapped = 0
         self.bad = 0
         self.mq_total = 0
         self.mq_ss = 0
@@ -90,12 +91,6 @@ class Pileup:
     def add_read(self, read):
         """Add a pysam.PileupRead object to this pileup"""
         alignment = read.alignment
-
-        # check for decent mapping quality
-        mq = alignment.mapping_quality
-        if mq < min_mq:
-            self.bad += 1
-            return
 
         # if this is a paired read, make sure the pairs are properly aligned
         if (not alignment.is_paired) or (not alignment.is_proper_pair):
@@ -126,6 +121,12 @@ class Pileup:
         index = bases.find(base)
         if index < 0:
             self.bad += 1
+            return
+
+# check for decent mapping quality
+        mq = alignment.mapping_quality
+        if mq < min_mq:
+            self.unmapped += 1
             return
 
         # We're good! Update the pileup stats...
@@ -176,7 +177,15 @@ class Pileup:
 
     def covered(self):
         """Does this pileup have enough data to consider this locus covered?"""
-        return self.ref_qual >= min_confirm and self.count > self.bad
+        # this seems wrong
+        #return self.ref_qual >= min_confirm and self.count > self.bad
+        
+        # this seems better...
+        return self.qual_total >= min_confirm and self.count > self.bad
+
+    def unmappable(self):
+        """Good quality sequence, but can't be mapped"""
+        return self.qual_total >= min_confirm and self.unmapped > self.bad
 
     def ref_fraction(self):
         """Fraction of evidence which supports reference base"""
@@ -295,6 +304,9 @@ def process_scaffold(bam, scaffold, refseq):
                 gap = (last_covered + 1, refpos - last_covered)
                 print "Coverage gap:", gap[0], gap[1]
                 gaps.append(gap)
+            last_covered = refpos
+        elif pileup.unmappable():
+            # not a real gap, just can't map to this region
             last_covered = refpos
         if verbose:
             print pileup, pileup.confirmed()

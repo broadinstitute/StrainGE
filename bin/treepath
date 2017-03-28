@@ -105,7 +105,9 @@ class KmerTreeNode:
     def computeScoreWeighted(self, kmers, returnn=False):
         """Score this node vs a set of kmers"""
         if self.counts is None:
-            raise Exception("Unique tree? Counts are missing from node!")
+            print "Counts missing from node. Using unique score..."
+            self.computeScoreUnique(kmers)
+            #raise Exception("Unique tree? Counts are missing from node!")
         weights = 1.0 / (self.counts * self.counts)
         self.denominator = weights.sum()
         if self.denominator > 0:
@@ -220,7 +222,7 @@ def get_path_scores(tree, scores=None, leaves=False, min_score=0.1, max_gap=None
     paths = []
     if max_gap == None or min_score <= 0 or any([x >= min_score for x in scores[-max_gap:]]):
         if not leaves or tree.isLeaf():
-            paths.append([[name], scores[:], tree.children])
+            paths.append([[name], scores[:], tree])
         for child in tree.children:
             for path in get_path_scores(child, scores[:], leaves=leaves, min_score=min_score, max_gap=max_gap):
                 paths.append([[name]+path[0], path[1], path[2]])
@@ -229,6 +231,7 @@ def get_path_scores(tree, scores=None, leaves=False, min_score=0.1, max_gap=None
 
 
 def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
+    """Filter to remove low supported paths by both node count and score"""
     if min_nodes <= 0 or min_score <= 0:
         return paths
     keep = []
@@ -243,6 +246,7 @@ def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
 
 
 def rank_and_reduce_paths(paths, min_score=0.1):
+    """Rank paths by node score and reduce paths based on parental nodes"""
     ranked = sorted(paths, key = lambda path: (float(sum(path[1]))/len(path[1]), len([x for x in path[1] if x >= min_score])), reverse=True)
     
     reduced = []
@@ -263,7 +267,7 @@ def rank_and_reduce_paths(paths, min_score=0.1):
     
     # rerank on complete, then on length of path, then on path score
     final = []
-    for path in sorted(reduced, key = lambda path: (len(path[2]) == 0, len(path[0]), sum(path[1])), reverse=True):
+    for path in sorted(reduced, key = lambda path: (path[2].isLeaf(), len(path[0]), sum(path[1])), reverse=True):
         if not final:
             final.append(path)
             continue
@@ -276,10 +280,11 @@ def rank_and_reduce_paths(paths, min_score=0.1):
             final.append(path)
     
     # return sorted complete paths first, then by average node score
-    return sorted(final, key = lambda path: (len(path[2]) == 0, float(sum(path[1]))/len(path[1])))
+    return sorted(final, key = lambda path: (path[2].isLeaf(), float(sum(path[1]))/len(path[1])))
 
 
-def recurse_through_children(tree):
+def get_strains(tree):
+    """Recurse through tree and get children leaves"""
     answer = []
     if tree.isLeaf():
         answer.append([tree.name, tree.score])
@@ -288,15 +293,6 @@ def recurse_through_children(tree):
             answer.extend(recurse_through_children(child))
     
     return answer
-
-
-def get_strains(children):
-    if not children:
-        return []
-    strains = []
-    for child in children:
-        strains.extend(recurse_through_children(child))
-    return strains
 
 
 def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None, verbose=False):
@@ -345,20 +341,22 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     return np.percentile(random_scores, 95)
     
 
-def saveText(pathScores, out, random_score = None):
+def saveText(pathScores, out, random_score = None, only_complete=False):
     """Save path scores to text file"""
     with open(out, 'wb') as w:
         w.write("Path,Score,Complete,Significant,Strains\n")
         for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -pathScores[x][0][0], -pathScores[x][0][1])):
-            if not pathScores[path][1]:
+            if len(pathScores[path][1]) == 1:
                 complete = 'complete'
-                strains = ""
+            elif only_complete:
+                break # keep only complete
             else:
                 complete = 'incomplete'
-                strains = ""
-                for strain in pathScores[path][1]:
-                    if strains: strains += " "
-                    strains += "%s:%.3f" % (strain[0], strain[1])
+            
+            strains = ""
+            for strain in pathScores[path][1]:
+                if strains: strains += " "
+                strains += "%s:%.3f" % (strain[0], strain[1])
             
             if random_score:
                 if pathScores[path][0][1] > random_score:
@@ -387,6 +385,7 @@ parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers p
 parser.add_argument("-p", "--calc_p", help="Calculate p value for nodes fewer than this many kmers (default: 1000)", type=int, default=1000)
 parser.add_argument("-n", "--min_nodes", type=float, default=0.7, help="fraction of nodes required in a path (default: 0.7)")
 parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
+parser.add_argument("-c", "--complete", action="store_true", help="Keep only complete paths")
 parser.add_argument("-g", "--max_gap", type=int, help="Short circuit path detection if this many nodes are below min_score (default: disabled)")
 parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
 args = parser.parse_args()
@@ -406,16 +405,19 @@ if args.random:
     print "Estimating threshold for significant path..."
     random_score = get_p_value_on_scores(tree, args.min_nodes, args.min_score, args.max_gap)
     print "For this tree, sum of node scores must be > %.3f for p < 0.05" % random_score
+else:
+    random_score = None
 
 print "Scoring paths in tree..."
 pathScores = scorePathsInSample(tree, args.min_nodes, args.min_score, args.max_gap, verbose=args.verbose)
 
-for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -pathScores[x][0][0], -pathScores[x][0][1])):
-    print path,
-    if pathScores[path][1]:
-        print "incomplete",
+for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
+    if pathScores[path][1] == 1:
+        print path, "complete",
+    elif args.complete:
+        break # keep only complete
     else:
-        print "complete",
+        print path, "incomplete",
     
     if args.random:
         if pathScores[path][0][1] > random_score:
@@ -428,8 +430,5 @@ for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 0, -path
 
 if args.out:
     print "Output path results to:", args.out
-    if args.random:
-        saveText(pathScores, args.out, random_score)
-    else:
-        saveText(pathScores, args.out)
-
+    saveText(pathScores, args.out, random_score, args.complete)
+    

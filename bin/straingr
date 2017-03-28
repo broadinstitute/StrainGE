@@ -280,8 +280,8 @@ def process_scaffold(bam, scaffold, refseq):
     snps = 0
     unmapped = 0
     goodcoverage = 0
-    badcoverage = 0
-    unmappable = 0
+    #badcoverage = 0
+    #unmappable = 0
 
     #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
@@ -296,8 +296,8 @@ def process_scaffold(bam, scaffold, refseq):
             refbase = refseq[refpos]
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
         goodcoverage += pileup.count
-        badcoverage += pileup.bad
-        unmappable += pileup.unmapped
+        #badcoverage += pileup.bad
+        #unmappable += pileup.unmapped
         if pileup.covered():
             covered += 1
             if pileup.confirmed():
@@ -317,14 +317,14 @@ def process_scaffold(bam, scaffold, refseq):
             print pileup, pileup.confirmed()
         pileups.append(pileup)
 
-    total = length
+    #total = length
     coverage = float(goodcoverage) / float(length)
-    total_coverage = float(goodcoverage + badcoverage + unmappable) / length
-    pct_good = total_coverage and 100.0 * coverage / total_coverage
+    #total_coverage = float(goodcoverage + badcoverage + unmappable) / length
+    #pct_good = total_coverage and 100.0 * coverage / total_coverage
     mixed = covered - (confirmed + snps)
 
     print "good coverage: %.1fx" % (coverage,)
-    print "covered: %d %.1f%%" % (covered, pct(covered, total))
+    print "covered: %d %.1f%%" % (covered, pct(covered, length))
     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
     if snps > 0:
@@ -333,8 +333,8 @@ def process_scaffold(bam, scaffold, refseq):
     if mixed > 0:
         mixed_rate = float(covered) / float(mixed)
         print "mixed rate: %.0f Q%.0f" % (mixed_rate, math.log10(mixed_rate) * 10.0)
-    print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps]),
-    print "unmappable: %d %.1f%%" % (unmapped, pct(unmapped, total))
+    print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
+    print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
     
     if coverage > 3:
         # threshold is 99.9%ile of poissons distribution at average coverage

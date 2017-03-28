@@ -277,8 +277,10 @@ def process_scaffold(bam, scaffold, refseq):
     confirmed = 0
     covered = 0
     snps = 0
+    unmapped = 0
     goodcoverage = 0
     badcoverage = 0
+    unmappable = 0
 
     #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
@@ -294,6 +296,7 @@ def process_scaffold(bam, scaffold, refseq):
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
         goodcoverage += pileup.count
         badcoverage += pileup.bad
+        unmappable += pileup.unmapped
         if pileup.covered():
             covered += 1
             if pileup.confirmed():
@@ -306,6 +309,7 @@ def process_scaffold(bam, scaffold, refseq):
                 gaps.append(gap)
             last_covered = refpos
         elif pileup.unmappable():
+            unmapped += 1
             # not a real gap, just can't map to this region
             last_covered = refpos
         if verbose:
@@ -314,7 +318,7 @@ def process_scaffold(bam, scaffold, refseq):
 
     total = length
     coverage = float(goodcoverage) / float(length)
-    total_coverage = float(goodcoverage + badcoverage) / length
+    total_coverage = float(goodcoverage + badcoverage + unmappable) / length
     pct_good = total_coverage and 100.0 * coverage / total_coverage
     mixed = covered - (confirmed + snps)
 
@@ -328,7 +332,8 @@ def process_scaffold(bam, scaffold, refseq):
     if mixed > 0:
         mixed_rate = float(covered) / float(mixed)
         print "mixed rate: %.0f Q%.0f" % (mixed_rate, math.log10(mixed_rate) * 10.0)
-    print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
+    print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps]),
+    print "unmappable: %d %.1f%%" % (unmapped, pct(unmapped, total))
     
     if coverage > 3:
         # threshold is 99%ile of poissons distribution at average coverage

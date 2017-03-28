@@ -403,7 +403,7 @@ print "Scoring paths in tree..."
 pathScores = scorePathsInSample(tree, args.min_nodes, args.min_score, args.max_gap, verbose=args.verbose)
 
 for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
-    if pathScores[path][1] == 1:
+    if len(pathScores[path][1]) == 1:
         print path, "complete",
     elif args.complete:
         break # keep only complete

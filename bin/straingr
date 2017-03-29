@@ -312,7 +312,12 @@ def process_scaffold(bam, scaffold, refseq):
         elif pileup.unmappable():
             unmapped += 1
             # not a real gap, just can't map to this region
+            if refpos - last_covered > min_gap:
+                gap = (last_covered + 1, refpos - last_covered)
+                print "Coverage gap:", gap[0], gap[1]
+                gaps.append(gap)
             last_covered = refpos
+        
         if verbose:
             print pileup, pileup.confirmed()
         pileups.append(pileup)

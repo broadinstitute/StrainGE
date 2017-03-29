@@ -32,8 +32,9 @@ vcf_header = \
 ##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
 ##FILTER=<ID=cv,Description="Coverage too low">
 ##FILTER=<ID=hc,Description="Coverage abnormally high">
-##FILTER<ID=amb,Description="Ambiguous SNP call">
+##FILTER=<ID=amb,Description="Ambiguous SNP call">
 ##FILTER=<ID=um,Description="Unmappable position">
+##FILTER=<ID=del,Description="Deletion at position">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
 
@@ -138,7 +139,9 @@ class Pileup:
         self.qual_total += qual
 
         if read.is_del:
-            self.add_other("del", qual, mq)
+            # using N as marker for deletion...
+            # workaround until we can write actual deletions into vcf format
+            self.add_other("N", qual, mq)
         elif base == self.refbase:
             self.ref_count += 1
             self.ref_qual_ss += qual**2
@@ -389,6 +392,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
             # reference not confirmed and there are other alleles
             elif pileup.others:
                 snp = pileup.base_call()
+                
                 # confirmed a snp
                 if snp:
                     QUAL = sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])

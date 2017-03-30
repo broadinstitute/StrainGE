@@ -7,6 +7,19 @@ import kmerizer
 import numpy as np
 from itertools import chain, imap
 import random
+import pydot
+
+# globals
+verbose = False
+method = 'adjusted'
+calc_p = 1000
+min_unique = 100
+min_nodes = 0.7
+min_score = 0.1
+complete = False
+max_gaps = None
+random = False
+
 
 class RandomTreeNode:
     def __init__(self, tree=None, root = None):
@@ -39,12 +52,11 @@ class RandomTreeNode:
         for child in self.children:
             child.randomize(root)
             
-        
-        
+
 
 class KmerTreeNode:
     """Class to recursively hold tree representation"""
-    def __init__(self, kmers, name = None, children = [], counts = None, parent = None):
+    def __init__(self, kmers, name = None, children = [], counts = None, parent = None, score = None, common = None, denominator = None):
         global treeNodeCount
         if name:
             self.name = name
@@ -55,9 +67,9 @@ class KmerTreeNode:
         self.counts = counts
         self.parent = parent
         self.children = children
-        self.score = None
-        self.common = None
-        self.denominator = None
+        self.score = score
+        self.common = common
+        self.denominator = denominator
         
     def isLeaf(self):
         return not self.children
@@ -166,6 +178,7 @@ class KmerTreeNode:
                 randscores = self.computeRandomScore(kmers)                    
                 if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
                     self.score = 0 # assign no score since p >= .05
+                    self.common = None
     
     def computeRandomScore(self, kmers, n = 100): #n is number of iterations needs to be properly chosen
         n_kmers = kmerizer.count_common(self.kmers, kmers)
@@ -180,19 +193,31 @@ class KmerTreeNode:
 
 
 def treeFromHdf5(h5node, parent = None):
-    assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
+    #assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
+    if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleTreeNode"):
+        print "HDF5 not a valid class"
+        return
     name = h5node.attrs["name"]
     children = []
     kmers = None
     counts = None
+    score = None
+    common = None
+    denominator = None
     for key, value in h5node.items():
         if key == "kmers":
             kmers = np.array(value)
         elif key == "counts":
             counts = np.array(value)
+        elif key == "score":
+            score = float(value)
+        elif key == "common":
+            common = np.array(value)
+        elif key == "denominator":
+            denominator = float(value)
         else:
             children.append(value)
-    node = KmerTreeNode(kmers, name = name, counts = counts, parent = parent)
+    node = KmerTreeNode(kmers, name = name, counts = counts, parent = parent, score = score, common = common, denominator = denominator)
     node.children = [treeFromHdf5(child, node) for child in children]
     return node
 
@@ -295,7 +320,7 @@ def get_strains(tree):
     return answer
 
 
-def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None, verbose=False):
+def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None):
     """Score kmers of sample to paths in a tree"""
     
     scores = {}
@@ -360,6 +385,69 @@ def saveText(pathScores, out, random_score = None, only_complete=False):
             w.write("%s,%.3f,%s,%s,%s\n" % (path, pathScores[path][0][0], complete, significance, strains))
     
 
+def graphTree(graph, tree, parentNode):
+    leaf = tree.isLeaf()
+    nodeLabel = tree.label()
+    color = 1
+    textcolor = 9
+    id = tree.name
+    if tree.score is not None:
+        frac = tree.score
+        nodeLabel = "%.0f%% %s" % (100.0 * frac, nodeLabel)
+        color = int(round(frac * 8.0)) + 1
+        if color >= 7:
+            textcolor = 1
+    node = pydot.Node(id, label=nodeLabel, style="filled", colorscheme='blues9', fillcolor=color, fontcolor=textcolor)
+    graph.add_node(node)
+    if parentNode:
+        graph.add_edge(pydot.Edge(parentNode, node))
+    if not leaf:
+        for child in tree.children:
+            graphTree(graph, child, node)
+
+
+def process_sample(tree, sample):
+    
+    print "Loading kmers from sample:", sample
+    sampleKmers = kmertools.loadKmers(sample)
+    
+    print "Scoring sample kmers using:", method
+    scoreSample(tree, sampleKmers, method, min_unique, calc_p)
+
+
+def process_tree(tree, out=None, dot=None)
+    if random:
+        print "Estimating threshold for significant path..."
+        random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap)
+        print "For this tree, sum of node scores must be > %.3f for p < 0.05" % random_score
+    else:
+        random_score = None
+    
+    print "Scoring paths in tree..."
+    pathScores = scorePathsInSample(tree, min_nodes, min_score, max_gap)
+    
+    for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
+        if len(pathScores[path][1]) == 1:
+            print path, "complete",
+        elif complete:
+            break # keep only complete
+        else:
+            print path, "incomplete",
+    
+        if random:
+            if pathScores[path][0][1] > random_score:
+                print "significant",
+            else:
+                print "p > 0.05",
+    
+        print "%.3f" % pathScores[path][0][0]
+    
+    if out:
+        saveText(pathScores, out, random_score, complete)
+    
+    if dot:
+        graphTree(dot, tree, None)
+
 
 ###
 ### Main
@@ -368,58 +456,63 @@ def saveText(pathScores, out, random_score = None, only_complete=False):
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbose", help="increase output verbosity",
                     action="store_true")
-parser.add_argument("input", help="HDF5 tree input file")
-parser.add_argument("sample", help="test path in tree vs kmers in this sample hdf5")
-parser.add_argument("-o", "--out", help="Text output file")
-parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'], default='adjusted')
-parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers per node to use unique score (default: 100)", type=int, default=100)
-parser.add_argument("-p", "--calc_p", help="Calculate p value for nodes fewer than this many kmers (default: 1000)", type=int, default=1000)
-parser.add_argument("-n", "--min_nodes", type=float, default=0.7, help="fraction of nodes required in a path (default: 0.7)")
-parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
+parser.add_argument("input", help="HDF5 tree input file (can be previously scored tree!)")
+parser.add_argument("sample", nargs='*', help="sample hdf5 to calculate paths in tree")
+parser.add_argument("-o", "--out", action='store_true', help="Output results to csv file")
+parser.add_argument("--dot", action='store_true', help="Save graphviz dot-style tree graph")
+parser.add_argument("--hdf5", action='store_true', help="HDF5 tree score output (useful to re-analyze paths with different options)")
+parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'])
+parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers per node to use unique score (default: 100)", type=int)
+parser.add_argument("-p", "--calc_p", help="Calculate p value for nodes fewer than this many kmers (default: 1000)", type=int)
+parser.add_argument("-n", "--min_nodes", type=float, help="fraction of nodes required in a path (default: 0.7)")
+parser.add_argument("-s", "--min_score", type=float, help="minimum score of a node in a tree to keep (default: 0.1)")
 parser.add_argument("-c", "--complete", action="store_true", help="Keep only complete paths")
 parser.add_argument("-g", "--max_gap", type=int, help="Short circuit path detection if this many nodes are below min_score (default: disabled)")
 parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
 args = parser.parse_args()
 
+if args.method:
+    method = args.method
+if args.min_unique:
+    min_unique = args.min_unique
+if args.calc_p:
+    calc_p = args.calc_p
+if args.min_score:
+    min_score = args.min_score
+if args.complete:
+    complete = args.complete
+if args.max_gap:
+    max_gap = args.max_gap
+if args.random:
+    random = args.random
+
+dot = None
+out = None
 
 print "Loading tree file:", args.input
 with h5py.File(args.input, 'r') as h5:
     tree = treeFromHdf5(h5)
 
-print "Loading kmers from sample:", args.sample
-sampleKmers = kmertools.loadKmers(args.sample)
-
-print "Scoring sample kmers using:", args.method
-scoreSample(tree, sampleKmers, args.method, args.min_unique, args.calc_p)
-
-if args.random:
-    print "Estimating threshold for significant path..."
-    random_score = get_p_value_on_scores(tree, args.min_nodes, args.min_score, args.max_gap)
-    print "For this tree, sum of node scores must be > %.3f for p < 0.05" % random_score
+if args.sample:
+    for sample in args.sample:
+        if args.dot:
+            dot = sample + '.png'
+        if args.out
+            out = sample + '.csv'
+        process_sample(tree, sample)
+        if args.hdf5:
+            print "Saving scored tree to hdf5 file..."
+            with h5py.File(args.input+'_'+sample+'_scored.hdf5', 'w') as h5:
+                tree.saveSampleHdf5(h5)
+        process_tree(tree, out=out, dot=dot)
 else:
-    random_score = None
-
-print "Scoring paths in tree..."
-pathScores = scorePathsInSample(tree, args.min_nodes, args.min_score, args.max_gap, verbose=args.verbose)
-
-for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
-    if len(pathScores[path][1]) == 1:
-        print path, "complete",
-    elif args.complete:
-        break # keep only complete
-    else:
-        print path, "incomplete",
-    
-    if args.random:
-        if pathScores[path][0][1] > random_score:
-            print "significant",
-        else:
-            print "p > 0.05",
-    
-    print "%.3f" % pathScores[path][0][0]
+    assert tree.score != None, "No score value for this tree. Did you forget to specify samples?"
+    if args.out:
+        out = args.input+'.csv'
+    if args.dot:
+        dot = args.input+'.png'
+    process_tree(tree, out=out, dot=out)
 
 
-if args.out:
-    print "Output path results to:", args.out
-    saveText(pathScores, args.out, random_score, args.complete)
-    
+
+

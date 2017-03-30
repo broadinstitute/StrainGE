@@ -303,7 +303,7 @@ def rank_and_reduce_paths(paths, min_score=0.1):
             final.append(path)
     
     # return sorted complete paths first, then by average node score
-    return sorted(final, key = lambda path: (path[2].isLeaf(), float(sum(path[1]))/len(path[1])))
+    return sorted(final, key = lambda path: (path[2].isLeaf(), float(sum(path[1]))/len(path[1])), reverse=True)
 
 
 def get_strains(tree):

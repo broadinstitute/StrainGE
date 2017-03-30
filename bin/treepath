@@ -194,8 +194,8 @@ class KmerTreeNode:
 
 def treeFromHdf5(h5node, parent = None):
     #assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
-    if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleTreeNode"):
-        print "HDF5 not a valid class"
+    if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleScoreNode"):
+        print "HDF5 not a valid class", h5node.attrs["type"]
         return
     name = h5node.attrs["name"]
     children = []
@@ -492,6 +492,7 @@ out = None
 print "Loading tree file:", args.input
 with h5py.File(args.input, 'r') as h5:
     tree = treeFromHdf5(h5)
+    assert tree != None, 'Could not load tree!'
 
 if args.sample:
     for sample in args.sample:

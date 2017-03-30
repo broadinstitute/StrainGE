@@ -345,8 +345,8 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     random_tree = RandomTreeNode(tree, root=None)
     random_scores = []
     temp = False
+    global verbose
     if verbose:
-        global verbose
         temp = verbose # this is just too much info...
         verbose = False
     for i in xrange(n):

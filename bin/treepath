@@ -198,23 +198,21 @@ def treeFromHdf5(h5node, parent = None):
         print "HDF5 not a valid class", h5node.attrs["type"]
         return
     name = h5node.attrs["name"]
+    score = h5node.attrs.get('score')
+    denominator = h5node.attrs.get('denominator')
     children = []
     kmers = None
     counts = None
-    score = None
     common = None
-    denominator = None
+
+
     for key, value in h5node.items():
         if key == "kmers":
             kmers = np.array(value)
         elif key == "counts":
             counts = np.array(value)
-        elif key == "score":
-            score = float(value)
         elif key == "common":
             common = np.array(value)
-        elif key == "denominator":
-            denominator = float(value)
         else:
             children.append(value)
     node = KmerTreeNode(kmers, name = name, counts = counts, parent = parent, score = score, common = common, denominator = denominator)

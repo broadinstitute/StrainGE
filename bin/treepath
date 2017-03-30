@@ -415,7 +415,7 @@ def process_sample(tree, sample):
     scoreSample(tree, sampleKmers, method, min_unique, calc_p)
 
 
-def process_tree(tree, out=None, dot=None)
+def process_tree(tree, out=None, dot=None):
     if random:
         print "Estimating threshold for significant path..."
         random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap)

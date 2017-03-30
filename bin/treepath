@@ -18,7 +18,7 @@ min_nodes = 0.7
 min_score = 0.1
 complete = False
 max_gap = None
-random = False
+calc_random = False
 
 
 class RandomTreeNode:
@@ -414,7 +414,7 @@ def process_sample(tree, sample):
 
 
 def process_tree(tree, out=None, dot=None):
-    if random:
+    if calc_random:
         print "Estimating threshold for significant path..."
         random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap)
         print "For this tree, sum of node scores must be > %.3f for p < 0.05" % random_score
@@ -484,7 +484,7 @@ if args.complete:
 if args.max_gap:
     max_gap = args.max_gap
 if args.random:
-    random = args.random
+    calc_random = args.random
 
 dot = None
 out = None

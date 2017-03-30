@@ -17,7 +17,7 @@ min_unique = 100
 min_nodes = 0.7
 min_score = 0.1
 complete = False
-max_gaps = None
+max_gap = None
 random = False
 
 
@@ -495,14 +495,15 @@ with h5py.File(args.input, 'r') as h5:
 
 if args.sample:
     for sample in args.sample:
+        name = args.input + '_' + sample
         if args.dot:
-            dot = sample + '.png'
+            dot = name + '.png'
         if args.out:
-            out = sample + '.csv'
+            out = name + '.csv'
         process_sample(tree, sample)
         if args.hdf5:
             print "Saving scored tree to hdf5 file..."
-            with h5py.File(args.input+'_'+sample+'_scored.hdf5', 'w') as h5:
+            with h5py.File(name+'_scored.hdf5', 'w') as h5:
                 tree.saveSampleHdf5(h5)
         process_tree(tree, out=out, dot=dot)
 else:

@@ -450,7 +450,9 @@ def process_tree(tree, out=None, dot=None):
         saveText(pathScores, out, random_score, complete)
     
     if dot:
-        graphTree(dot, tree, None)
+        graph = pydot.Dot(graph_type='graph', rankdir='LR')
+        graphTree(graph, tree, None)
+        graph.write_png(dot)
 
 
 ###

@@ -497,7 +497,7 @@ if args.sample:
     for sample in args.sample:
         if args.dot:
             dot = sample + '.png'
-        if args.out
+        if args.out:
             out = sample + '.csv'
         process_sample(tree, sample)
         if args.hdf5:

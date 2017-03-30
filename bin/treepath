@@ -469,6 +469,8 @@ parser.add_argument("-g", "--max_gap", type=int, help="Short circuit path detect
 parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
 args = parser.parse_args()
 
+if args.verbose:
+    verbose = args.verbose
 if args.method:
     method = args.method
 if args.min_unique:

@@ -344,9 +344,11 @@ def process_scaffold(bam, scaffold, refseq):
     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
     print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
     
-    if coverage > 3:
+    
+    avg_count = goodcoverage / covered
+    if avg_count > 3:
         # threshold is 99.9%ile of poissons distribution at average coverage
-        threshold = int(np.percentile(np.random.poisson(int(coverage), 1000), 99.9))
+        threshold = int(np.percentile(np.random.poisson(avg_count, 10000), 99.9))
     else:
         # at lower coverages, just set it to 10
         threshold = 10

@@ -16,7 +16,7 @@ parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, defaul
 parser.add_argument("-o", "--output", help="Output file (in numpy npz format)")
 parser.add_argument("-f", "--fingerprint", help="Include kmer fingerprint in output file for quick matching",
                     action="store_true")
-parser.add_argument("--fraction", type='float', default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
+parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
 parser.add_argument("-c", "--compress", help="Compress output file", action="store_true")
 parser.add_argument("--npz", help="Store output in npz format (default hdf5)", action="store_true")
 parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",

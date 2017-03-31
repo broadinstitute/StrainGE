@@ -11,9 +11,9 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('sequences', nargs='+',
-                    help='Input sequence files (fasta or fastq; optionally compressed with gz or bz2)')
+                    help='Input sequence files (fasta or fastq by default; optionally compressed with gz or bz2)')
 parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
-parser.add_argument("-o", "--output", help="Output file (in numpy npz format)")
+parser.add_argument("-o", "--output", help="Output file (hdf5 or npz)")
 parser.add_argument("-f", "--fingerprint", help="Include kmer fingerprint in output file for quick matching",
                     action="store_true")
 parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
@@ -23,13 +23,20 @@ parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer sp
                     action="store_true")
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
 parser.add_argument("--histogram", help="Histogram output file (count of kmers by frequency)")
+parser.add_argument("--kmerset", help="Input is kmerset in hdf5 or npz format", action="store_true")
 args = parser.parse_args()
 
-kset = kmertools.KmerSet(args.K)
 
-for arg in args.sequences:
-    print 'Kmerizing', arg
-    kset.kmerizeFile(arg)
+
+if args.kmerset:
+    assert len(args.sequences) == 1, "Sorry, you can only specify one kmerset file at a time!!"
+    print 'Loading', args.sequences[0]
+    kset = kmertools.kmerSetFromFile(args.sequences[0])
+else:
+    kset = kmertools.KmerSet(args.K)
+    for arg in args.sequences:
+        print 'Kmerizing', arg
+        kset.kmerizeFile(arg)
 
 if args.histogram:
     kset.writeHistogram(args.histogram)

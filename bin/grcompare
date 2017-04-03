@@ -77,6 +77,15 @@ class VCF:
         else:
             self.filters[filt]['count'] += 1
     
+    def get_confirmed(self):
+        confirmed = []
+        for chrom in sorted(self.data):
+            for pos in sorted(self.data[chrom]):
+                if self.data[chrom][pos]['filter'] == 'PASS' and self.data[chrom][pos]['alt'] == '.':
+                    confirmed.append( (chrom, pos, None) )
+        
+        return confirmed
+    
     def get_snps(self):
         snps = []
         for chrom in sorted(self.data):
@@ -173,29 +182,39 @@ def get_overlapping_pos(v1, v2, exact=True):
 
 def compare_vcf_files(vcfs):
     # get snps and amb calls for each vcf
+    refs = {}
+    confirmed = {}
     snps = {}
     ambs = {}
     for vcf in vcfs:
+        refs[vcf.name] = vcf.reference
+        confirmed[vcf.name] = vcf.get_confirmed()
         snps[vcf.name] = vcf.get_snps()
         ambs[vcf.name] = vcf.get_ambiguous()
     
     # for each pair of vcf
     comps = {}
-    for (v1, v2) in itertools.combinations(snps.keys()):
+    for (v1, v2) in itertools.combinations(snps.keys(), 2):
         print "Comparing %s to %s" % (v1, v2)
+        if refs[v1] != refs[v2]:
+            print "Different references", refs[v1], refs[v2]
+            continue
+        # get overlapping confirmed positions
+        overlap_confirmed = get_overlapping_pos(confirmed[v1], confirmed[v2], exact=True)
         # get identical snps between them
         overlap_snps = get_overlapping_pos(snps[v1], snps[v2], exact=True)
         # also get overlap of amb calls (check for alt alleles)
-        overlap_ambs = get_overlapping_pos(ambs[v1], ams[v2], exact=False)
+        overlap_ambs = get_overlapping_pos(ambs[v1], ambs[v2], exact=False)
         # and finally look for overlap of snps and amb between pair
         overlap_nonref = get_overlapping_pos(snps[v1], ambs[v2], exact=False)+get_overlapping_pos(ambs[v1], snps[v2], exact=False)
         # report % overlap somehow...
+        print "Overlapping confirmed reference positions:", len(overlap_confirmed)
         total = len(overlap_snps) + len(overlap_ambs) + len(overlap_nonref)
         print "Total overlapping non-reference positions shared:", total
         print "Exact SNPs overlapping:", len(overlap_snps)
         print "Ambiguous calls overlapping:", len(overlap_ambs)
         print "Non-reference positions shared:", len(overlap_nonref)
-        comps[(v1, v2)] = (len(overlap_snps), len(overlap_ambs), len(overlap_nonref))
+        comps[(v1, v2)] = (len(overlap_confirmed), len(overlap_snps), len(overlap_ambs), len(overlap_nonref))
     
     return comps
     

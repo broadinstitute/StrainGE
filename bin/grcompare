@@ -206,7 +206,11 @@ def compare_vcf_files(vcfs):
         # also get overlap of amb calls (check for alt alleles)
         overlap_ambs = get_overlapping_pos(ambs[v1], ambs[v2], exact=False)
         # and finally look for overlap of snps and amb between pair
-        overlap_nonref = get_overlapping_pos(snps[v1], ambs[v2], exact=False)+get_overlapping_pos(ambs[v1], snps[v2], exact=False)
+        overlap_nonref = sorted(get_overlapping_pos(snps[v1], ambs[v2], exact=False)+get_overlapping_pos(ambs[v1], snps[v2], exact=False))
+
+        # look for signals that conflict b/w samples (SNP in one and REF in other)
+        conflicts = sorted(get_overlapping_pos(snps[v1], confirmed[v2], exact=False)+get_overlapping_pos(confirmed[v1], snps[v2], exact=False))
+
         # report % overlap somehow...
         print "Overlapping confirmed reference positions:", len(overlap_confirmed)
         total = len(overlap_snps) + len(overlap_ambs) + len(overlap_nonref)
@@ -214,7 +218,8 @@ def compare_vcf_files(vcfs):
         print "Exact SNPs overlapping:", len(overlap_snps)
         print "Ambiguous calls overlapping:", len(overlap_ambs)
         print "Non-reference positions shared:", len(overlap_nonref)
-        comps[(v1, v2)] = (len(overlap_confirmed), len(overlap_snps), len(overlap_ambs), len(overlap_nonref))
+        print "Conflicting evidence (SNP in one, REF in other):", len(conflicts)
+        comps[(v1, v2)] = (len(overlap_confirmed), len(overlap_snps), len(overlap_ambs), len(overlap_nonref), len(conflicts))
     
     return comps
     

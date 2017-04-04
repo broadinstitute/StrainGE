@@ -509,7 +509,7 @@ with h5py.File(args.input, 'r') as h5:
 
 if args.sample:
     for sample in args.sample:
-        name = args.input + '_' + sample
+        name = os.path.basename(args.input) + '_' + os.path.basename(sample)
         if args.dot:
             dot = name + '.png'
         if args.out:

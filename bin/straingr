@@ -185,7 +185,10 @@ class Pileup:
         #return self.ref_qual >= min_confirm and self.count > self.bad
         
         # this seems better...
-        return self.qual_total >= min_confirm and self.count > (self.bad + self.unmapped)
+        #return self.qual_total >= min_confirm and self.count > (self.bad + self.unmapped)
+
+        # why do we care if there are also bad reads as long as there are good ones???
+        return self.qual_total >= min_confirm
 
     def unmappable(self):
         """Good quality sequence, but can't be mapped"""
@@ -340,7 +343,11 @@ def process_scaffold(bam, scaffold, refseq):
     print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
     if mixed > 0:
         mixed_rate = float(covered) / float(mixed)
-        print "mixed rate: %.0f Q%.0f" % (mixed_rate, math.log10(mixed_rate) * 10.0)
+        if mixed_rate > 0:
+            mixed_quality = math.log10(mixed_rate) * 10.0
+        else:
+            mixed_quality = 0
+        print "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
     print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
     

@@ -5,6 +5,8 @@ import math
 import pysam
 import numpy as np
 import kmertools
+import gzip
+import cPickle
 from numpy import sqrt
 from datetime import date
 
@@ -67,6 +69,7 @@ class Pileup:
         self.chrom = chrom
         self.scaffold = scaffold
         self.pos = pos
+        self.reads = {}
         self.count = 0
         self.unmapped = 0
         self.bad = 0
@@ -137,6 +140,8 @@ class Pileup:
         self.mq_total += mq
         self.qual_ss += qual**2
         self.qual_total += qual
+        # keep track of the reads in this pileup and the position in that read
+        self.reads[alignment.query_name] = pos
 
         if read.is_del:
             # using N as marker for deletion...
@@ -483,6 +488,12 @@ def process_bamfile(reference, bamfile):
             continue
     return all_pileups
 
+def save_pileups(pileups, out):
+    """Save all pileups to a pickled file"""
+
+    with gzip.open(out, 'wb') as w:
+        cPickle.dump(pileups, w)
+
 ##################################
 ### Main
 ##################################
@@ -495,7 +506,6 @@ parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping q
 parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--mingap", type=int, default=2000, help='minimum contiguous uncovered region to flag')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
-#parser.add_argument('-o', '--out', help="Output VCF file")
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
 args = parser.parse_args()
@@ -522,3 +532,4 @@ for file in args.bam:
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
     write_vcf(all_pileups, vcf_out, date=date.today(), reference=args.reference)
+    save_pileups(all_pileups, '.'.join(file.split('.')[:-1])+'.pkl')

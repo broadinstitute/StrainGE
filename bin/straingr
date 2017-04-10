@@ -141,7 +141,7 @@ class Pileup:
         self.qual_ss += qual**2
         self.qual_total += qual
         # keep track of the reads in this pileup and the position in that read
-        self.reads[alignment.query_name] = pos
+        self.reads[alignment.query_name] = (pos, base)
 
         if read.is_del:
             # using N as marker for deletion...
@@ -278,8 +278,8 @@ class Pileup:
 
 def pct(numerator, denominator):
     """Makes into a percent"""
-    if denominator:
-        return 100.0 * numerator / denominator
+    if numerator > 0 and denominator > 0:
+        return (100.0 * numerator) / denominator
     return 0.0
 
 def process_scaffold(bam, scaffold, refseq):
@@ -356,16 +356,16 @@ def process_scaffold(bam, scaffold, refseq):
     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
     print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
     
-    
-    avg_count = goodcoverage / len(pileups)
-    if avg_count > 3:
-        # threshold is 99.99%ile of poissons distribution at average coverage
-        threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.99))
-    else:
-        # at lower coverages, just set it to 10
-        threshold = 10
-    for pileup in pileups:
-        pileup.high_coverage(threshold)
+    if len(pileups):
+        avg_count = goodcoverage / len(pileups)
+        if avg_count > 3:
+            # threshold is 99.99%ile of poissons distribution at average coverage
+            threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.99))
+        else:
+            # at lower coverages, just set it to 10
+            threshold = 10
+        for pileup in pileups:
+            pileup.high_coverage(threshold)
     
     return pileups
 

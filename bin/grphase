@@ -263,9 +263,6 @@ def load_pileups(file):
 
         return pileups
 
-
-# TODO: implement this better...
-# have to not redo reads and pileups already phased.
 def phase_snps(pileups):
     """Look for SNPs and ambiguous calls in phase"""
 

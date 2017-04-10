@@ -197,7 +197,7 @@ class Pileup:
 
     def unmappable(self):
         """Good quality sequence, but can't be mapped"""
-        return self.unmapped > self.bad
+        return self.unmapped > (self.bad + self.count)
 
     def ref_fraction(self):
         """Fraction of evidence which supports reference base"""
@@ -532,4 +532,6 @@ for file in args.bam:
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
     write_vcf(all_pileups, vcf_out, date=date.today(), reference=args.reference)
-    save_pileups(all_pileups, '.'.join(file.split('.')[:-1])+'.pkl')
+    pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
+    print "Writing to pickle file: %s" % pkl_out
+    save_pileups(all_pileups, pkl_out)

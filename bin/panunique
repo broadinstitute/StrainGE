@@ -69,7 +69,7 @@ else:
             strainUnique[name] = unique
 
 if args.sample:
-    print "Loading sample"
+    print "Loading sample", args.sample
     sample = kmertools.kmerSetFromFile(args.sample)
     results = []
 
@@ -89,7 +89,7 @@ if args.sample:
 
         result = (strain, nunique, nucounts, covered, coverRate, coverage)
         results.append(result)
-        print "\t".join([str(r) for r in result])
+        print "\t".join([str(r) for r in sorted(result, key = lambda x: x[-1])])
 
     if args.sampleout:
         results.sort(lambda a, b: cmp(b[3], a[3]))

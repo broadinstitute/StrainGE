@@ -3,10 +3,37 @@ import os
 import numpy as np
 import re
 import itertools
+import gzip
+import cPickle
 import argparse
 
 info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+),Description="(.*)">')
-filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">')
+filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 
+
+class Pileups:
+    def __init__(self, pileups=[], name=None):
+        self.pileups = {}
+        self.reads = {}
+        self.name = name
+
+        for pileup in pileups:
+            self.add_pileup(pileup)
+
+    def add_pileup(self, pileup):
+        """Add pileups based on scaffold and position"""
+        scaffold = pileup.scaffold
+        if scaffold not in self.pileups:
+            self.pileups[scaffold] = {}
+        pos = pileup.pos
+        self.pileups[scaffold][pos] = pileup
+
+        # store reads and their positions, match back to pileup
+        for read in pileup.reads:
+            if read not in self.reads:
+                self.reads[read] = {}
+            self.reads[read][pileup.reads[read]] = (scaffold, pos)    
+
+
 
 class VCF:
     def __init__(self, name=None, reference=None, source=None, date=None):
@@ -204,6 +231,8 @@ def compare_vcf_files(vcfs):
         # get identical snps between them
         overlap_snps = get_overlapping_pos(snps[v1], snps[v2], exact=True)
         # also get overlap of amb calls (check for alt alleles)
+        # TODO: check exact match... or top match..., or just the set (forget ranking)
+        # TODO: use Allele frequencies
         overlap_ambs = get_overlapping_pos(ambs[v1], ambs[v2], exact=False)
         # and finally look for overlap of snps and amb between pair
         overlap_nonref = sorted(get_overlapping_pos(snps[v1], ambs[v2], exact=False)+get_overlapping_pos(ambs[v1], snps[v2], exact=False))
@@ -224,15 +253,279 @@ def compare_vcf_files(vcfs):
     return comps
     
 
+def load_pileups(file):
+    """Load straingr pileups"""
+    with gzip.open(file) as f:
+        pileups = Pileups(cPickle.load(f), name=os.path.basename(file))
+
+        return pileups
+
+
+def easy_compare(s1, s2):
+    """Compare two samples from same reference"""
+    i = 0
+    confirmed = 0
+    snps = 0
+    ambs = 0
+    non_refs = 0
+    conflicts = 0
+    for scaffold in s1.pileups:
+        if scaffold not in s2.pileups:
+            continue
+        for pos in s1.pileups[scaffold]:
+            if pos not in s2.pileups[scaffold]:
+                continue # not found in 2
+            elif not s1.pileups[scaffold][pos].covered():
+                continue # not covered in 1
+            elif not s2.pileups[scaffold][pos].covered():
+                continue # not covered in 2
+            elif s1.pileups[scaffold][pos].confirmed():
+                if s2.pileups[scaffold][pos].confirmed():
+                    confirmed += 1 # ref in both
+                elif s2.pileups[scaffold][pos].base_call():
+                    conflicts += 1 # ref in 1, snp in 2
+            elif s1.pileups[scaffold][pos].base_call():
+                if s2.pileups[scaffold][pos].confirmed():
+                    conflicts += 1 # snp in 1, ref in 2
+                elif s1.pileups[scaffold][pos].base_call() == s2.pileups[scaffold][pos].base_call():
+                    snps += 1 # snp in both and same snp
+                else:
+                    non_refs += 1 # snp in 1 but amb in 2
+            else:
+                if s2.pileups[scaffold][pos].base_call():
+                    non_refs += 1 # amb in 1, snp in 2
+                elif not s1.pileups[scaffold][pos].confirmed():
+                    ambs += 1 # amb in both
+    
+
+    total = confirmed + snps + amb + non_ref + conflicts
+    print "Total positions analyzed:", total
+    print "Reference confirmed in both", confirmed, float(confirmed)/total*100, '%'
+    print "SNP confirmed in both", snps, float(snps)/total*100, '%'
+    print "Ambiguous calls in both", ambs, float(ambs)/total*100, '%'
+    print "Other non-reference calls in both", non_refs, float(non_refs)/total*100, '%'
+    print "Conflicting evidence between samples", conflicts, float(conflicts)/total*100, '%'
+
+    return (confirmed, snps, ambs, non_refs, conflicts)
+
+
+# TODO: make some amalgam of sites, a la pan-genome...
+def compare_references(s1, s2):
+    s1_reads = []
+    s2_reads = []
+
+    # ref confirmed in both (same nt)
+    confirmed = 0
+    # snp confirmed in both (same nt)
+    snps = 0
+    # amb calls in both
+    ambs = 0
+    # snp confirmed in s2, but likely ref allele from s1 ref
+    likely_ref_s1 = 0
+    # snp confirmed in s1, but likely ref allele from s2 ref
+    likely_ref_s2 = 0
+    # found only in s1
+    s1_only = 0
+    # found only in s2
+    s2_only = 0
+    
+    # various positions that don't make sense
+    problematic = 0
+
+    # already matched from p1
+    p2_analyzed = {}
+    # already matched from p2
+    p1_analyzed = {}
+
+    for read in s1.reads:
+        if read not in s2.reads:
+            s1_reads.append(read)
+    for read in s2.reads:
+        if read not in s1.reads:
+            s2_reads.append(read)
+    
+    for scaffold in s1.pileups:
+        for pos in s1.pileups[scaffold]:
+            s2_hits = {}
+            p1 = s1.pileups[scaffold][pos]
+             
+            if not p1.covered():
+                continue
+            for read in p1.reads:
+                if read in s1_reads:
+                    continue
+                read_pos = p1.reads[read]
+                if read_pos not in s2.reads[read]:
+                    # this base did not align in s2 ref
+                    continue
+                hit = s2.reads[read][read_pos]
+                if hit not in s2_hits:
+                    s2_hits[hit] = 0
+                s2_hits[hit] += 1
+            if not s2_hits:
+                # didn't find any pileups to match to in s2
+                continue
+            elif len(s2_hits) == 1:
+                # only one pileup matched! this is the one
+                hit = s2_hits.keys()[0]
+            else:
+                hit = max(s2_hits, key = lambda x: s2_hits[x], reverse=True)
+                if s2_hits[top] < sum(s2_hits.values())*.5:
+                    # there's no majority pileup
+                    continue
+            
+            # got a matching pileup in s2
+            if hit in p2_analyzed:
+                print "Already found position matching this pileup"
+                if s2_hits[hit] > p2_analyzed[hit]:
+                    print "This one is better!"
+                else:
+                    print "Previous pileup was better."
+
+            p2_analyzed[hit] = s2_hits[hit]
+            p1_analyzed[(scaffold, pos)] = s2_hits[hit]
+            p2 = s2.pileups[hit[0]][hit[1]]                
+
+            if not p2.covered():
+                s1_only += 1 # not covered in p2
+                continue
+            if p1.confirmed():
+                if p2.confirmed():
+                    if p1.refbase == p2.refbase:
+                        confirmed += 1 # confirmed ref bases and same
+                    else:
+                        problematic += 1 # confirmed diff ref bases
+                elif p2.base_call() == p1.refbase:
+                    likely_ref_s1 += 1 # p2 SNP is actually ref base
+                elif p2.base_call():
+                    problematic += 1 # p2 SNP but p1 REF but diff SNP
+                else:
+                    likely_ref_s1 += 1 # amb call in p2 but ref p1
+            elif p1.base_call():
+                if p2.confirmed():
+                    if p2.refbase == p1.base_call():
+                        likely_ref_s2 += 1 # p1 SNP is p2 ref base
+                    else:
+                        problematic += 1 # p1 SNP is not p2 ref base but p2 ref confirmed
+                elif p2.base_call() == p1.base_call():
+                    snps += 1 # both snps and same snp called
+            else:
+                if p2.confirmed():
+                    likely_ref_s2 += 1 # amb call in p1 but p2 ref
+                elif p2.base_call():
+                    problematic += 1 # amb call in p1 but snp in p2
+                else:
+                    ambs += 1 # amb call in both
+    
+    for scaffold in s2.pileups:
+        for pos in s2.pileups[scaffold]:
+            if (scaffold, pos) in p2_analyzed:
+                continue
+            s1_hits = {}
+            p2 = s2.pileups[scaffold][pos]
+            if not p2.covered():
+                continue
+            for read in p2.reads:
+                if read in s2_reads:
+                    continue
+                read_pos = p2.reads[read]
+                if read_pos not in s1.reads[read]:
+                    # this base did not align in s1 ref
+                    continue
+                hit = s1.reads[read][read_pos]
+                if hit not in s1_hits:
+                    s1_hits[hit] = 0
+                s1_hits[hit] += 1
+            if not s1_hits:
+                # didn't find any pileups to match to in s1
+                continue
+            elif len(s1_hits) == 1:
+                # only one pileup matched! this is the one
+                hit = s1_hits.keys()[0]
+            else:
+                hit = max(s1_hits, key = lambda x: s1_hits[x], reverse=True)
+                if s1_hits[top] < sum(s1_hits.values())*.5:
+                    # there's no majority pileup
+                    continue
+            
+            # got a matching pileup in s1
+            if hit in p1_analyzed:
+                print "Already found position matching this pileup"
+                if s1_hits[hit] > p2_analyzed[hit]:
+                    p1_analyzed[hit] = s1_hits[hit]
+                    print "This one is better!"
+                else:
+                    print "Previous pileup was better."
+
+            p1 = s1.pileups[hit[0]][hit[1]]                
+
+            if not p1.covered():
+                s2_only += 1 # not covered in p2
+                continue
+            if p2.confirmed():
+                if p1.confirmed():
+                    if p1.refbase == p2.refbase:
+                        confirmed += 1 # confirmed ref bases and same
+                    else:
+                        problematic += 1 # confirmed diff ref bases
+                elif p1.base_call() == p2.refbase:
+                    likely_ref_s2 += 1 # p1 SNP is actually ref base
+                elif p1.base_call():
+                    problematic += 1 # p1 SNP but p1 REF but diff SNP
+                else:
+                    likely_ref_s2 += 1 # amb call in p1 but ref p2
+            elif p2.base_call():
+                if p1.confirmed():
+                    if p1.refbase == p2.base_call():
+                        likely_ref_s1 += 1 # p2 SNP is p1 ref base
+                    else:
+                        problematic += 1 # p2 SNP is not p1 ref base but p1 ref confirmed
+                elif p2.base_call() == p1.base_call():
+                    snps += 1 # both snps and same snp called
+            else:
+                if p1.confirmed():
+                    likely_ref_s1 += 1 # amb call in p2 but p1 ref
+                elif p1.base_call():
+                    problematic += 1 # amb call in p2 but snp in p1
+                else:
+                    ambs += 1 # amb call in both
+    
+    s1_pileups = 0
+    s2_pileups = 0
+    for read in s1_reads:
+        for pos in s1_reads[read]:
+            hit = s1_reads[read][pos]
+            if hit not in p1_analyzed:
+                s1_pileups += 1 # pileup not found previously
+    
+    for read in s2_reads:
+        for pos in s2_reads[read]:
+            hit = s2_reads[read][pos]
+            if hit not in p2_analyzed:
+                s2_pileups += 1 # pileup not found previously
+
+
+    return (confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, s1_only, s2_only, problematic, len(s1_reads), len(s2_reads), s1_pileups, s2_pileups)
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("vcf", nargs='+', help="VCF file from straingr tool")
+# parser.add_argument('--vcf', help='Files specified are vcf', action='store_true')
+parser.add_argument("file", nargs='+', help="file from straingr tool")
 args = parser.parse_args()
 
 
+# if args.vcf:
 vcfs = []
-for file in args.vcf:
+for file in args.file:
     vcfs.append(parse_vcf_file(file))
 
 compare_vcf_files(vcfs)
+
+# else:
+#     samples = []
+#     for file in args.file:
+#         samples.append(load_pileups(file))
+    
+#     compare_samples(samples)

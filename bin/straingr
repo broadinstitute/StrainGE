@@ -141,23 +141,26 @@ class Pileup:
         self.qual_ss += qual**2
         self.qual_total += qual
         # keep track of the reads in this pileup and the position in that read
-        self.reads[alignment.query_name] = (pos, base)
+        
 
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
             self.add_other("N", qual, mq)
-        elif base == self.refbase:
-            self.ref_count += 1
-            self.ref_qual_ss += qual**2
-            self.ref_qual += qual
-            self.ref_mq_ss += mq**2
-            self.ref_mq += mq
-            
+            self.reads[alignment.query_name] = (pos, 'del')
         else:
-            self.add_other(base, qual, mq)
-            if verbose:
-                print base, qual, mq
+            self.reads[alignment.query_name] = (pos, base)
+            if base == self.refbase:
+                self.ref_count += 1
+                self.ref_qual_ss += qual**2
+                self.ref_qual += qual
+                self.ref_mq_ss += mq**2
+                self.ref_mq += mq
+                
+            else:
+                self.add_other(base, qual, mq)
+                if verbose:
+                    print base, qual, mq
 
     def add_other(self, base, bq, mq):
         """

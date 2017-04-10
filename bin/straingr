@@ -67,7 +67,7 @@ class Pileup:
         :param pileup_reads: pileup objects from pysam
         """
         self.chrom = chrom
-        self.scaffold = scaffold
+        #self.scaffold = scaffold
         self.pos = pos
         self.reads = {}
         self.count = 0
@@ -249,7 +249,7 @@ class Pileup:
         """Call another base...just print out stats for now"""
         rf = self.ref_fraction()
         if rf < consensus:
-            if verbose: print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
+            if verbose: print 'SNP?', self.pos, self.refbase, self.count, self.bad, rf, self.others
             
             if len(self.others) == 0:
                 if verbose: print "No evidence of SNPs"

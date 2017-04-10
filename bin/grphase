@@ -253,7 +253,12 @@ class Pileups:
         for read in pileup.reads:
             if read not in self.reads:
                 self.reads[read] = {}
+<<<<<<< HEAD
+            readpos = pileup.reads[read][0]
+            self.reads[read][readpos] = (scaffold, pos)   
+=======
             self.reads[read][pileup.reads[read]] = (scaffold, pos)   
+>>>>>>> 273185b31db504a46dc4a3604f8076a7f6134cdf
 
 def load_pileups(file):
     """Load straingr pileups"""
@@ -269,6 +274,28 @@ def phase_snps(pileups):
     """Look for SNPs and ambiguous calls in phase"""
 
     phased_snps = {}
+<<<<<<< HEAD
+    
+    # go through scaffolds
+    for scaffold in pileups.pileups:
+        seen = set()
+        # go through positions in scaffolds
+        scaf_pileups = pilesup.pileups[scaffold]
+        for pos in scaf_pileups:
+            if pos in seen:
+                # already found in phase with another pileup
+                continue
+            
+            # if ambiguous
+            if not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
+                # loop through all reads in that pileup
+                for read in scaf_pileups[pos].reads:
+                    base1 = scaf_pileups[pos].reads[read][1]
+                    # loop through every position in that read
+                    for read_pos in scaf_pileups.reads[read]:
+                        # get pileup location for that position
+                        (scaffold2, pos2) = scaf_pileups.reads[read][read_pos]
+=======
     seen = set()
     # go through scaffolds
     for scaffold in pileups.pileups:
@@ -283,6 +310,7 @@ def phase_snps(pileups):
                     for pos in scaf_pileups.reads[read]:
                         # get pileup location for that position
                         (scaffold2, pos2) = scaf_pileups.reads[read][pos]
+>>>>>>> 273185b31db504a46dc4a3604f8076a7f6134cdf
                         if scaffold2 != scaffold:
                             print 'Read found on two scaffolds!'
                             continue
@@ -291,6 +319,23 @@ def phase_snps(pileups):
                             continue
                         # if this pileup also ambigous!
                         if not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos].base_call()):
+<<<<<<< HEAD
+                            seen.add(pos2)
+
+                            if scaffold not in phased_snps:
+                                phased_snps[scaffold] = {}
+                            if pos not in phased_snps[scaffold]:
+                                phased_snps[scaffold][pos] = {}
+                            
+                            if pos2 not in phased_snps[scaffold][pos]:
+                                phased_snps[scaffold][pos][pos2] = []
+                            
+                            base2 = scaff_pileups[pos2].reads[read][1]
+                            phased_snps[scaffold][pos][pos2].append((base1, base2))
+
+    return phased_snps
+=======
                             
                             
+>>>>>>> 273185b31db504a46dc4a3604f8076a7f6134cdf
         

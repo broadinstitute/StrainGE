@@ -141,7 +141,7 @@ class Pileup:
         self.qual_ss += qual**2
         self.qual_total += qual
         # keep track of the reads in this pileup and the position in that read
-        self.reads[alignment.query_name] = pos
+        self.reads[alignment.query_name] = (pos, base)
 
         if read.is_del:
             # using N as marker for deletion...

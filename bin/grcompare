@@ -31,7 +31,7 @@ class Pileups:
         for read in pileup.reads:
             if read not in self.reads:
                 self.reads[read] = {}
-            self.reads[read][pileup.reads[read]] = (scaffold, pos)    
+            self.reads[read][pileup.reads[read][0]] = (scaffold, pos)    
 
 
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""Phase ambiguous SNPs from straingr"""
 
 import os
 import gzip
@@ -242,16 +243,20 @@ class Pileup:
 
 
 class Pileups:
-    def __init__(self, pileups=[], name=None):
+    def __init__(self, pileups=None, name=None, keepCovered=True):
         self.pileups = {}
         self.reads = {}
         self.name = name
 
         for pileup in pileups:
-            self.add_pileup(pileup)
+            self.add_pileup(pileup, keepCovered)
 
-    def add_pileup(self, pileup):
+    def add_pileup(self, pileup, keepCovered=True):
         """Add pileups based on scaffold and position"""
+
+        if keepCovered and not pileup.covered():
+            return
+
         chrom = pileup.chrom
         if chrom not in self.pileups:
             self.pileups[chrom] = {}
@@ -264,13 +269,15 @@ class Pileups:
                 self.reads[read] = {}
             readpos = pileup.reads[read][0]
             if readpos in self.reads[read]:
-                print "Duplicate read position found"
+                print "Duplicate read position found", read, readpos
+                print self.reads[read][readpos]
+                print chrom, pos
             self.reads[read][readpos] = (chrom, pos)   
 
-def load_pileups(pkl_file):
+def load_pileups(pkl_file, keepCovered=True):
     """Load straingr pileups"""
     with gzip.open(pkl_file) as f:
-        pileups = Pileups(cPickle.load(f), name=os.path.basename(pkl_file))
+        pileups = Pileups(cPickle.load(f), name=os.path.basename(pkl_file), keepCovered=keepCovered)
 
         return pileups
 
@@ -284,7 +291,7 @@ def phase_snps(pileups):
         seen = set()
         # go through positions in scaffolds
         scaf_pileups = pileups.pileups[scaffold]
-        for pos in scaf_pileups:
+        for pos in sorted(scaf_pileups):
             if pos in seen:
                 # already found in phase with another pileup
                 continue
@@ -295,7 +302,7 @@ def phase_snps(pileups):
                 for read in scaf_pileups[pos].reads:
                     base1 = scaf_pileups[pos].reads[read][1]
                     # loop through every position in that read
-                    for read_pos in pileups.reads[read]:
+                    for read_pos in sorted(pileups.reads[read]):
                         # get pileup location for that position
                         (scaffold2, pos2) = pileups.reads[read][read_pos]
                         if scaffold2 != scaffold:
@@ -322,3 +329,43 @@ def phase_snps(pileups):
                             phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
 
     return phased_snps
+
+
+def write_text(phased_snps, out):
+    """Write phased snps to text"""
+
+    with open(out, 'wb') as w:
+        w.write("Scaffold\tPos1\tPos2\tCount\tBase1\tBase2\n")
+        for scaffold in sorted(phased_snps):
+            for pos1 in sorted(phased_snps[scaffold]):
+                for pos2 in sorted(phased_snps[scaffold][pos1]):
+                    for (base1, base2) in sorted(phased_snps[scaffold][pos1][pos2]):
+                        count = phased_snps[scaffold][pos1][pos2][(base1, base2)]
+                        w.write('%s\t%i\t%i\t%i\t%s\t%s\n' % (scaffold, pos1, pos2, count, base1, base2))
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
+parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
+parser.add_argument("file", nargs='+', help="pickle file from straingr tool")
+args = parser.parse_args()
+
+
+if args.verbose:
+    verbose = args.verbose
+if args.minconfirm:
+    min_confirm = args.minconfirm
+if args.consensus:
+    consensus = args.consensus
+
+for pkl_file in args.file:
+    try:
+        pileups = load_pileups(pkl_file)
+        phased_snps = phase_snps(pileups)
+        out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
+        write_text(phased_snps, out)
+    except KeyboardInterrupt:
+        break
+    except Exception as e:
+        print e

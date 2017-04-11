@@ -1,12 +1,21 @@
 #!/usr/bin/env python
 
 import os
-import numpy as np
-import re
-import itertools
 import gzip
 import cPickle
 import argparse
+
+
+from numpy import sqrt
+
+bases = "ACGT"
+
+# globals
+min_qual = 5
+min_mq = 5
+min_confirm = 50
+consensus = 0.9
+verbose = False
 
 class Pileup:
     """
@@ -15,7 +24,7 @@ class Pileup:
     to a given reference coordinate.
     """
 
-    def __init__(self, chrom, scaffold, pos, pileup_reads = []):
+    def __init__(self, chrom, scaffold, pos, pileup_reads=None):
         """
         :param scaffold: reference sequence
         :param pos: coordinate in reference (0-based)
@@ -243,23 +252,23 @@ class Pileups:
 
     def add_pileup(self, pileup):
         """Add pileups based on scaffold and position"""
-        scaffold = pileup.scaffold
-        if scaffold not in self.pileups:
-            self.pileups[scaffold] = {}
+        chrom = pileup.chrom
+        if chrom not in self.pileups:
+            self.pileups[chrom] = {}
         pos = pileup.pos
-        self.pileups[scaffold][pos] = pileup
+        self.pileups[chrom][pos] = pileup
 
         # store reads and their positions, match back to pileup
         for read in pileup.reads:
             if read not in self.reads:
                 self.reads[read] = {}
             readpos = pileup.reads[read][0]
-            self.reads[read][readpos] = (scaffold, pos)   
+            self.reads[read][readpos] = (chrom, pos)   
 
-def load_pileups(file):
+def load_pileups(pkl_file):
     """Load straingr pileups"""
-    with gzip.open(file) as f:
-        pileups = Pileups(cPickle.load(f), name=os.path.basename(file))
+    with gzip.open(pkl_file) as f:
+        pileups = Pileups(cPickle.load(f), name=os.path.basename(pkl_file))
 
         return pileups
 
@@ -272,7 +281,7 @@ def phase_snps(pileups):
     for scaffold in pileups.pileups:
         seen = set()
         # go through positions in scaffolds
-        scaf_pileups = pilesup.pileups[scaffold]
+        scaf_pileups = pileups.pileups[scaffold]
         for pos in scaf_pileups:
             if pos in seen:
                 # already found in phase with another pileup
@@ -305,7 +314,7 @@ def phase_snps(pileups):
                             if pos2 not in phased_snps[scaffold][pos]:
                                 phased_snps[scaffold][pos][pos2] = []
                             
-                            base2 = scaff_pileups[pos2].reads[read][1]
+                            base2 = scaf_pileups[pos2].reads[read][1]
                             phased_snps[scaffold][pos][pos2].append((base1, base2))
 
     return phased_snps

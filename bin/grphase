@@ -263,6 +263,8 @@ class Pileups:
             if read not in self.reads:
                 self.reads[read] = {}
             readpos = pileup.reads[read][0]
+            if readpos in self.reads[read]:
+                print "Duplicate read position found"
             self.reads[read][readpos] = (chrom, pos)   
 
 def load_pileups(pkl_file):
@@ -288,22 +290,22 @@ def phase_snps(pileups):
                 continue
             
             # if ambiguous
-            if not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
+            if scaf_pileups[pos].covered() and not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
                 # loop through all reads in that pileup
                 for read in scaf_pileups[pos].reads:
                     base1 = scaf_pileups[pos].reads[read][1]
                     # loop through every position in that read
-                    for read_pos in scaf_pileups.reads[read]:
+                    for read_pos in pileups.reads[read]:
                         # get pileup location for that position
-                        (scaffold2, pos2) = scaf_pileups.reads[read][read_pos]
+                        (scaffold2, pos2) = pileups.reads[read][read_pos]
                         if scaffold2 != scaffold:
                             print 'Read found on two scaffolds!'
                             continue
-                        if pos2 < pos:
+                        if pos2 <= pos:
                             # don't look back?
                             continue
                         # if this pileup also ambigous!
-                        if not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos].base_call()):
+                        if scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
                             seen.add(pos2)
 
                             if scaffold not in phased_snps:
@@ -312,9 +314,11 @@ def phase_snps(pileups):
                                 phased_snps[scaffold][pos] = {}
                             
                             if pos2 not in phased_snps[scaffold][pos]:
-                                phased_snps[scaffold][pos][pos2] = []
+                                phased_snps[scaffold][pos][pos2] = {}
                             
                             base2 = scaf_pileups[pos2].reads[read][1]
-                            phased_snps[scaffold][pos][pos2].append((base1, base2))
+                            if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
+                                phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
+                            phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
 
     return phased_snps

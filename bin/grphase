@@ -6,7 +6,6 @@ import gzip
 import cPickle
 import argparse
 
-
 from numpy import sqrt
 
 bases = "ACGT"

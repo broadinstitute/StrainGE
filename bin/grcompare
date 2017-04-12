@@ -624,6 +624,8 @@ def compare_references(s1, s2):
             for read in p1.reads:
                 if read in s1_reads:
                     continue
+                if p1.reads[read][1] == 'del':
+                    continue
                 read_pos = p1.reads[read][0]
                 if read_pos not in s2.reads[read]:
                     # this base did not align in s2 ref
@@ -631,7 +633,7 @@ def compare_references(s1, s2):
                 hit = s2.reads[read][read_pos]
                 if hit not in s2_hits:
                     s2_hits[hit] = 0
-                s2_hits[hit] += 1
+                s2_hits[hit] += s2.pileups[hit[0]][hit[1]].mq_total
             if not s2_hits:
                 # didn't find any pileups to match to in s2
                 continue
@@ -647,13 +649,17 @@ def compare_references(s1, s2):
             # got a matching pileup in s2
             if top in p2_analyzed:
                 print "Already found position matching this pileup"
-                if s2_hits[top] > p2_analyzed[top]:
+                print 'Pileups:', top, p2_analyzed[top], s2_hits[top]
+                if s2_hits[top] > p2_analyzed[top][1]:
                     print "This one is better!"
+                    p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
                 else:
                     print "Previous pileup was better."
-
-            p2_analyzed[top] = s2_hits[top]
-            p1_analyzed[(scaffold, pos)] = s2_hits[top]
+                    continue
+            else:
+                p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
+            
+            p1_analyzed[(scaffold, pos)] = (top, s2_hits[top])
             p2 = s2.pileups[top[0]][top[1]]                
 
             if not p2.covered():
@@ -701,6 +707,7 @@ def compare_references(s1, s2):
     for scaffold in s2.pileups:
         for pos in s2.pileups[scaffold]:
             if (scaffold, pos) in p2_analyzed:
+                # we have already gotten this pileup
                 continue
             s1_hits = {}
             p2 = s2.pileups[scaffold][pos]
@@ -709,6 +716,8 @@ def compare_references(s1, s2):
             for read in p2.reads:
                 if read in s2_reads:
                     continue
+                if p2.reads[read][1] == 'del':
+                    continue
                 read_pos = p2.reads[read][0]
                 if read_pos not in s1.reads[read]:
                     # this base did not align in s1 ref
@@ -716,7 +725,7 @@ def compare_references(s1, s2):
                 hit = s1.reads[read][read_pos]
                 if hit not in s1_hits:
                     s1_hits[hit] = 0
-                s1_hits[hit] += 1
+                s1_hits[hit] += s1.pileups[hit[0]][hit[1]].mq_total
             if not s1_hits:
                 # didn't find any pileups to match to in s1
                 continue
@@ -732,11 +741,15 @@ def compare_references(s1, s2):
             # got a matching pileup in s1
             if top in p1_analyzed:
                 print "Already found position matching this pileup"
-                if s1_hits[top] > p1_analyzed[top]:
-                    p1_analyzed[top] = s1_hits[top]
+                if s1_hits[top] > p1_analyzed[top][1]:
+                    p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
                     print "This one is better!"
+                    
                 else:
                     print "Previous pileup was better."
+                    continue
+            else:
+                p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
 
             p1 = s1.pileups[top[0]][top[1]]                
 
@@ -786,15 +799,15 @@ def compare_references(s1, s2):
     s1_pileups = 0
     s2_pileups = 0
     for read in s1_reads:
-        for pos in s1_reads[read]:
-            hit = s1_reads[read][pos]
+        for pos in read:
+            hit = read[pos]
             if hit not in p1_analyzed:
                 s1_pileups += 1 # pileup not found previously
                 pileups['s1_pileups'].append(s1.pileups[hit[0]][hit[1]])
     
     for read in s2_reads:
-        for pos in s2_reads[read]:
-            hit = s2_reads[read][pos]
+        for pos in read:
+            hit = read[pos]
             if hit not in p2_analyzed:
                 s2_pileups += 1 # pileup not found previously
                 pileups['s2_pileups'].append(s2.pileups[hit[0]][hit[1]])

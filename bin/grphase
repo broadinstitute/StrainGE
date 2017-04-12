@@ -306,9 +306,11 @@ def phase_snps(pileups):
                 reads2 = []
                 for read in reads:
                     if read[-2:] == '.1':
-                        reads2.append(read[-2:]+'.2')
+                        read2 = read[-2:]+'.2'
                     else:
-                        reads2.append(read[-2:]+'.1')
+                        read2 = read[-2:]+'.1'
+                    if read2 in pileups.reads:
+                        reads2.append(read2)
                 for read in sorted(reads.keys()+reads2):
                     base1 = scaf_pileups[pos].reads[read][1]
                     # loop through every position in that read

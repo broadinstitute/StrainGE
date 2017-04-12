@@ -564,8 +564,8 @@ def easy_compare(s1, s2):
 
 # TODO: make some amalgam of sites, a la pan-genome...
 def compare_references(s1, s2):
-    s1_reads = []
-    s2_reads = []
+    s1_reads = {}
+    s2_reads = {}
 
     pileups = {
         'confirmed': [],
@@ -605,10 +605,10 @@ def compare_references(s1, s2):
 
     for read in s1.reads:
         if read not in s2.reads:
-            s1_reads.append(read)
+            s1_reads[read] = s1.reads[read]
     for read in s2.reads:
         if read not in s1.reads:
-            s2_reads.append(read)
+            s2_reads[read] = s2.reads[read]
     
     if len(s1_reads) == len(s1.reads) or len(s2_reads) == len(s2.reads):
         print "No overlapping reads between comparitors!"
@@ -649,10 +649,13 @@ def compare_references(s1, s2):
             # got a matching pileup in s2
             if top in p2_analyzed:
                 print "Already found position matching this pileup"
-                print 'Pileups:', top, p2_analyzed[top], s2_hits[top]
+                print 'Pileups:', top, s2_hits[top], p2_analyzed[top]
                 if s2_hits[top] > p2_analyzed[top][1]:
                     print "This one is better!"
                     p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
+                elif s2_hits[top] == p2_analyzed[top][1]:
+                    print "Equally good pileups..." # not sure what to do here
+                    #continue
                 else:
                     print "Previous pileup was better."
                     continue
@@ -666,6 +669,7 @@ def compare_references(s1, s2):
                 s1_only += 1 # not covered in p2
                 pileups['s1_only'].append((p1, p2))
                 continue
+            
             if p1.confirmed():
                 if p2.confirmed():
                     if p1.refbase == p2.refbase:
@@ -704,6 +708,8 @@ def compare_references(s1, s2):
                     ambs += 1 # amb call in both
                     pileups['ambs'].append((p1, p2))
     
+    print "So far...", s1_only, confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, problematic
+
     for scaffold in s2.pileups:
         for pos in s2.pileups[scaffold]:
             if (scaffold, pos) in p2_analyzed:
@@ -741,6 +747,7 @@ def compare_references(s1, s2):
             # got a matching pileup in s1
             if top in p1_analyzed:
                 print "Already found position matching this pileup"
+                print top, s1_hits[top], p1_analyzed[top]
                 if s1_hits[top] > p1_analyzed[top][1]:
                     p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
                     print "This one is better!"
@@ -799,15 +806,15 @@ def compare_references(s1, s2):
     s1_pileups = 0
     s2_pileups = 0
     for read in s1_reads:
-        for pos in read:
-            hit = read[pos]
+        for pos in s1_reads[read]:
+            hit = s1_reads[read][pos]
             if hit not in p1_analyzed:
                 s1_pileups += 1 # pileup not found previously
                 pileups['s1_pileups'].append(s1.pileups[hit[0]][hit[1]])
     
     for read in s2_reads:
-        for pos in read:
-            hit = read[pos]
+        for pos in s2_reads[read]:
+            hit = s2_reads[read][pos]
             if hit not in p2_analyzed:
                 s2_pileups += 1 # pileup not found previously
                 pileups['s2_pileups'].append(s2.pileups[hit[0]][hit[1]])

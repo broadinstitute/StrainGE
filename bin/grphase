@@ -306,7 +306,7 @@ def phase_snps(pileups):
                 reads2 = []
                 for read in reads:
                     if read[-2:] == '.1':
-                        reads2.append(read[:-2]+'.2')
+                        reads2.append(read[-2:]+'.2')
                     else:
                         reads2.append(read[-2:]+'.1')
                 for read in sorted(reads.keys()+reads2):

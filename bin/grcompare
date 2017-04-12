@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import os
-import numpy as np
 import re
 import itertools
 import gzip
 import cPickle
 import argparse
+
+from numpy import sqrt
 
 info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+),Description="(.*)">')
 filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 

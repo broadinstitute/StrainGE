@@ -247,9 +247,13 @@ class Pileups:
         self.pileups = {}
         self.reads = {}
         self.name = name
+        self.length = 0
 
         for pileup in pileups:
+            if verbose:
+                print "Adding pileup", str(pileup)
             self.add_pileup(pileup, keepCovered)
+            self.length += 1
 
     def add_pileup(self, pileup, keepCovered=True):
         """Add pileups based on scaffold and position"""
@@ -274,7 +278,13 @@ class Pileups:
                 print "Duplicate read position found", read, readpos
                 print self.reads[read][readpos]
                 print chrom, pos
-            self.reads[read][readpos] = (chrom, pos)   
+            self.reads[read][readpos] = (chrom, pos)
+    
+    def __len__(self):
+        return self.length
+    
+    def __str__(self):
+        return "<Pileups Class> containing %i pileups" % self.length
 
 def load_pileups(pkl_file, keepCovered=True):
     """Load straingr pileups"""

@@ -637,24 +637,24 @@ def compare_references(s1, s2):
                 continue
             elif len(s2_hits) == 1:
                 # only one pileup matched! this is the one
-                hit = s2_hits.keys()[0]
+                top = s2_hits.keys()[0]
             else:
-                hit = max(s2_hits, key = lambda x: s2_hits[x])
-                if s2_hits[hit] < sum(s2_hits.values())*.5:
+                top = max(s2_hits, key = lambda x: s2_hits[x])
+                if s2_hits[top] < sum(s2_hits.values())*.5:
                     # there's no majority pileup
                     continue
             
             # got a matching pileup in s2
-            if hit in p2_analyzed:
+            if top in p2_analyzed:
                 print "Already found position matching this pileup"
-                if s2_hits[hit] > p2_analyzed[hit]:
+                if s2_hits[top] > p2_analyzed[top]:
                     print "This one is better!"
                 else:
                     print "Previous pileup was better."
 
-            p2_analyzed[hit] = s2_hits[hit]
-            p1_analyzed[(scaffold, pos)] = s2_hits[hit]
-            p2 = s2.pileups[hit[0]][hit[1]]                
+            p2_analyzed[top] = s2_hits[top]
+            p1_analyzed[(scaffold, pos)] = s2_hits[top]
+            p2 = s2.pileups[top[0]][top[1]]                
 
             if not p2.covered():
                 s1_only += 1 # not covered in p2
@@ -722,23 +722,23 @@ def compare_references(s1, s2):
                 continue
             elif len(s1_hits) == 1:
                 # only one pileup matched! this is the one
-                hit = s1_hits.keys()[0]
+                top = s1_hits.keys()[0]
             else:
-                hit = max(s1_hits, key = lambda x: s1_hits[x])
-                if s1_hits[hit] < sum(s1_hits.values())*.5:
+                top = max(s1_hits, key = lambda x: s1_hits[x])
+                if s1_hits[top] < sum(s1_hits.values())*.5:
                     # there's no majority pileup
                     continue
             
             # got a matching pileup in s1
-            if hit in p1_analyzed:
+            if top in p1_analyzed:
                 print "Already found position matching this pileup"
-                if s1_hits[hit] > p2_analyzed[hit]:
-                    p1_analyzed[hit] = s1_hits[hit]
+                if s1_hits[top] > p1_analyzed[top]:
+                    p1_analyzed[top] = s1_hits[top]
                     print "This one is better!"
                 else:
                     print "Previous pileup was better."
 
-            p1 = s1.pileups[hit[0]][hit[1]]                
+            p1 = s1.pileups[top[0]][top[1]]                
 
             if not p1.covered():
                 s2_only += 1 # not covered in p2

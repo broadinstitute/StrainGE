@@ -306,7 +306,7 @@ def phase_snps(pileups):
                         read2 = read[-2:]+'.1'
                     if read2 in scaf_pileups[pos].reads:
                         reads2[read] = read2
-                for read in sorted(reads.keys()):
+                for read in reads.keys():
                     base1 = scaf_pileups[pos].reads[read][1]
                     # loop through every position in that read
                     for read_pos in sorted(pileups.reads[read]):
@@ -319,7 +319,7 @@ def phase_snps(pileups):
                             # don't look back
                             continue
                         # if this pileup also ambigous!
-                        if not not scaf_pileups[pos].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
+                        if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
 
                             if scaffold not in phased_snps:
                                 phased_snps[scaffold] = {}
@@ -337,10 +337,11 @@ def phase_snps(pileups):
                     if read not in reads2:
                         # paired read not in data
                         continue
+                    read2 = reads2[read]
                     # do this for the other paired read
-                    for read_pos in sorted(pileups.reads[reads2[read]]):
+                    for read_pos in sorted(pileups.reads[read2]):
                         # get pileup location for that position
-                        (scaffold2, pos2) = pileups.reads[reads2[read]][read_pos]
+                        (scaffold2, pos2) = pileups.reads[read2][read_pos]
                         if scaffold2 != scaffold:
                             print 'Read found on two scaffolds!'
                             continue
@@ -348,7 +349,7 @@ def phase_snps(pileups):
                             # don't look back
                             continue
                         # if this pileup also ambigous!
-                        if not not scaf_pileups[pos].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
+                        if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
 
                             if scaffold not in phased_snps:
                                 phased_snps[scaffold] = {}
@@ -358,7 +359,7 @@ def phase_snps(pileups):
                             if pos2 not in phased_snps[scaffold][pos]:
                                 phased_snps[scaffold][pos][pos2] = {}
                             
-                            base2 = scaf_pileups[pos2].reads[reads2[read]][1]
+                            base2 = scaf_pileups[pos2].reads[read2][1]
                             if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
                                 phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
                             phased_snps[scaffold][pos][pos2][(base1, base2)] += 1

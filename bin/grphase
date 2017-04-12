@@ -267,6 +267,8 @@ class Pileups:
         for read in pileup.reads:
             if read not in self.reads:
                 self.reads[read] = {}
+            if pileup.reads[read][1] == 'del':
+                continue
             readpos = pileup.reads[read][0]
             if readpos in self.reads[read]:
                 print "Duplicate read position found", read, readpos

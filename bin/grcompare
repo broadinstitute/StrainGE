@@ -609,9 +609,9 @@ def compare_references(s1, s2):
         if read not in s1.reads:
             s2_reads.append(read)
     
-if len(s1_reads) == len(s1.reads) or len(s2_reads) == len(s2.reads):
-    print "No overlapping reads between comparitors!"
-    return
+    if len(s1_reads) == len(s1.reads) or len(s2_reads) == len(s2.reads):
+        print "No overlapping reads between comparitors!"
+        return
 
     for scaffold in s1.pileups:
         for pos in s1.pileups[scaffold]:

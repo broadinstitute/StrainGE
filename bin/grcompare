@@ -638,7 +638,7 @@ def compare_references(s1, s2):
                 # only one pileup matched! this is the one
                 hit = s2_hits.keys()[0]
             else:
-                hit = max(s2_hits, key = lambda x: s2_hits[x], reverse=True)
+                hit = max(s2_hits, key = lambda x: s2_hits[x])
                 if s2_hits[top] < sum(s2_hits.values())*.5:
                     # there's no majority pileup
                     continue
@@ -723,7 +723,7 @@ def compare_references(s1, s2):
                 # only one pileup matched! this is the one
                 hit = s1_hits.keys()[0]
             else:
-                hit = max(s1_hits, key = lambda x: s1_hits[x], reverse=True)
+                hit = max(s1_hits, key = lambda x: s1_hits[x])
                 if s1_hits[top] < sum(s1_hits.values())*.5:
                     # there's no majority pileup
                     continue
@@ -819,6 +819,7 @@ if args.references:
         print "Loading file", pkl_file
         all_pileups[pkl_file] = load_pileups(pkl_file)
     
+    print "Writing results to", args.out
     with open(args.out, 'wb') as w:
         w.write("Reference1\tReference2\tConfirmed\tSNPs\tAmbiguous\tRef1\tRef2\tRef1Only\tRef2Only\tProblematic\tRef1Reads\tRef2Reads\tRef1Pileups\tRef2Pileups\n")
         for (s1, s2) in itertools.combinations(all_pileups.keys(), 2):

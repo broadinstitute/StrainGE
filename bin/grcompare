@@ -10,28 +10,280 @@ import argparse
 info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+),Description="(.*)">')
 filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 
 
+bases = "ACGT"
+
+# globals
+min_qual = 5
+min_mq = 5
+min_confirm = 50
+consensus = 0.9
+verbose = False
+
 class Pileups:
-    def __init__(self, pileups=[], name=None):
+    def __init__(self, pileups=None, name=None, keepCovered=True):
         self.pileups = {}
         self.reads = {}
         self.name = name
+        self.length = 0
 
         for pileup in pileups:
-            self.add_pileup(pileup)
+            if verbose:
+                print "Adding pileup", str(pileup)
+            self.add_pileup(pileup, keepCovered)
+            self.length += 1
 
-    def add_pileup(self, pileup):
+    def add_pileup(self, pileup, keepCovered=True):
         """Add pileups based on scaffold and position"""
-        scaffold = pileup.scaffold
-        if scaffold not in self.pileups:
-            self.pileups[scaffold] = {}
+
+        if keepCovered and not pileup.covered():
+            return
+
+        chrom = pileup.chrom
+        if chrom not in self.pileups:
+            self.pileups[chrom] = {}
         pos = pileup.pos
-        self.pileups[scaffold][pos] = pileup
+        self.pileups[chrom][pos] = pileup
 
         # store reads and their positions, match back to pileup
         for read in pileup.reads:
             if read not in self.reads:
                 self.reads[read] = {}
-            self.reads[read][pileup.reads[read][0]] = (scaffold, pos)    
+            if pileup.reads[read][1] == 'del':
+                continue
+            readpos = pileup.reads[read][0]
+            if readpos in self.reads[read]:
+                print "Duplicate read position found", read, readpos
+                print self.reads[read][readpos]
+                print chrom, pos
+            self.reads[read][readpos] = (chrom, pos)
+    
+    def __len__(self):
+        return self.length
+    
+    def __str__(self):
+        return "<Pileups Class> containing %i pileups" % self.length
+
+class Pileup:
+    """
+    Class to process pileup information; that is,
+    all the alignment information corresponding
+    to a given reference coordinate.
+    """
+
+    def __init__(self, chrom, scaffold, pos, pileup_reads=None):
+        """
+        :param scaffold: reference sequence
+        :param pos: coordinate in reference (0-based)
+        :param pileup_reads: pileup objects from pysam
+        """
+        self.chrom = chrom
+        self.scaffold = scaffold
+        self.pos = pos
+        self.reads = {}
+        self.count = 0
+        self.unmapped = 0
+        self.bad = 0
+        self.mq_total = 0
+        self.mq_ss = 0
+        self.qual_total = 0
+        self.qual_ss = 0
+        self.ref_count = 0
+        self.ref_qual = 0
+        self.ref_qual_ss = 0
+        self.ref_mq = 0
+        self.ref_mq_ss = 0
+        self.hc = False
+        # reads with other than reference base; list of tuples (base, qual, mq)
+        self.others = {}
+
+        self.refbase = scaffold[pos]
+        if not pileup_reads:
+            print "No reads for pileup"
+            return
+        for read in pileup_reads:
+            self.add_read(read)
+
+    def add_read(self, read):
+        """Add a pysam.PileupRead object to this pileup"""
+        alignment = read.alignment
+
+        # if this is a paired read, make sure the pairs are properly aligned
+        if (not alignment.is_paired) or (not alignment.is_proper_pair):
+            self.bad += 1
+            return
+
+        # restrict ourselves to full-length alignments (not clipped)
+        if alignment.query_alignment_length != alignment.query_length:
+            # alignment is clipped
+            self.bad += 1
+            return
+
+        # check that inferred insert size is at least read length
+        tlen = alignment.template_length
+        if abs(tlen) < alignment.query_length:
+            self.bad += 1
+            return
+
+        # get base quality (note this is next base if deletion)
+        pos = read.query_position_or_next
+        qual = alignment.query_qualities[pos]
+        if qual < min_qual:
+            self.bad += 1
+            return
+
+        # base call must be real base (e.g., not N)
+        base = alignment.query_sequence[pos]
+        index = bases.find(base)
+        if index < 0:
+            self.bad += 1
+            return
+
+        # check for decent mapping quality
+        mq = alignment.mapping_quality
+        if mq < min_mq:
+            self.unmapped += 1
+            return
+
+        # We're good! Update the pileup stats...
+        self.count += 1
+        self.mq_ss += mq**2
+        self.mq_total += mq
+        self.qual_ss += qual**2
+        self.qual_total += qual
+        # keep track of the reads in this pileup and the position in that read
+        self.reads[alignment.query_name] = pos
+
+        if read.is_del:
+            # using N as marker for deletion...
+            # workaround until we can write actual deletions into vcf format
+            self.add_other("N", qual, mq)
+        elif base == self.refbase:
+            self.ref_count += 1
+            self.ref_qual_ss += qual**2
+            self.ref_qual += qual
+            self.ref_mq_ss += mq**2
+            self.ref_mq += mq
+            
+        else:
+            self.add_other(base, qual, mq)
+            if verbose:
+                print base, qual, mq
+
+    def add_other(self, base, bq, mq):
+        """
+        Keep information about bases in pileup which differ from reference.
+        :param base: alternate base or 'del' for deletion
+        :param bq: base quality
+        :param mq: mapping quality
+        :return:
+        """
+        if not self.others:
+            self.others = {}
+        if base in self.others:
+            (count, qss, mqss, qual, mapqual) = self.others[base]
+        else:
+            count = 0
+            qual = 0
+            mapqual = 0
+            qss = 0
+            mqss = 0
+        count += 1
+        qual += bq
+        mapqual += mq
+        qss += bq**2
+        mqss += mq**2
+        self.others[base] = (count, qss, mqss, qual, mapqual)
+
+    def covered(self):
+        """Does this pileup have enough data to consider this locus covered?"""
+        # this seems wrong
+        #return self.ref_qual >= min_confirm and self.count > self.bad
+        
+        # this seems better...
+        #return self.qual_total >= min_confirm and self.count > (self.bad + self.unmapped)
+
+        # why do we care if there are also bad reads as long as there are good ones???
+        return self.qual_total >= min_confirm
+
+    def unmappable(self):
+        """Good quality sequence, but can't be mapped"""
+        return self.unmapped > self.bad
+
+    def ref_fraction(self):
+        """Fraction of evidence which supports reference base"""
+        if self.qual_total:
+            return float(self.ref_qual) / self.qual_total
+        else:
+            return 0
+
+    def confirmed(self):
+        """Does this pileup confirm the reference?"""
+        return self.ref_qual >= min_confirm and \
+               (self.ref_qual == self.qual_total or self.ref_fraction() > consensus)
+    
+    def _get_best_snp(self):
+        """Returns the SNP with the highest sum of RMS base quality and mapping quality, if two are qual, return higher count. All else equal, alphabetical."""
+        best_snp = None
+        best_score = 0
+        best_count = 0
+        if len(self.others) == 1:
+            return self.others.keys()[0]
+        for snp in self.others:
+            # score is just sum of RMS(BQ) and RMS(MQ)
+            score = sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0])
+            count = self.others[snp][0]
+            if score > best_score:
+                best_snp = snp
+                best_score = score
+                best_count = count
+            elif score == best_score:
+                if count > best_count:
+                    best_snp = snp
+                    best_score = score
+                    best_count = count
+                elif count == best_count:
+                    if verbose: print "Warning: multiple SNPs have same score and count!"
+                    return False
+        
+        return best_snp
+        
+        #return max(self.others.keys(), key = lambda snp: (sqrt(float(self.others[snp][1])/self.others[snp][0])+sqrt(float(self.others[snp][2])/self.others[snp][0]), self.others[snp][0], snp))
+    
+    def sort_alts(self):
+        return sorted(self.others.keys(), key = lambda snp: (-sqrt(float(self.others[snp][1])/self.others[snp][0]) + sqrt(float(self.others[snp][2])/self.others[snp][0]), -self.others[snp][0], snp))
+    
+    def base_call(self):
+        """Call another base...just print out stats for now"""
+        rf = self.ref_fraction()
+        if rf < consensus:
+            if verbose: print 'SNP?', self.pos, self.scaffold[self.pos], self.count, self.bad, rf, self.others
+            
+            if len(self.others) == 0:
+                if verbose: print "No evidence of SNPs"
+            else:
+                # get SNP with highest proportion if >1 SNP
+                base = self._get_best_snp()
+                #if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
+                if base and (float(self.others[base][3]) / self.qual_total) >= consensus and self.others[base][3] >= min_confirm:
+                    # 90% of base quality matches SNP
+                    if verbose: print "SNP confirmed %s" % base
+                    return base
+                else:
+                    # no consensus
+                    if verbose: print "No confirmed SNP"
+        
+        return None
+    
+    def high_coverage(self, high):
+        """Flag pileup for too much coverage"""
+        self.hc = self.count > high
+    
+    def __str__(self):
+        return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
+                                                                      self.ref_qual, self.qual_total,
+                                                                      self.ref_mq, self.mq_total, str(self.others))
+
+
 
 
 
@@ -256,7 +508,7 @@ def compare_vcf_files(vcfs):
 def load_pileups(file):
     """Load straingr pileups"""
     with gzip.open(file) as f:
-        pileups = Pileups(cPickle.load(f), name=os.path.basename(file))
+        pileups = Pileups(cPickle.load(f), name=os.path.basename(file), keepCovered=False)
 
         return pileups
 
@@ -314,6 +566,19 @@ def compare_references(s1, s2):
     s1_reads = []
     s2_reads = []
 
+    pileups = {
+        'confirmed': [],
+        'snps': [],
+        'ambs': [],
+        'likely_ref_s1': [],
+        'likely_ref_s2': [],
+        's1_only': [],
+        's2_only': [],
+        'problematic': [],
+        's1_pileups': [],
+        's2_pileups': [],
+    }
+
     # ref confirmed in both (same nt)
     confirmed = 0
     # snp confirmed in both (same nt)
@@ -344,6 +609,10 @@ def compare_references(s1, s2):
         if read not in s1.reads:
             s2_reads.append(read)
     
+if len(s1_reads) == len(s1.reads) or len(s2_reads) == len(s2.reads):
+    print "No overlapping reads between comparitors!"
+    return
+
     for scaffold in s1.pileups:
         for pos in s1.pileups[scaffold]:
             s2_hits = {}
@@ -354,7 +623,7 @@ def compare_references(s1, s2):
             for read in p1.reads:
                 if read in s1_reads:
                     continue
-                read_pos = p1.reads[read]
+                read_pos = p1.reads[read][0]
                 if read_pos not in s2.reads[read]:
                     # this base did not align in s2 ref
                     continue
@@ -388,34 +657,45 @@ def compare_references(s1, s2):
 
             if not p2.covered():
                 s1_only += 1 # not covered in p2
+                pileups['s1_only'].append((p1, p2))
                 continue
             if p1.confirmed():
                 if p2.confirmed():
                     if p1.refbase == p2.refbase:
                         confirmed += 1 # confirmed ref bases and same
+                        pileups['confirmed'].append((p1, p2))
                     else:
                         problematic += 1 # confirmed diff ref bases
+                        pileups['problematic'].append((p1, p2))
                 elif p2.base_call() == p1.refbase:
                     likely_ref_s1 += 1 # p2 SNP is actually ref base
+                    pileups['likely_ref_s1'].append((p1, p2))
                 elif p2.base_call():
                     problematic += 1 # p2 SNP but p1 REF but diff SNP
+                    pileups['problematic'].append((p1, p2))
                 else:
                     likely_ref_s1 += 1 # amb call in p2 but ref p1
             elif p1.base_call():
                 if p2.confirmed():
                     if p2.refbase == p1.base_call():
                         likely_ref_s2 += 1 # p1 SNP is p2 ref base
+                        pileups['likely_ref_s2'].append((p1, p2))
                     else:
                         problematic += 1 # p1 SNP is not p2 ref base but p2 ref confirmed
+                        pileups['problematic'].append((p1, p2))
                 elif p2.base_call() == p1.base_call():
                     snps += 1 # both snps and same snp called
+                    pileups['snps'].append((p1, p2))
             else:
                 if p2.confirmed():
                     likely_ref_s2 += 1 # amb call in p1 but p2 ref
+                    pileups['likely_ref_s2'].append((p1, p2))
                 elif p2.base_call():
                     problematic += 1 # amb call in p1 but snp in p2
+                    pileups['problematic'].append((p1, p2))
                 else:
                     ambs += 1 # amb call in both
+                    pileups['ambs'].append((p1, p2))
     
     for scaffold in s2.pileups:
         for pos in s2.pileups[scaffold]:
@@ -428,7 +708,7 @@ def compare_references(s1, s2):
             for read in p2.reads:
                 if read in s2_reads:
                     continue
-                read_pos = p2.reads[read]
+                read_pos = p2.reads[read][0]
                 if read_pos not in s1.reads[read]:
                     # this base did not align in s1 ref
                     continue
@@ -461,34 +741,46 @@ def compare_references(s1, s2):
 
             if not p1.covered():
                 s2_only += 1 # not covered in p2
+                pileups['s2_only'].append((p1, p2))
                 continue
             if p2.confirmed():
                 if p1.confirmed():
                     if p1.refbase == p2.refbase:
                         confirmed += 1 # confirmed ref bases and same
+                        pileups['confirmed'].append((p1, p2))
                     else:
                         problematic += 1 # confirmed diff ref bases
+                        pileups['problematic'].append((p1, p2))
                 elif p1.base_call() == p2.refbase:
                     likely_ref_s2 += 1 # p1 SNP is actually ref base
+                    pileups['likely_ref_s2'].append((p1, p2))
                 elif p1.base_call():
                     problematic += 1 # p1 SNP but p1 REF but diff SNP
+                    pileups['problematic'].append((p1, p2))
                 else:
                     likely_ref_s2 += 1 # amb call in p1 but ref p2
+                    pileups['likely_ref_s2'].append((p1, p2))
             elif p2.base_call():
                 if p1.confirmed():
                     if p1.refbase == p2.base_call():
                         likely_ref_s1 += 1 # p2 SNP is p1 ref base
+                        pileups['likely_ref_s1'].append((p1, p2))
                     else:
                         problematic += 1 # p2 SNP is not p1 ref base but p1 ref confirmed
+                        pileups['problematic'].append((p1, p2))
                 elif p2.base_call() == p1.base_call():
                     snps += 1 # both snps and same snp called
+                    pileups['snps'].append((p1, p2))
             else:
                 if p1.confirmed():
                     likely_ref_s1 += 1 # amb call in p2 but p1 ref
+                    pileups['likely_ref_s1'].append((p1, p2))
                 elif p1.base_call():
                     problematic += 1 # amb call in p2 but snp in p1
+                    pileups['problematic'].append((p1, p2))
                 else:
                     ambs += 1 # amb call in both
+                    pileups['ambs'].append((p1, p2))
     
     s1_pileups = 0
     s2_pileups = 0
@@ -497,35 +789,45 @@ def compare_references(s1, s2):
             hit = s1_reads[read][pos]
             if hit not in p1_analyzed:
                 s1_pileups += 1 # pileup not found previously
+                pileups['s1_pileups'].append(s1.pileups[hit[0]][hit[1]])
     
     for read in s2_reads:
         for pos in s2_reads[read]:
             hit = s2_reads[read][pos]
             if hit not in p2_analyzed:
                 s2_pileups += 1 # pileup not found previously
+                pileups['s2_pileups'].append(s2.pileups[hit[0]][hit[1]])
 
 
-    return (confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, s1_only, s2_only, problematic, len(s1_reads), len(s2_reads), s1_pileups, s2_pileups)
+    return (pileups, confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, s1_only, s2_only, problematic, len(s1_reads), len(s2_reads), s1_pileups, s2_pileups)
+
 
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-# parser.add_argument('--vcf', help='Files specified are vcf', action='store_true')
+parser.add_argument("--references", action='store_true', help="Compare between references (within samples)")
+parser.add_argument('out', help='Output results to file')
 parser.add_argument("file", nargs='+', help="file from straingr tool")
 args = parser.parse_args()
 
 
-# if args.vcf:
-vcfs = []
-for file in args.file:
-    vcfs.append(parse_vcf_file(file))
-
-compare_vcf_files(vcfs)
-
-# else:
-#     samples = []
-#     for file in args.file:
-#         samples.append(load_pileups(file))
+if args.references:
+    all_pileups = {}
+    for pkl_file in args.file:
+        all_pileups[pkl_file] = load_pileups(pkl_file)
     
-#     compare_samples(samples)
+    with open(args.out, 'wb') as w:
+        w.write("Reference1\tReference2\tConfirmed\tSNPs\tAmbiguous\tRef1\tRef2\tRef1Only\tRef2Only\tProblematic\tRef1Reads\tRef2Reads\tRef1Pileups\tRef2Pileups\n")
+        for (s1, s2) in itertools.combinations(all_pileups.keys(), 2):
+            comparison = compare_references(all_pileups[s1], all_pileups[s2])
+            if comparison:
+                w.write('%s\t%s\t%s\n' % (s1, s2, [str(x) for x in comparison[1:]]))
+
+
+else:
+    vcfs = []
+    for file in args.file:
+        vcfs.append(parse_vcf_file(file))
+
+    compare_vcf_files(vcfs)

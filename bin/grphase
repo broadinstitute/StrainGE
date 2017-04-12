@@ -299,7 +299,15 @@ def phase_snps(pileups):
             # if ambiguous
             if scaf_pileups[pos].covered() and not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
                 # loop through all reads in that pileup
-                for read in scaf_pileups[pos].reads:
+                # and look at their paired mate too!
+                reads = scaf_pileups[pos].reads
+                reads2 = []
+                for read in reads:
+                    if read[-2:] == '.1':
+                        reads2.append(read[:-2]+'.2')
+                    else:
+                        reads2.append(read[-2:]+'.1')
+                for read in sorted(reads+reads2):
                     base1 = scaf_pileups[pos].reads[read][1]
                     # loop through every position in that read
                     for read_pos in sorted(pileups.reads[read]):
@@ -361,9 +369,12 @@ if args.consensus:
 
 for pkl_file in args.file:
     try:
+        print "Loading", pkl_file
         pileups = load_pileups(pkl_file)
+        print "Getting SNPs in phase"
         phased_snps = phase_snps(pileups)
         out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
+        print "Writing to", out
         write_text(phased_snps, out)
     except KeyboardInterrupt:
         break

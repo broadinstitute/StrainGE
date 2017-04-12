@@ -639,7 +639,7 @@ def compare_references(s1, s2):
                 hit = s2_hits.keys()[0]
             else:
                 hit = max(s2_hits, key = lambda x: s2_hits[x])
-                if s2_hits[top] < sum(s2_hits.values())*.5:
+                if s2_hits[hit] < sum(s2_hits.values())*.5:
                     # there's no majority pileup
                     continue
             
@@ -724,7 +724,7 @@ def compare_references(s1, s2):
                 hit = s1_hits.keys()[0]
             else:
                 hit = max(s1_hits, key = lambda x: s1_hits[x])
-                if s1_hits[top] < sum(s1_hits.values())*.5:
+                if s1_hits[hit] < sum(s1_hits.values())*.5:
                     # there's no majority pileup
                     continue
             

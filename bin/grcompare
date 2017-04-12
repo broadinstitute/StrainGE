@@ -813,13 +813,16 @@ args = parser.parse_args()
 
 
 if args.references:
+    print "Comparing within samples between references"
     all_pileups = {}
     for pkl_file in args.file:
+        print "Loading file", pkl_file
         all_pileups[pkl_file] = load_pileups(pkl_file)
     
     with open(args.out, 'wb') as w:
         w.write("Reference1\tReference2\tConfirmed\tSNPs\tAmbiguous\tRef1\tRef2\tRef1Only\tRef2Only\tProblematic\tRef1Reads\tRef2Reads\tRef1Pileups\tRef2Pileups\n")
         for (s1, s2) in itertools.combinations(all_pileups.keys(), 2):
+            print "Comparing", s1, s2
             comparison = compare_references(all_pileups[s1], all_pileups[s2])
             if comparison:
                 w.write('%s\t%s\t%s\n' % (s1, s2, [str(x) for x in comparison[1:]]))

@@ -265,9 +265,7 @@ def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
         return paths
     keep = []
     for path in paths:
-        min_node_count = int(min_nodes * len(path[1]))
-        if min_node_count == 0:
-            min_node_count = 1
+        min_node_count = np.ceil(min_nodes * len(path[1]))
         if len([x for x in path[1] if x >= min_score]) >= min_node_count:
             keep.append(path)
     

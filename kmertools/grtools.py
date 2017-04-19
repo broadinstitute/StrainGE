@@ -109,14 +109,16 @@ class Pileup:
             read_name += ".1"
         else:
             read_name += ".2"
-
+        
+        self.reads[read_name] = pos
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
             self.add_other("N", qual, mq)
-            self.reads[read_name] = (pos, 'del')
+            #self.reads[read_name] = (pos, 'del')
+            
         else:
-            self.reads[read_name] = (pos, base)
+            #self.reads[read_name] = (pos, base)
             if base == self.refbase:
                 self.ref_count += 1
                 self.ref_qual_ss += qual**2

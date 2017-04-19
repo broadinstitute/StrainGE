@@ -23,6 +23,7 @@ calc_random = False
 
 
 class RandomTreeNode:
+    """Class to support randomizing tree node scores"""
     def __init__(self, tree=None, root = None):
         self.score = None
         self.name = None
@@ -187,6 +188,7 @@ class KmerTreeNode:
                     self.score = 0 # assign no score since p >= .05
     
     def computeRandomScore(self, kmers, n = 100): #n is number of iterations needs to be properly chosen
+        """Randomize kmers and score node"""
         n_kmers = kmerizer.count_common(self.kmers, kmers)
         res = []
         for i in xrange(n): 
@@ -199,6 +201,7 @@ class KmerTreeNode:
 
 
 def treeFromHdf5(h5node, parent = None):
+    """Construct KmerTree from hdf5 file"""
     #assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
     if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleScoreNode"):
         print "HDF5 not a valid class", h5node.attrs["type"]
@@ -227,6 +230,7 @@ def treeFromHdf5(h5node, parent = None):
 
 
 def scoreSample(tree, sampleKmers, scoring='adjusted', min_unique=100, calc_p=1000):
+    """Score a sample against a KmerTree"""
     if scoring == 'adjusted':
         tree.computeScoreAdjusted(sampleKmers, min_unique, calc_p)
     elif scoring == "unique":
@@ -274,8 +278,11 @@ def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
 
 def rank_and_reduce_paths(paths, min_score=0.1):
     """Rank paths by node score and reduce paths based on parental nodes"""
+
+    # rank paths by their average node score (in decreasing order)
     ranked = sorted(paths, key = lambda path: (float(sum(path[1]))/len(path[1]), len([x for x in path[1] if x >= min_score])), reverse=True)
     
+    # remove paths that are subsets of higher ranked paths unless they have new nodes >= min_score
     reduced = []
     for path in ranked:
         if not reduced:
@@ -293,6 +300,7 @@ def rank_and_reduce_paths(paths, min_score=0.1):
             reduced.append(path)
     
     # rerank on complete, then on length of path, then on path score
+    # remove paths that are complete subsets of better paths
     final = []
     for path in sorted(reduced, key = lambda path: (path[2].isLeaf(), len(path[0]), sum(path[1])), reverse=True):
         if not final:
@@ -346,6 +354,7 @@ def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None):
 
 
 def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=1000):
+    """Get 99%ile of the sum of node scores of random paths (p = 0.01)"""
     random_tree = RandomTreeNode(tree, root=None)
     random_scores = []
     temp = False
@@ -394,6 +403,7 @@ def saveText(pathScores, out, random_score = None, only_complete=False):
     
 
 def graphTree(graph, tree, parentNode):
+    """Graph a tree to dot figure"""
     leaf = tree.isLeaf()
     nodeLabel = tree.label()
     color = 1
@@ -415,7 +425,7 @@ def graphTree(graph, tree, parentNode):
 
 
 def process_sample(tree, sample):
-    
+    """Score a sample to a tree"""
     print "Loading kmers from sample:", sample
     sampleKmers = kmertools.loadKmers(sample)
     
@@ -424,6 +434,7 @@ def process_sample(tree, sample):
 
 
 def process_tree(tree, out=None, dot=None):
+    """"After sample scored to tree, calculate paths and output results"""
     if calc_random:
         print "Estimating threshold for significant path..."
         random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap)

@@ -104,13 +104,13 @@ class Pileup:
         # keep track of the reads in this pileup and the position in that read
         
 
-        read_name = alignment.query_name
-        if alignment.is_read1:
-            read_name += ".1"
-        else:
-            read_name += ".2"
+        # read_name = alignment.query_name
+        # if alignment.is_read1:
+        #     read_name += ".1"
+        # else:
+        #     read_name += ".2"
         
-        self.reads[read_name] = pos
+        # self.reads[read_name] = pos
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format

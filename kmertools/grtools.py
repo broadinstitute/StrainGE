@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Shared code for genome recovery tools"""
 
+import pysam
 import os
 import gzip
 import cPickle
@@ -224,12 +225,12 @@ class Pileup:
                 if verbose: print "No evidence of SNPs"
             else:
                 # get SNP with highest proportion if >1 SNP
-                base = self._get_best_snp()
+                snp_base = self._get_best_snp()
                 #if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
-                if base and (float(self.others[base][3]) / self.qual_total) >= consensus and self.others[base][3] >= min_confirm:
+                if snp_base and (float(self.others[snp_base][3]) / self.qual_total) >= consensus and self.others[snp_base][3] >= min_confirm:
                     # 90% of base quality matches SNP
-                    if verbose: print "SNP confirmed %s" % base
-                    return base
+                    if verbose: print "SNP confirmed %s" % snp_base
+                    return snp_base
                 else:
                     # no consensus
                     if verbose: print "No confirmed SNP"

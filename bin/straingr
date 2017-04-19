@@ -7,7 +7,8 @@ import numpy as np
 import gzip
 import cPickle
 import kmertools
-import grtools
+
+from grtools import Pileup, save_pileups
 
 from datetime import date
 
@@ -74,7 +75,7 @@ def process_scaffold(bam, scaffold, refseq):
     #badcoverage = 0
     #unmappable = 0
 
-    #pileups = [grtools.Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
+    #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
 
     last_covered = -1
@@ -82,7 +83,7 @@ def process_scaffold(bam, scaffold, refseq):
     
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
-        pileup = grtools.Pileup(column.reference_name, refseq, refpos, column.pileups)
+        pileup = Pileup(column.reference_name, refseq, refpos, column.pileups)
         if verbose:
             refbase = refseq[refpos]
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
@@ -310,4 +311,4 @@ for file in args.bam:
     if args.pickle:
         pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
         print "Writing to pickle file: %s" % pkl_out
-        grtools.save_pileups(all_pileups, pkl_out)
+        save_pileups(all_pileups, pkl_out)

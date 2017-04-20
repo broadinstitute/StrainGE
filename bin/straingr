@@ -8,18 +8,14 @@ import gzip
 import cPickle
 import kmertools
 
-from grtools import Pileup, save_pileups
+import grtools
 
 from datetime import date
 
 
 
 # globals
-min_qual = None
-min_mq = None
-min_confirm = None
-min_gap = None
-consensus = None
+min_gap = 2000
 verbose = False
 
 bases = "ACGT"
@@ -75,7 +71,7 @@ def process_scaffold(bam, scaffold, refseq):
     #badcoverage = 0
     #unmappable = 0
 
-    #pileups = [Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
+    #pileups = [grtools.Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
     pileups = []
 
     last_covered = -1
@@ -83,7 +79,7 @@ def process_scaffold(bam, scaffold, refseq):
     
     for column in bam.pileup(scaffold):
         refpos = column.reference_pos
-        pileup = Pileup(column.reference_name, refseq, refpos, column.pileups)
+        pileup = grtools.Pileup(column.reference_name, refseq, refpos, column.pileups)
         if verbose:
             refbase = refseq[refpos]
             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
@@ -140,11 +136,11 @@ def process_scaffold(bam, scaffold, refseq):
     if len(pileups):
         avg_count = goodcoverage / len(pileups)
         if avg_count > 3:
-            # threshold is 99.99%ile of poissons distribution at average coverage
-            threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.99))
+            # threshold is 99.9999%ile of poissons distribution at average coverage
+            threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.9999))
         else:
-            # at lower coverages, just set it to 10
-            threshold = 10
+            # at lower coverages, just set it to 15
+            threshold = 15
         for pileup in pileups:
             pileup.high_coverage(threshold)
     
@@ -277,23 +273,30 @@ def process_bamfile(reference, bamfile):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--pickle", help="Output pkl files for downstream analysis", action="store_true")
-parser.add_argument("--minqual", type=int, default=5, help='minimum base quality score to consider')
-parser.add_argument("--minmq", type=int, default=5, help='minimum read mapping quality score to consider')
-parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
-parser.add_argument("--mingap", type=int, default=2000, help='minimum contiguous uncovered region to flag')
-parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
+# parser.add_argument("--pickle", help="Output pkl files for downstream analysis", action="store_true")
+parser.add_argument("--minqual", type=int, help='minimum base quality score to consider')
+parser.add_argument("--minmq", type=int, help='minimum read mapping quality score to consider')
+parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--mingap", type=int, help='minimum contiguous uncovered region to flag')
+parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
 args = parser.parse_args()
 
 # set global options
-verbose = args.verbose
-min_qual = args.minqual
-min_mq = args.minmq
-min_confirm = args.minconfirm
-min_gap = args.mingap
-consensus = args.consensus
+if args.verbose:
+    verbose = args.verbose
+    grtools.verbose = args.verbose
+if args.minqual:
+    grtools.min_qual = args.minqual
+if args.minmq:
+    grtools.min_mq = args.minmq
+if args.minconfirm:
+    grtools.min_confirm = args.minconfirm
+if args.mingap:
+    min_gap = args.mingap
+if args.consensus:
+    grtools.consensus = args.consensus
 
 print "Loading reference genome"
 # add upper to fix lower case reference genomes
@@ -308,7 +311,6 @@ for file in args.bam:
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
     write_vcf(all_pileups, vcf_out, date=date.today(), reference=args.reference)
-    if args.pickle:
-        pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
-        print "Writing to pickle file: %s" % pkl_out
-        save_pileups(all_pileups, pkl_out)
+    pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
+    print "Writing to pickle file: %s" % pkl_out
+    grtools.save_pileups(all_pileups, pkl_out)

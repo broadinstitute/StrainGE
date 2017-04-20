@@ -7,11 +7,10 @@ import gzip
 import cPickle
 import numpy as np
 
-min_qual = None
-min_mq = None
-min_confirm = None
-min_gap = None
-consensus = None
+min_qual = 5
+min_mq = 5
+min_confirm = 50
+consensus = 0.9
 verbose = False
 
 bases = "ACGT"
@@ -104,22 +103,21 @@ class Pileup:
         self.qual_total += qual
         # keep track of the reads in this pileup and the position in that read
         
-
-        # read_name = alignment.query_name
-        # if alignment.is_read1:
-        #     read_name += ".1"
-        # else:
-        #     read_name += ".2"
+        read_name = alignment.query_name
+        if alignment.is_read1:
+            read_name += ".1"
+        else:
+            read_name += ".2"
         
         # self.reads[read_name] = pos
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
             self.add_other("N", qual, mq)
-            #self.reads[read_name] = (pos, 'del')
+            self.reads[read_name] = (pos, 'del')
             
         else:
-            #self.reads[read_name] = (pos, base)
+            self.reads[read_name] = (pos, base)
             if base == self.refbase:
                 self.ref_count += 1
                 self.ref_qual_ss += qual**2

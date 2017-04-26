@@ -163,8 +163,8 @@ parser.add_argument("file", nargs='+', help="pickle file from straingr tool")
 args = parser.parse_args()
 
 
-if args.verbose:
-    verbose = args.verbose
+# if args.verbose:
+#     verbose = args.verbose
 if args.minconfirm:
     min_confirm = grtools.minconfirm
 if args.consensus:

@@ -460,16 +460,16 @@ if args.references:
             print "Comparing", r1, "to", r2
             comparison, r1_reads, r2_reads = compare_references(all_pileups[r1], all_pileups[r2])
             if comparison:
-                confirmed = len2(comparisons.get('ref_confirmed'))
-                snps = len2(comparisons.get('same_snp'))
-                ref1_mixed = len2(comparisons.get('ref1_ref2_amb'))
-                ref2_mixed = len2(comparisons.get('ref2_ref1_amb'))
-                ref1_ref = len2(comparisons.get('likely_ref1'))
-                ref2_ref = len2(comparisons.get('likely_ref2'))
-                ref1_un = len2(comparisons.get('unmatched1'))
-                ref2_un = len2(comparisons.get('unmatched2'))
-                ref1_reads = len(r1_reads)
-                ref2_reads = len(r2_reads)
+            confirmed = len2(comparisons.get('ref_confirmed'))
+            snps = len2(comparisons.get('same_snp'))
+            ref1_mixed = len2(comparisons.get('ref1_ref2_amb'))
+            ref2_mixed = len2(comparisons.get('ref2_ref1_amb'))
+            ref1_ref = len2(comparisons.get('likely_ref1'))
+            ref2_ref = len2(comparisons.get('likely_ref2'))
+            ref1_un = len2(comparisons.get('unmatched1'))
+            ref2_un = len2(comparisons.get('unmatched2'))
+            ref1_reads = len(r1_reads)
+            ref2_reads = len(r2_reads)
 
                 w.write(line.format(ref1=r1, ref2=r2, confirmed=confirmed, snps=snps, ref1_mixed=ref1_mixed, 
                                     ref2_mixed=ref2_mixed, ref1_ref=ref1_ref, ref2_ref=ref2_ref, ref1_un=ref1_un,

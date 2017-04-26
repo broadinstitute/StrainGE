@@ -276,7 +276,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--pickle", help="Output pkl files for downstream analysis", action="store_true")
+# parser.add_argument("--pickle", help="Output pkl files for downstream analysis", action="store_true")
 parser.add_argument("--minqual", type=int, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, help='minimum read mapping quality score to consider')
 parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
@@ -315,7 +315,7 @@ for file in args.bam:
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
     write_vcf(pileups, vcf_out, date=date.today(), reference=args.reference)
-    if args.pickle:
-        pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
-        print "Writing to pickle file: %s" % pkl_out
-        grtools.save_pileups(pileups, pkl_out)
+    # if args.pickle:
+    pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
+    print "Writing to pickle file: %s" % pkl_out
+    grtools.save_pileups(pileups, pkl_out)

@@ -767,7 +767,7 @@ def compare_references(ref1, ref2):
         if read not in ref1.reads:
             r2_reads.append(read)
     
-    return match_pileups(matching), r1_reads, r2_reads
+    return match_pileups(matching, ref1, ref2), r1_reads, r2_reads
 
 def len2(data):
     if data == None:

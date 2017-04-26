@@ -16,7 +16,7 @@ def phase_ambiguous(pileups):
             pileup = pileups.pileups[scaffold][refpos]
             if not pileup.covered():
                 continue
-            if pileup.covered():
+            if pileup.confirmed():
                 continue
             if pileup.base_call():
                 continue
@@ -26,18 +26,26 @@ def phase_ambiguous(pileups):
     
     phased_ambs = {}
     # loop through reads
-    for read in pileups.reads:
+
+    reads = set([read[:-2] for read in pileups.reads])
+
+    for pair in reads:
         in_phase = []
-        for pos in pileups.reads[read]:
-            (base, scaffold, refpos) = pileups.reads[read][pos]
-            if scaffold not in amb_pileups:
-                break # rest of read won't be ambiguous either
-            if refpos not in amb_pileups[scaffold]:
+        for i in xrange(1,3):
+            read = "%s.%i" % (pair, i)
+            if read not in pileups.reads:
                 continue
-            
-            in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos, base=base))
+            for pos in pileups.reads[read]:
+                (base, scaffold, refpos) = pileups.reads[read][pos]
+                if scaffold not in amb_pileups:
+                    break # rest of read won't be ambiguous either
+                if refpos not in amb_pileups[scaffold]:
+                    continue
+                
+                in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos,  mate=i, base=base))
+        
         if len(in_phase) > 1:
-            phased_ambs[read] = in_phase
+            phased_ambs[pair] = in_phase
     
     return phased_ambs
 
@@ -47,16 +55,17 @@ def write_text(phased_ambs, out):
     
     if not out:
         return
-    line = '{read}\t{scaffold}\t{refpos}\t{pos}\t{base}\n'
+    line = '{pair}\t{mate}\t{scaffold}\t{refpos}\t{pos}\t{base}\n'
     with open(out, 'wb') as w:
-        w.write("Read\tScaffold\tRefpos\tPos\tBase\n")
-        for read in sorted(phased_ambs):
-            for result in sorted(phased_ambs[read], key = lambda x: (x['refpos'])):
+        w.write("Read\tMate\tScaffold\tRefpos\tPos\tBase\n")
+        for pair in sorted(phased_ambs):
+            for result in sorted(phased_ambs[pair], key = lambda x: (x['refpos'])):
                 scaffold = result['scaffold']
                 refpos = result['refpos']
                 pos = result['pos']
+                mate = result['mate']
                 base = result['base']
-                w.write(line.format(read=read, scaffold=scaffold, refpos=refpos, pos=pos, base=base))
+                w.write(line.format(pair=pair, mate=mate, scaffold=scaffold, refpos=refpos, pos=pos, base=base))
 
 
 # def phase_snps(pileups):

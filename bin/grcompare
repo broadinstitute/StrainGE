@@ -742,6 +742,8 @@ def match_pileups(matching, ref1, ref2):
         
 def compare_read(matching, read, ref1, ref2):
     for pos in ref1.reads[read]:
+        if pos not in ref2.reads[read]:
+            continue
         (base, scaffold, refpos) = ref1.reads[read][pos]
         (scaffold2, refpos2) = ref2.reads[read][pos][1:]
         if (scaffold, refpos) not in matching:

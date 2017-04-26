@@ -360,7 +360,7 @@ class Pileups:
         # keep track of total values in the Pileups class variables
         self.length += length
         self.confirmed += confirmed
-        self.covered = += covered
+        self.covered += covered
         self.snps += snps
         self.unmapped += unmapped
         self.goodcoverage += goodcoverage

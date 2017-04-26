@@ -775,12 +775,14 @@ def len2(data):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--references", action='store_true', help="Compare between references (within samples)")
+parser.add_argument("-r", "--references", action='store_true', help="Compare between references (within samples)")
 parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--consensus", type=float, help='minimum fraction of read quality to confirm reference or SNP')
 parser.add_argument('out', help='Output results to file')
 parser.add_argument("file", nargs='+', help="file from straingr tool (vcf or pkl)")
 args = parser.parse_args()
+
+print "Will output results to", args.out
 
 if args.verbose:
     verbose = grtools.verbose
@@ -797,13 +799,12 @@ if args.references:
         print "Loading file", pkl_file
         all_pileups[pkl_file] = grtools.load_pileups(pkl_file)        
 
-    print "Writing results to", args.out
     line = "{ref1}\t{ref2}\t{confirmed}\t{snps}\t{ref1_mixed}\t{ref2_mixed}\t{ref1_ref}\t{ref2_ref}\t{ref1_un}\t{ref2_un}\t{ref1_reads}\t{ref2_reads}\t{other}\n"
     with open(args.out, 'wb') as w:
         #w.write("Reference1\tReference2\tConfirmed\tSNPs\tAmbiguous\tRef1\tRef2\tRef1Only\tRef2Only\tProblematic\tRef1Reads\tRef2Reads\tRef1Pileups\tRef2Pileups\n")
         w.write("Ref1\tRef2\tConfirmed\tSNPs\tRef1_mixed\tRef2_mixed\tRef1_ref\tRef2_ref\tRef1_unmatched\tRef2_unmatched\tRef1_reads\tRef2_reads\n")
         for (r1, r2) in itertools.combinations(all_pileups.keys(), 2):
-            print "Comparing", r1, r2
+            print "Comparing", r1, "to", r2
             comparison, r1_reads, r2_reads = compare_references(all_pileups[r1], all_pileups[r2])
             if comparison:
                 confirmed = len2(comparisons.get('ref_confirmed'))

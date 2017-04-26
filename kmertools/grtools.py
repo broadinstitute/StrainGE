@@ -403,9 +403,9 @@ def load_pileups(pkl_file):
 
     with gzip.open(pkl_file, 'rb') as f:
         pileups = cPickle.load(f)
-        if type(pileups) is not Pileups:
-            print 'Not a valid pickled pileups file'
-            return
+        # if type(pileups) is not Pileups:
+        #     print 'Not a valid pickled pileups file'
+        #     return
         return pileups
 
 # def load_pileups(pkl_file, keep_covered=False):

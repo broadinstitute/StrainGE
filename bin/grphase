@@ -157,8 +157,8 @@ def write_text(phased_ambs, out):
 
 parser = argparse.ArgumentParser()
 # parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
-parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
+parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument("file", nargs='+', help="pickle file from straingr tool")
 args = parser.parse_args()
 
@@ -166,7 +166,7 @@ args = parser.parse_args()
 # if args.verbose:
 #     verbose = args.verbose
 if args.minconfirm:
-    min_confirm = grtools.minconfirm
+    min_confirm = grtools.min_confirm
 if args.consensus:
     consensus = grtools.consensus
 

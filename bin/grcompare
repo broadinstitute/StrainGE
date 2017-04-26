@@ -682,10 +682,13 @@ def compare_pileups(pileup1, pileup2):
                 else:
                     snp2 = pileup2.base_call()
                     if snp2:
-                        if snp2 == snp1:
-                            return 'same_snp'
+                        if snp1:
+                            if snp2 == snp1:
+                                return 'same_snp'
+                            else:
+                                return 'diff_snp'
                         else:
-                            return 'diff_snp'
+                            return 'snp2_amb1'
                     else:
                         if snp1:
                             return 'snp1_amb2'
@@ -705,7 +708,8 @@ def compare_pileups(pileup1, pileup2):
 
 
 def match_pileups(matching, ref1, ref2):
-    results = {}
+    results = {'unmatched1': [], 'unmatched2': []}
+    matched = set()
     for (scaffold, refpos) in matching.keys():
         comparison = None
         # only one pileup matches between references
@@ -725,7 +729,15 @@ def match_pileups(matching, ref1, ref2):
             if comparison not in results:
                 results[comparison] = []
             results[comparison].append((scaffold, refpos, scaffold2, refpos2))
-
+            matched.add((scaffold2, refpos2))
+        else:
+            results['unmatched1'].append((scaffold, refpos))
+    
+    for scaffold2 in ref2.pileups:
+        for refpos2 in ref2.pileups[scaffold2]:
+            if (scaffold2, refpos2) not in matched:
+                results['unmatched2'].append((scaffold2, refpos2))
+    
     return results
         
 def compare_read(matching, read, ref1, ref2):
@@ -753,10 +765,13 @@ def compare_references(ref1, ref2):
         if read not in ref1.reads:
             r2_reads.append(read)
     
-    match_pileups(matching)
+    return match_pileups(matching), r1_reads, r2_reads
 
-
-
+def len2(data):
+    if data == None:
+        return 0
+    else:
+        return len(data)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
@@ -780,16 +795,34 @@ if args.references:
     all_pileups = {}
     for pkl_file in args.file:
         print "Loading file", pkl_file
-        all_pileups[pkl_file] = grtools.load_pileups(pkl_file)
-    
+        all_pileups[pkl_file] = grtools.load_pileups(pkl_file)        
+
     print "Writing results to", args.out
+    line = "{ref1}\t{ref2}\t{confirmed}\t{snps}\t{ref1_mixed}\t{ref2_mixed}\t{ref1_ref}\t{ref2_ref}\t{ref1_un}\t{ref2_un}\t{ref1_reads}\t{ref2_reads}\t{other}\n"
     with open(args.out, 'wb') as w:
-        w.write("Reference1\tReference2\tConfirmed\tSNPs\tAmbiguous\tRef1\tRef2\tRef1Only\tRef2Only\tProblematic\tRef1Reads\tRef2Reads\tRef1Pileups\tRef2Pileups\n")
-        for (s1, s2) in itertools.combinations(all_pileups.keys(), 2):
-            print "Comparing", s1, s2
-            comparison = compare_references(all_pileups[s1], all_pileups[s2])
+        #w.write("Reference1\tReference2\tConfirmed\tSNPs\tAmbiguous\tRef1\tRef2\tRef1Only\tRef2Only\tProblematic\tRef1Reads\tRef2Reads\tRef1Pileups\tRef2Pileups\n")
+        w.write("Ref1\tRef2\tConfirmed\tSNPs\tRef1_mixed\tRef2_mixed\tRef1_ref\tRef2_ref\tRef1_unmatched\tRef2_unmatched\tRef1_reads\tRef2_reads\n")
+        for (r1, r2) in itertools.combinations(all_pileups.keys(), 2):
+            print "Comparing", r1, r2
+            comparison, r1_reads, r2_reads = compare_references(all_pileups[r1], all_pileups[r2])
             if comparison:
-                w.write('%s\t%s\t%s\n' % (s1, s2, '\t'.join([str(x) for x in comparison[1:]])))
+                confirmed = len2(comparisons.get('ref_confirmed'))
+                snps = len2(comparisons.get('same_snp'))
+                ref1_mixed = len2(comparisons.get('ref1_ref2_amb'))
+                ref2_mixed = len2(comparisons.get('ref2_ref1_amb'))
+                ref1_ref = len2(comparisons.get('likely_ref1'))
+                ref2_ref = len2(comparisons.get('likely_ref2'))
+                ref1_un = len2(comparisons.get('unmatched1'))
+                ref2_un = len2(comparisons.get('unmatched2'))
+                ref1_reads = len(r1_reads)
+                ref2_reads = len(r2_reads)
+
+                w.write(line.format(ref1=r1, ref2=r2, confirmed=confirmed, snps=snps, ref1_mixed=ref1_mixed, 
+                                    ref2_mixed=ref2_mixed, ref1_ref=ref1_ref, ref2_ref=ref2_ref, ref1_un=ref1_un,
+                                    ref2_un=ref2_un, ref1_reads=ref1_reads, ref2_reads=ref2_reads))
+
+                # w.write('%s\t%s\t%s\n' % (s1, s2, '\t'.join([str(x) for x in comparison[1:]])))
+
 
 
 else:

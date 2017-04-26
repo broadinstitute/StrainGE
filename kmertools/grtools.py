@@ -369,7 +369,7 @@ class Pileups:
             avg_count = goodcoverage / len(self.pileups[scaffold])
             if avg_count > 3:
                 # threshold is 99.9999%ile of poissons distribution at average coverage
-                threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.9999))
+                threshold = int(np.percentile(np.random.poisson(avg_count, self.nPileups), 99.9999))
             else:
                 # at lower coverages, just set it to 15
                 threshold = 15

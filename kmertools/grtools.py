@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Shared code for genome recovery tools"""
 
-import pysam
 import os
+import math
+import pysam
 import gzip
 import cPickle
 import numpy as np
@@ -11,6 +12,7 @@ min_qual = 5
 min_mq = 5
 min_confirm = 50
 consensus = 0.9
+min_gap = 2000
 verbose = False
 
 bases = "ACGT"
@@ -30,7 +32,7 @@ class Pileup:
         """
         self.chrom = chrom
         self.pos = pos
-        # self.reads = {}
+        self.reads = {}
         self.count = 0
         self.unmapped = 0
         self.bad = 0
@@ -103,21 +105,21 @@ class Pileup:
         self.qual_total += qual
         # keep track of the reads in this pileup and the position in that read
         
-        # read_name = alignment.query_name
-        # if alignment.is_read1:
-        #     read_name += ".1"
-        # else:
-        #     read_name += ".2"
+        read_name = alignment.query_name
+        if alignment.is_read1:
+            read_name += ".1"
+        else:
+            read_name += ".2"
         
         # self.reads[read_name] = pos
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
             self.add_other("N", qual, mq)
-            # self.reads[read_name] = (pos, 'del')
+            self.reads[read_name] = (pos, 'del')
             
         else:
-            # self.reads[read_name] = (pos, base)
+            self.reads[read_name] = (pos, base)
             if base == self.refbase:
                 self.ref_count += 1
                 self.ref_qual_ss += qual**2
@@ -238,6 +240,10 @@ class Pileup:
     def high_coverage(self, high):
         """Flag pileup for too much coverage"""
         self.hc = self.count > high
+        if self.hc:
+            return 1
+        else:
+            return 0
     
     def __str__(self):
         return "<Pileup n=%d rc=%d bad=%d rq=%d/%d mq=%d/%d o=%s>" % (self.count, self.ref_count, self.bad,
@@ -245,48 +251,145 @@ class Pileup:
                                                                       self.ref_mq, self.mq_total, str(self.others))
 
 class Pileups:
-    def __init__(self, pileups=None, name=None, keep_covered=True):
+    """Class of Pileups and reads for straingr"""
+    def __init__(self, reference, bamfile):
         self.pileups = {}
         self.reads = {}
-        self.name = name
+        self.nPileups = 0
         self.length = 0
+        self.confirmed = 0
+        self.covered = 0
+        self.snps = 0
+        self.unmapped = 0
+        self.goodcoverage = 0
+        self.highcoverage = 0
 
-        for pileup in pileups:
-            if verbose:
-                print "Adding pileup", str(pileup)
-            self.add_pileup(pileup, keep_covered=keep_covered)
-            self.length += 1
-
-    def add_pileup(self, pileup, keep_covered=False):
-        """Add pileups based on scaffold and position"""
-
-        if keep_covered and not pileup.covered():
-            return
-
-        chrom = pileup.chrom
-        if chrom not in self.pileups:
-            self.pileups[chrom] = {}
-        pos = pileup.pos
-        self.pileups[chrom][pos] = pileup
-
-        # store reads and their positions, match back to pileup
-        for read in pileup.reads:
-            if read not in self.reads:
-                self.reads[read] = {}
-            if pileup.reads[read][1] == 'del':
+        print "Scanning BAM file: %s" % bamfile
+        bam = pysam.AlignmentFile(bamfile, "rb")
+    
+        for scaffold in bam.references:
+            try:
+                self.process_scaffold(bam, scaffold, reference[scaffold])
+            except KeyboardInterrupt:
+                raise e
+            except Exception as e:
+                print "Error in straingr: %s" % e
                 continue
-            readpos = pileup.reads[read][0]
-            if readpos in self.reads[read]:
-                print "Duplicate read position found", read, readpos
-                print self.reads[read][readpos]
-                print chrom, pos
-            self.reads[read][readpos] = (chrom, pos)
-
+    
     def __len__(self):
-        return self.length
+        return self.nPileups
 
-    def __str__(self):
-        return "<Pileups Class> containing %i pileups" % self.length
+    def process_scaffold(self, bam, scaffold, refseq):
+        """Scan the pileups for each locus in the scaffold"""
+
+        self.pileups[scaffold] = {}
+        length = len(refseq)
+        print "Processing", scaffold, length
+        confirmed = 0
+        covered = 0
+        snps = 0
+        unmapped = 0
+        goodcoverage = 0
+        highcoverage = 0
+
+        last_covered = -1
+        gaps = []
+        
+        for column in bam.pileup(scaffold):
+            self.nPileups += 1
+            refpos = column.reference_pos
+            pileup = Pileup(column.reference_name, refseq, refpos, column.pileups)
+
+            for read in pileup.reads:
+                if read not in self.reads:
+                    self.reads[read] = {}
+                (pos, base) = pileups.read[read]
+                self.reads[read][pos] = (base, scaffold, refpos)
+            
+            # don't keep this info, as it's redundant
+            del pileup.reads
+
+            if verbose:
+                refbase = refseq[refpos]
+                print "Ref:", column.reference_name, refpos, refbase, column.nsegments
+            goodcoverage += pileup.count
+            if pileup.covered():
+                covered += 1
+                if pileup.confirmed():
+                    confirmed += 1
+                elif pileup.base_call():
+                    snps += 1
+                if refpos - last_covered > min_gap:
+                    gap = (last_covered + 1, refpos - last_covered)
+                    print "Coverage gap:", gap[0], gap[1]
+                    gaps.append(gap)
+                last_covered = refpos
+            elif pileup.unmappable():
+                unmapped += 1
+                # not a real gap, just can't map to this region
+                if refpos - last_covered > min_gap:
+                    gap = (last_covered + 1, refpos - last_covered)
+                    print "Coverage gap:", gap[0], gap[1]
+                    gaps.append(gap)
+                last_covered = refpos
+            
+            if verbose:
+                print pileup, pileup.confirmed()
+            self.pileups[scaffold][refpos] = pileup
+
+        coverage = float(goodcoverage) / float(length)
+        mixed = covered - (confirmed + snps)
+
+        print "good coverage: %.1fx" % (coverage,)
+        print "covered: %d %.1f%%" % (covered, pct(covered, length))
+        print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
+        print "snps: %d %.3f%%" % (snps, pct(snps, covered))
+        if snps > 0:
+            print "snp rate: %.0f" % (float(covered) / float(snps))
+        print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
+        if mixed > 0:
+            mixed_rate = float(covered) / float(mixed)
+            if mixed_rate > 0:
+                mixed_quality = math.log10(mixed_rate) * 10.0
+            else:
+                mixed_quality = 0
+            print "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
+        print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
+        print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
+        
+        # keep track of total values in the Pileups class variables
+        self.length += length
+        self.confirmed += confirmed
+        self.covered = += covered
+        self.snps += snps
+        self.unmapped += unmapped
+        self.goodcoverage += goodcoverage
+
+        if len(self.pileups[scaffold]):
+            avg_count = goodcoverage / len(self.pileups[scaffold])
+            if avg_count > 3:
+                # threshold is 99.9999%ile of poissons distribution at average coverage
+                threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.9999))
+            else:
+                # at lower coverages, just set it to 15
+                threshold = 15
+            for refpos in self.pileups[scaffold]:
+                highcoverage += self.pileups[scaffold][refpos].high_coverage(threshold)
+            
+            print "Abnormally high coverage: %d %.1f%% (expect 0.01% false positive)" % (highcoverage, pct(highcoverage, length))
+
+            self.highcoverage += highcoverage
+
+        
+
+        
+
+
+def pct(numerator, denominator):
+    """Makes into a percent"""
+    if numerator > 0 and denominator > 0:
+        return (100.0 * numerator) / denominator
+    return 0.0
 
 
 def save_pileups(pileups, out):
@@ -295,9 +398,19 @@ def save_pileups(pileups, out):
     with gzip.open(out, 'wb') as w:
         cPickle.dump(pileups, w)
 
-def load_pileups(pkl_file, keep_covered=False):
-    """Load straingr pileups"""
-    with gzip.open(pkl_file) as f:
-        pileups = Pileups(cPickle.load(f), name=os.path.basename(pkl_file), keep_covered=keep_covered)
+def load_pileups(pkl_file):
+    """Load saved pileups from pickled file"""
 
+    with gzip.open(pkl_file, 'rb') as f:
+        pileups = cPickle.load(f)
+        if type(pileups) is not Pileups:
+            print 'Not a valid pickled pileups file'
+            return
         return pileups
+
+# def load_pileups(pkl_file, keep_covered=False):
+#     """Load straingr pileups"""
+#     with gzip.open(pkl_file) as f:
+#         pileups = Pileups(cPickle.load(f), name=os.path.basename(pkl_file), keep_covered=keep_covered)
+
+#         return pileups

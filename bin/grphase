@@ -1,117 +1,162 @@
 #!/usr/bin/env python
-"""Phase ambiguous SNPs from straingr"""
+"""Phase ambiguous calls (mixed evidence) from straingr results"""
 
 import os
-import gzip
-import cPickle
 import argparse
 
 import grtools
 
-# globals
-min_confirm = None
-consensus = None
-verbose = False
+def phase_ambiguous(pileups):
+    """Phase ambiguous pileups based on read information"""
 
-def phase_snps(pileups):
-    """Look for SNPs and ambiguous calls in phase"""
-
-    phased_snps = {}
-    
-    # go through scaffolds
+    # only look for ambiguous pileups
+    amb_pileups = {}
     for scaffold in pileups.pileups:
-        # go through positions in scaffolds
-        scaf_pileups = pileups.pileups[scaffold]
-        for pos in sorted(scaf_pileups):
+        for refpos in pileups.pileups[scaffold]:
+            pileup = pileups.pileups[scaffold][refpos]
+            if not pileup.covered():
+                continue
+            if pileup.covered():
+                continue
+            if pileup.base_call():
+                continue
+            if scaffold not in amb_pileups:
+                amb_pileups[scaffold] = set()
+            amb_pileups[scaffold].add(refpos) 
+    
+    phased_ambs = {}
+    # loop through reads
+    for read in pileups.reads:
+        in_phase = []
+        for pos in pileups.reads[read]:
+            (base, scaffold, refpos) = pileups.reads[read][pos]
+            if scaffold not in amb_pileups:
+                break # rest of read won't be ambiguous either
+            if refpos not in amb_pileups[scaffold]:
+                continue
             
-            # if ambiguous
-            if not scaf_pileups[pos].hc and scaf_pileups[pos].covered() and not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
-                # loop through all reads in that pileup
-                reads = scaf_pileups[pos].reads
-                reads2 = {}
-                for read in reads:
-                    if read[-2:] == '.1':
-                        read2 = read[-2:]+'.2'
-                    else:
-                        read2 = read[-2:]+'.1'
-                    if read2 in scaf_pileups[pos].reads:
-                        reads2[read] = read2
-                for read in reads.keys():
-                    base1 = scaf_pileups[pos].reads[read][1]
-                    # loop through every position in that read
-                    for read_pos in sorted(pileups.reads[read]):
-                        # get pileup location for that position
-                        (scaffold2, pos2) = pileups.reads[read][read_pos]
-                        if scaffold2 != scaffold:
-                            print 'Read found on two scaffolds!'
-                            continue
-                        if pos2 <= pos:
-                            # don't look back
-                            continue
-                        # if this pileup also ambigous!
-                        if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
+            in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos, base=base))
+        if len(in_phase) > 1:
+            phased_ambs[read] = in_phase
+    
+    return phased_ambs
 
-                            if scaffold not in phased_snps:
-                                phased_snps[scaffold] = {}
-                            if pos not in phased_snps[scaffold]:
-                                phased_snps[scaffold][pos] = {}
-                            
-                            if pos2 not in phased_snps[scaffold][pos]:
-                                phased_snps[scaffold][pos][pos2] = {}
-                            
-                            base2 = scaf_pileups[pos2].reads[read][1]
-                            if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
-                                phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
-                            phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
-                    
-                    if read not in reads2:
-                        # paired read not in data
-                        continue
-                    read2 = reads2[read]
-                    # do this for the other paired read
-                    for read_pos in sorted(pileups.reads[read2]):
-                        # get pileup location for that position
-                        (scaffold2, pos2) = pileups.reads[read2][read_pos]
-                        if scaffold2 != scaffold:
-                            print 'Read found on two scaffolds!'
-                            continue
-                        if pos2 <= pos:
-                            # don't look back
-                            continue
-                        # if this pileup also ambigous!
-                        if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
-
-                            if scaffold not in phased_snps:
-                                phased_snps[scaffold] = {}
-                            if pos not in phased_snps[scaffold]:
-                                phased_snps[scaffold][pos] = {}
-                            
-                            if pos2 not in phased_snps[scaffold][pos]:
-                                phased_snps[scaffold][pos][pos2] = {}
-                            
-                            base2 = scaf_pileups[pos2].reads[read2][1]
-                            if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
-                                phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
-                            phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
-
-    return phased_snps
-
-
-def write_text(phased_snps, out):
-    """Write phased snps to text"""
-
+def write_text(phased_ambs, out):
+    if not phased_ambs:
+        return
+    
+    if not out:
+        return
+    line = '{read}\t{scaffold}\t{refpos}\t{pos}\t{base}\n'
     with open(out, 'wb') as w:
-        w.write("Scaffold\tPos1\tPos2\tCount\tBase1\tBase2\n")
-        for scaffold in sorted(phased_snps):
-            for pos1 in sorted(phased_snps[scaffold]):
-                for pos2 in sorted(phased_snps[scaffold][pos1]):
-                    for (base1, base2) in sorted(phased_snps[scaffold][pos1][pos2]):
-                        count = phased_snps[scaffold][pos1][pos2][(base1, base2)]
-                        w.write('%s\t%i\t%i\t%i\t%s\t%s\n' % (scaffold, pos1, pos2, count, base1, base2))
+        w.write("Read\tScaffold\tRefpos\tPos\tBase\n")
+        for read in sorted(phased_ambs):
+            for result in sorted(phased_ambs[read], key = lambda x: (x['refpos'])):
+                scaffold = result['scaffold']
+                refpos = result['refpos']
+                pos = result['pos']
+                base = result['base']
+                w.write(line.format(read=read, scaffold=scaffold, refpos=refpos, pos=pos, base=base))
+
+
+# def phase_snps(pileups):
+#     """Look for SNPs and ambiguous calls in phase"""
+
+#     phased_snps = {}
+    
+#     # go through scaffolds
+#     for scaffold in pileups.pileups:
+#         # go through positions in scaffolds
+#         scaf_pileups = pileups.pileups[scaffold]
+#         for pos in sorted(scaf_pileups):
+            
+#             # if ambiguous
+#             if not scaf_pileups[pos].hc and scaf_pileups[pos].covered() and not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
+#                 # loop through all reads in that pileup
+#                 reads = scaf_pileups[pos].reads
+#                 reads2 = {}
+#                 for read in reads:
+#                     if read[-2:] == '.1':
+#                         read2 = read[-2:]+'.2'
+#                     else:
+#                         read2 = read[-2:]+'.1'
+#                     if read2 in scaf_pileups[pos].reads:
+#                         reads2[read] = read2
+#                 for read in reads.keys():
+#                     base1 = scaf_pileups[pos].reads[read][1]
+#                     # loop through every position in that read
+#                     for read_pos in sorted(pileups.reads[read]):
+#                         # get pileup location for that position
+#                         (scaffold2, pos2) = pileups.reads[read][read_pos]
+#                         if scaffold2 != scaffold:
+#                             print 'Read found on two scaffolds!'
+#                             continue
+#                         if pos2 <= pos:
+#                             # don't look back
+#                             continue
+#                         # if this pileup also ambigous!
+#                         if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
+
+#                             if scaffold not in phased_snps:
+#                                 phased_snps[scaffold] = {}
+#                             if pos not in phased_snps[scaffold]:
+#                                 phased_snps[scaffold][pos] = {}
+                            
+#                             if pos2 not in phased_snps[scaffold][pos]:
+#                                 phased_snps[scaffold][pos][pos2] = {}
+                            
+#                             base2 = scaf_pileups[pos2].reads[read][1]
+#                             if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
+#                                 phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
+#                             phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
+                    
+#                     if read not in reads2:
+#                         # paired read not in data
+#                         continue
+#                     read2 = reads2[read]
+#                     # do this for the other paired read
+#                     for read_pos in sorted(pileups.reads[read2]):
+#                         # get pileup location for that position
+#                         (scaffold2, pos2) = pileups.reads[read2][read_pos]
+#                         if scaffold2 != scaffold:
+#                             print 'Read found on two scaffolds!'
+#                             continue
+#                         if pos2 <= pos:
+#                             # don't look back
+#                             continue
+#                         # if this pileup also ambigous!
+#                         if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
+
+#                             if scaffold not in phased_snps:
+#                                 phased_snps[scaffold] = {}
+#                             if pos not in phased_snps[scaffold]:
+#                                 phased_snps[scaffold][pos] = {}
+                            
+#                             if pos2 not in phased_snps[scaffold][pos]:
+#                                 phased_snps[scaffold][pos][pos2] = {}
+                            
+#                             base2 = scaf_pileups[pos2].reads[read2][1]
+#                             if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
+#                                 phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
+#                             phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
+
+#     return phased_snps
+
+# def write_text(phased_snps, out):
+#     """Write phased snps to text"""
+
+#     with open(out, 'wb') as w:
+#         w.write("Scaffold\tPos1\tPos2\tCount\tBase1\tBase2\n")
+#         for scaffold in sorted(phased_snps):
+#             for pos1 in sorted(phased_snps[scaffold]):
+#                 for pos2 in sorted(phased_snps[scaffold][pos1]):
+#                     for (base1, base2) in sorted(phased_snps[scaffold][pos1][pos2]):
+#                         count = phased_snps[scaffold][pos1][pos2][(base1, base2)]
+#                         w.write('%s\t%i\t%i\t%i\t%s\t%s\n' % (scaffold, pos1, pos2, count, base1, base2))
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
+# parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument("file", nargs='+', help="pickle file from straingr tool")
@@ -121,19 +166,23 @@ args = parser.parse_args()
 if args.verbose:
     verbose = args.verbose
 if args.minconfirm:
-    min_confirm = args.minconfirm
+    min_confirm = grtools.minconfirm
 if args.consensus:
-    consensus = args.consensus
+    consensus = grtools.consensus
 
 for pkl_file in args.file:
     try:
         print "Loading", pkl_file
         pileups = grtools.load_pileups(pkl_file)
-        print "Getting SNPs in phase"
-        phased_snps = phase_snps(pileups)
-        out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
+        # print "Getting SNPs in phase"
+        print "Phasing ambiguous base calls"
+        # phased_snps = phase_snps(pileups)
+        phased_ambs = phase_ambiguous(pileups)
+        # out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
+        out = '.'.join(os.path.basename(pkl_file).split(".")[:-1])+'.phased_ambs.tsv'
         print "Writing to", out
-        write_text(phased_snps, out)
+        # write_text(phased_snps, out)
+        write_text(phased_ambs, out)
     except KeyboardInterrupt:
         break
     except Exception as e:

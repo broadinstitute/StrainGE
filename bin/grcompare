@@ -2,8 +2,6 @@
 import os
 import re
 import itertools
-import gzip
-import cPickle
 import argparse
 import numpy as np
 
@@ -13,9 +11,9 @@ info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+)
 filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 
 
 # globals
-min_confirm = None
-consensus = None
-verbose = False
+# min_confirm = None
+# consensus = None
+# verbose = False
 
 class VCF:
     def __init__(self, name=None, reference=None, source=None, date=None):
@@ -284,347 +282,478 @@ def easy_compare(s1, s2):
 
 
 # TODO: make some amalgam of sites, a la pan-genome...
-def compare_references(s1, s2):
-    s1_reads = {}
-    s2_reads = {}
+# def compare_references(s1, s2):
+#     s1_reads = {}
+#     s2_reads = {}
 
-    pileups = {
-        'confirmed': [],
-        'snps': [],
-        'ambs': [],
-        'likely_ref_s1': [],
-        'likely_ref_s2': [],
-        's1_only': [],
-        's2_only': [],
-        'problematic': [],
-        'multiple': [],
-        'non-reciprocal': [],
-        's1_pileups': [],
-        's2_pileups': [],
-    }
+#     pileups = {
+#         'confirmed': [],
+#         'snps': [],
+#         'ambs': [],
+#         'likely_ref_s1': [],
+#         'likely_ref_s2': [],
+#         's1_only': [],
+#         's2_only': [],
+#         'problematic': [],
+#         'multiple': [],
+#         'non-reciprocal': [],
+#         's1_pileups': [],
+#         's2_pileups': [],
+#     }
 
-    # ref confirmed in both (same nt)
-    confirmed = 0
-    # snp confirmed in both (same nt)
-    snps = 0
-    # amb calls in both
-    ambs = 0
-    # snp confirmed in s2, but likely ref allele from s1 ref
-    likely_ref_s1 = 0
-    # snp confirmed in s1, but likely ref allele from s2 ref
-    likely_ref_s2 = 0
-    # found only in s1
-    s1_only = 0
-    # found only in s2
-    s2_only = 0
+#     # ref confirmed in both (same nt)
+#     confirmed = 0
+#     # snp confirmed in both (same nt)
+#     snps = 0
+#     # amb calls in both
+#     ambs = 0
+#     # snp confirmed in s2, but likely ref allele from s1 ref
+#     likely_ref_s1 = 0
+#     # snp confirmed in s1, but likely ref allele from s2 ref
+#     likely_ref_s2 = 0
+#     # found only in s1
+#     s1_only = 0
+#     # found only in s2
+#     s2_only = 0
     
-    # various positions that don't make sense
-    problematic = 0
-    # multiple pileups match equally well between references
-    multiple = 0
-    # not the reciprocal best match
-    non_reciprocal = 0
+#     # various positions that don't make sense
+#     problematic = 0
+#     # multiple pileups match equally well between references
+#     multiple = 0
+#     # not the reciprocal best match
+#     non_reciprocal = 0
 
-    # already matched from p1
-    p2_analyzed = {}
-    # already matched from p2
-    p1_analyzed = {}
+#     # already matched from p1
+#     p2_analyzed = {}
+#     # already matched from p2
+#     p1_analyzed = {}
 
-    for read in s1.reads:
-        if read not in s2.reads:
-            s1_reads[read] = s1.reads[read]
-    for read in s2.reads:
-        if read not in s1.reads:
-            s2_reads[read] = s2.reads[read]
+#     for read in s1.reads:
+#         if read not in s2.reads:
+#             s1_reads[read] = s1.reads[read]
+#     for read in s2.reads:
+#         if read not in s1.reads:
+#             s2_reads[read] = s2.reads[read]
     
-    if len(s1_reads) == len(s1.reads) or len(s2_reads) == len(s2.reads):
-        print "No overlapping reads between comparitors!"
-        return
+#     if len(s1_reads) == len(s1.reads) or len(s2_reads) == len(s2.reads):
+#         print "No overlapping reads between comparitors!"
+#         return
 
-    for scaffold in s1.pileups:
-        for pos in s1.pileups[scaffold]:
-            s2_hits = {}
-            p1 = s1.pileups[scaffold][pos]
+#     for scaffold in s1.pileups:
+#         for pos in s1.pileups[scaffold]:
+#             s2_hits = {}
+#             p1 = s1.pileups[scaffold][pos]
              
-            if not p1.covered():
-                continue
-            for read in p1.reads:
-                if read in s1_reads:
-                    continue
-                if p1.reads[read][1] == 'del':
-                    continue
-                read_pos = p1.reads[read][0]
-                if read_pos not in s2.reads[read]:
-                    # this base did not align in s2 ref
-                    continue
-                hit = s2.reads[read][read_pos]
-                if hit not in s2_hits:
-                    s2_hits[hit] = 0
-                s2_hits[hit] += s2.pileups[hit[0]][hit[1]].mq_total
-            if not s2_hits:
-                # didn't find any pileups to match to in s2
-                continue
-            elif len(s2_hits) == 1:
-                # only one pileup matched! this is the one
-                top = s2_hits.keys()[0]
-            else:
-                top = max(s2_hits, key = lambda x: s2_hits[x])
-                if s2_hits[top] < sum(s2_hits.values())*.5:
-                    # there's no majority pileup
-                    continue
+#             if not p1.covered():
+#                 continue
+#             for read in p1.reads:
+#                 if read in s1_reads:
+#                     continue
+#                 if p1.reads[read][1] == 'del':
+#                     continue
+#                 read_pos = p1.reads[read][0]
+#                 if read_pos not in s2.reads[read]:
+#                     # this base did not align in s2 ref
+#                     continue
+#                 hit = s2.reads[read][read_pos]
+#                 if hit not in s2_hits:
+#                     s2_hits[hit] = 0
+#                 s2_hits[hit] += s2.pileups[hit[0]][hit[1]].mq_total
+#             if not s2_hits:
+#                 # didn't find any pileups to match to in s2
+#                 continue
+#             elif len(s2_hits) == 1:
+#                 # only one pileup matched! this is the one
+#                 top = s2_hits.keys()[0]
+#             else:
+#                 top = max(s2_hits, key = lambda x: s2_hits[x])
+#                 if s2_hits[top] < sum(s2_hits.values())*.5:
+#                     # there's no majority pileup
+#                     continue
             
-            # got a matching pileup in s2
-            if top in p2_analyzed:
-                #print "Already found position matching this pileup"
-                #print 'Pileups:', top, s2_hits[top], p2_analyzed[top]
-                if s2_hits[top] > p2_analyzed[top][1]:
-                    #print "This one is better!"
-                    p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
-                elif s2_hits[top] == p2_analyzed[top][1]:
-                    #print "Equally good pileups..." # not sure what to do here
-                    #continue
-                    pass
-                else:
-                    #print "Previous pileup was better."
-                    continue
-            else:
-                p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
+#             # got a matching pileup in s2
+#             if top in p2_analyzed:
+#                 #print "Already found position matching this pileup"
+#                 #print 'Pileups:', top, s2_hits[top], p2_analyzed[top]
+#                 if s2_hits[top] > p2_analyzed[top][1]:
+#                     #print "This one is better!"
+#                     p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
+#                 elif s2_hits[top] == p2_analyzed[top][1]:
+#                     #print "Equally good pileups..." # not sure what to do here
+#                     #continue
+#                     pass
+#                 else:
+#                     #print "Previous pileup was better."
+#                     continue
+#             else:
+#                 p2_analyzed[top] = ((scaffold, pos), s2_hits[top])
             
-            p1_analyzed[(scaffold, pos)] = (top, s2_hits[top])
-    #         p2 = s2.pileups[top[0]][top[1]]                
+#             p1_analyzed[(scaffold, pos)] = (top, s2_hits[top])
+#     #         p2 = s2.pileups[top[0]][top[1]]                
 
-    #         if not p2.covered():
-    #             s1_only += 1 # not covered in p2
-    #             pileups['s1_only'].append((p1, p2))
-    #             continue
+#     #         if not p2.covered():
+#     #             s1_only += 1 # not covered in p2
+#     #             pileups['s1_only'].append((p1, p2))
+#     #             continue
             
-    #         if p1.confirmed():
-    #             if p2.confirmed():
-    #                 if p1.refbase == p2.refbase:
-    #                     confirmed += 1 # confirmed ref bases and same
-    #                     pileups['confirmed'].append((p1, p2))
-    #                 else:
-    #                     problematic += 1 # confirmed diff ref bases
-    #                     pileups['problematic'].append((p1, p2))
-    #             elif p2.base_call() == p1.refbase:
-    #                 likely_ref_s1 += 1 # p2 SNP is actually ref base
-    #                 pileups['likely_ref_s1'].append((p1, p2))
-    #             elif p2.base_call():
-    #                 problematic += 1 # p2 SNP but p1 REF but diff SNP
-    #                 pileups['problematic'].append((p1, p2))
-    #             else:
-    #                 likely_ref_s1 += 1 # amb call in p2 but ref p1
-    #         elif p1.base_call():
-    #             if p2.confirmed():
-    #                 if p2.refbase == p1.base_call():
-    #                     likely_ref_s2 += 1 # p1 SNP is p2 ref base
-    #                     pileups['likely_ref_s2'].append((p1, p2))
-    #                 else:
-    #                     problematic += 1 # p1 SNP is not p2 ref base but p2 ref confirmed
-    #                     pileups['problematic'].append((p1, p2))
-    #             elif p2.base_call() == p1.base_call():
-    #                 snps += 1 # both snps and same snp called
-    #                 pileups['snps'].append((p1, p2))
-    #         else:
-    #             if p2.confirmed():
-    #                 likely_ref_s2 += 1 # amb call in p1 but p2 ref
-    #                 pileups['likely_ref_s2'].append((p1, p2))
-    #             elif p2.base_call():
-    #                 problematic += 1 # amb call in p1 but snp in p2
-    #                 pileups['problematic'].append((p1, p2))
-    #             else:
-    #                 ambs += 1 # amb call in both
-    #                 pileups['ambs'].append((p1, p2))
+#     #         if p1.confirmed():
+#     #             if p2.confirmed():
+#     #                 if p1.refbase == p2.refbase:
+#     #                     confirmed += 1 # confirmed ref bases and same
+#     #                     pileups['confirmed'].append((p1, p2))
+#     #                 else:
+#     #                     problematic += 1 # confirmed diff ref bases
+#     #                     pileups['problematic'].append((p1, p2))
+#     #             elif p2.base_call() == p1.refbase:
+#     #                 likely_ref_s1 += 1 # p2 SNP is actually ref base
+#     #                 pileups['likely_ref_s1'].append((p1, p2))
+#     #             elif p2.base_call():
+#     #                 problematic += 1 # p2 SNP but p1 REF but diff SNP
+#     #                 pileups['problematic'].append((p1, p2))
+#     #             else:
+#     #                 likely_ref_s1 += 1 # amb call in p2 but ref p1
+#     #         elif p1.base_call():
+#     #             if p2.confirmed():
+#     #                 if p2.refbase == p1.base_call():
+#     #                     likely_ref_s2 += 1 # p1 SNP is p2 ref base
+#     #                     pileups['likely_ref_s2'].append((p1, p2))
+#     #                 else:
+#     #                     problematic += 1 # p1 SNP is not p2 ref base but p2 ref confirmed
+#     #                     pileups['problematic'].append((p1, p2))
+#     #             elif p2.base_call() == p1.base_call():
+#     #                 snps += 1 # both snps and same snp called
+#     #                 pileups['snps'].append((p1, p2))
+#     #         else:
+#     #             if p2.confirmed():
+#     #                 likely_ref_s2 += 1 # amb call in p1 but p2 ref
+#     #                 pileups['likely_ref_s2'].append((p1, p2))
+#     #             elif p2.base_call():
+#     #                 problematic += 1 # amb call in p1 but snp in p2
+#     #                 pileups['problematic'].append((p1, p2))
+#     #             else:
+#     #                 ambs += 1 # amb call in both
+#     #                 pileups['ambs'].append((p1, p2))
     
-    # print "So far...", s1_only, confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, problematic
+#     # print "So far...", s1_only, confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, problematic
 
-    for scaffold in s2.pileups:
-        for pos in s2.pileups[scaffold]:
-            # if (scaffold, pos) in p2_analyzed:
-            #     # we have already gotten this pileup
-            #     continue
-            s1_hits = {}
-            p2 = s2.pileups[scaffold][pos]
-            if not p2.covered():
-                continue
-            for read in p2.reads:
-                if read in s2_reads:
-                    continue
-                if p2.reads[read][1] == 'del':
-                    continue
-                read_pos = p2.reads[read][0]
-                if read_pos not in s1.reads[read]:
-                    # this base did not align in s1 ref
-                    continue
-                hit = s1.reads[read][read_pos]
-                if hit not in s1_hits:
-                    s1_hits[hit] = 0
-                s1_hits[hit] += s1.pileups[hit[0]][hit[1]].mq_total
-            if not s1_hits:
-                # didn't find any pileups to match to in s1
-                continue
-            elif len(s1_hits) == 1:
-                # only one pileup matched! this is the one
-                top = s1_hits.keys()[0]
-            else:
-                top = max(s1_hits, key = lambda x: s1_hits[x])
-                if s1_hits[top] < sum(s1_hits.values())*.5:
-                    # there's no majority pileup
-                    continue
+#     for scaffold in s2.pileups:
+#         for pos in s2.pileups[scaffold]:
+#             # if (scaffold, pos) in p2_analyzed:
+#             #     # we have already gotten this pileup
+#             #     continue
+#             s1_hits = {}
+#             p2 = s2.pileups[scaffold][pos]
+#             if not p2.covered():
+#                 continue
+#             for read in p2.reads:
+#                 if read in s2_reads:
+#                     continue
+#                 if p2.reads[read][1] == 'del':
+#                     continue
+#                 read_pos = p2.reads[read][0]
+#                 if read_pos not in s1.reads[read]:
+#                     # this base did not align in s1 ref
+#                     continue
+#                 hit = s1.reads[read][read_pos]
+#                 if hit not in s1_hits:
+#                     s1_hits[hit] = 0
+#                 s1_hits[hit] += s1.pileups[hit[0]][hit[1]].mq_total
+#             if not s1_hits:
+#                 # didn't find any pileups to match to in s1
+#                 continue
+#             elif len(s1_hits) == 1:
+#                 # only one pileup matched! this is the one
+#                 top = s1_hits.keys()[0]
+#             else:
+#                 top = max(s1_hits, key = lambda x: s1_hits[x])
+#                 if s1_hits[top] < sum(s1_hits.values())*.5:
+#                     # there's no majority pileup
+#                     continue
             
-            # got a matching pileup in s1
-            if top in p1_analyzed:
-                #print "Already found position matching this pileup"
-                #print top, s1_hits[top], p1_analyzed[top]
-                if s1_hits[top] > p1_analyzed[top][1]:
-                    p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
-                    #print "This one is better!"
-                if s1_hits[top] == p1_analyzed[top][1]:
-                    #print "Equally good..."
-                    #continue
-                    pass
-                else:
-                    #print "Previous pileup was better."
-                    continue
-            else:
-                p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
+#             # got a matching pileup in s1
+#             if top in p1_analyzed:
+#                 #print "Already found position matching this pileup"
+#                 #print top, s1_hits[top], p1_analyzed[top]
+#                 if s1_hits[top] > p1_analyzed[top][1]:
+#                     p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
+#                     #print "This one is better!"
+#                 if s1_hits[top] == p1_analyzed[top][1]:
+#                     #print "Equally good..."
+#                     #continue
+#                     pass
+#                 else:
+#                     #print "Previous pileup was better."
+#                     continue
+#             else:
+#                 p1_analyzed[top] = ((scaffold, pos), s1_hits[top])
             
-            p2_analyzed[(scaffold, pos)] = (top, s1_hits[top])
+#             p2_analyzed[(scaffold, pos)] = (top, s1_hits[top])
 
-            # p1 = s1.pileups[top[0]][top[1]]                
+#             # p1 = s1.pileups[top[0]][top[1]]                
 
-            # if not p1.covered():
-            #     s2_only += 1 # not covered in p2
-            #     pileups['s2_only'].append((p1, p2))
-            #     continue
-            # if p2.confirmed():
-            #     if p1.confirmed():
-            #         if p1.refbase == p2.refbase:
-            #             confirmed += 1 # confirmed ref bases and same
-            #             pileups['confirmed'].append((p1, p2))
-            #         else:
-            #             problematic += 1 # confirmed diff ref bases
-            #             pileups['problematic'].append((p1, p2))
-            #     elif p1.base_call() == p2.refbase:
-            #         likely_ref_s2 += 1 # p1 SNP is actually ref base
-            #         pileups['likely_ref_s2'].append((p1, p2))
-            #     elif p1.base_call():
-            #         problematic += 1 # p1 SNP but p1 REF but diff SNP
-            #         pileups['problematic'].append((p1, p2))
-            #     else:
-            #         likely_ref_s2 += 1 # amb call in p1 but ref p2
-            #         pileups['likely_ref_s2'].append((p1, p2))
-            # elif p2.base_call():
-            #     if p1.confirmed():
-            #         if p1.refbase == p2.base_call():
-            #             likely_ref_s1 += 1 # p2 SNP is p1 ref base
-            #             pileups['likely_ref_s1'].append((p1, p2))
-            #         else:
-            #             problematic += 1 # p2 SNP is not p1 ref base but p1 ref confirmed
-            #             pileups['problematic'].append((p1, p2))
-            #     elif p2.base_call() == p1.base_call():
-            #         snps += 1 # both snps and same snp called
-            #         pileups['snps'].append((p1, p2))
-            # else:
-            #     if p1.confirmed():
-            #         likely_ref_s1 += 1 # amb call in p2 but p1 ref
-            #         pileups['likely_ref_s1'].append((p1, p2))
-            #     elif p1.base_call():
-            #         problematic += 1 # amb call in p2 but snp in p1
-            #         pileups['problematic'].append((p1, p2))
-            #     else:
-            #         ambs += 1 # amb call in both
-            #         pileups['ambs'].append((p1, p2))
+#             # if not p1.covered():
+#             #     s2_only += 1 # not covered in p2
+#             #     pileups['s2_only'].append((p1, p2))
+#             #     continue
+#             # if p2.confirmed():
+#             #     if p1.confirmed():
+#             #         if p1.refbase == p2.refbase:
+#             #             confirmed += 1 # confirmed ref bases and same
+#             #             pileups['confirmed'].append((p1, p2))
+#             #         else:
+#             #             problematic += 1 # confirmed diff ref bases
+#             #             pileups['problematic'].append((p1, p2))
+#             #     elif p1.base_call() == p2.refbase:
+#             #         likely_ref_s2 += 1 # p1 SNP is actually ref base
+#             #         pileups['likely_ref_s2'].append((p1, p2))
+#             #     elif p1.base_call():
+#             #         problematic += 1 # p1 SNP but p1 REF but diff SNP
+#             #         pileups['problematic'].append((p1, p2))
+#             #     else:
+#             #         likely_ref_s2 += 1 # amb call in p1 but ref p2
+#             #         pileups['likely_ref_s2'].append((p1, p2))
+#             # elif p2.base_call():
+#             #     if p1.confirmed():
+#             #         if p1.refbase == p2.base_call():
+#             #             likely_ref_s1 += 1 # p2 SNP is p1 ref base
+#             #             pileups['likely_ref_s1'].append((p1, p2))
+#             #         else:
+#             #             problematic += 1 # p2 SNP is not p1 ref base but p1 ref confirmed
+#             #             pileups['problematic'].append((p1, p2))
+#             #     elif p2.base_call() == p1.base_call():
+#             #         snps += 1 # both snps and same snp called
+#             #         pileups['snps'].append((p1, p2))
+#             # else:
+#             #     if p1.confirmed():
+#             #         likely_ref_s1 += 1 # amb call in p2 but p1 ref
+#             #         pileups['likely_ref_s1'].append((p1, p2))
+#             #     elif p1.base_call():
+#             #         problematic += 1 # amb call in p2 but snp in p1
+#             #         pileups['problematic'].append((p1, p2))
+#             #     else:
+#             #         ambs += 1 # amb call in both
+#             #         pileups['ambs'].append((p1, p2))
     
     
-    temp = [x[0] for x in p1_analyzed.values()]
-    temp2 = [x[0] for x in p2_analyzed.values()]
+#     temp = [x[0] for x in p1_analyzed.values()]
+#     temp2 = [x[0] for x in p2_analyzed.values()]
 
-    for p1_loc in p1_analyzed:
-        p2_loc = p1_analyzed[p1_loc][0]
+#     for p1_loc in p1_analyzed:
+#         p2_loc = p1_analyzed[p1_loc][0]
 
-        p1 = s1.pileups[p1_loc[0]][p1_loc[1]]
-        p2 = s2.pileups[p2_loc[0]][p2_loc[1]]
+#         p1 = s1.pileups[p1_loc[0]][p1_loc[1]]
+#         p2 = s2.pileups[p2_loc[0]][p2_loc[1]]
 
-        if temp2.count(p1_loc) > 1:
-            pileups['multiple'].append((p1, p2))
-            multiple += 1
-            continue
-        if temp.count(p2_loc) > 1:
-            pileups['multiple'].append((p1, p2))
-            multiple += 1
-            continue
+#         if temp2.count(p1_loc) > 1:
+#             pileups['multiple'].append((p1, p2))
+#             multiple += 1
+#             continue
+#         if temp.count(p2_loc) > 1:
+#             pileups['multiple'].append((p1, p2))
+#             multiple += 1
+#             continue
 
-        if p2_analyzed[p2_loc][0] != p1_loc:
-            pileups['non-reciprocal'].append((p1, p2))
-            non_reciprocal += 1
-            continue
+#         if p2_analyzed[p2_loc][0] != p1_loc:
+#             pileups['non-reciprocal'].append((p1, p2))
+#             non_reciprocal += 1
+#             continue
         
-        if not p1.covered():
-            s2_only += 1 # not covered in p2
-            pileups['s2_only'].append((p1, p2))
-            continue
-        if not p2.covered():
-            s1_only += 1 # not covered in p1
-            pileups['s1_only'].append((p1, p2))
-            continue
-        if p2.confirmed():
-            if p1.confirmed():
-                if p1.refbase == p2.refbase:
-                    confirmed += 1 # confirmed ref bases and same
-                    pileups['confirmed'].append((p1, p2))
-                else:
-                    problematic += 1 # confirmed diff ref bases
-                    pileups['problematic'].append((p1, p2))
-            elif p1.base_call() == p2.refbase:
-                likely_ref_s2 += 1 # p1 SNP is actually ref base
-                pileups['likely_ref_s2'].append((p1, p2))
-            elif p1.base_call():
-                problematic += 1 # p1 SNP but p1 REF but diff SNP
-                pileups['problematic'].append((p1, p2))
-            else:
-                likely_ref_s2 += 1 # amb call in p1 but ref p2
-                pileups['likely_ref_s2'].append((p1, p2))
-        elif p2.base_call():
-            if p1.confirmed():
-                if p1.refbase == p2.base_call():
-                    likely_ref_s1 += 1 # p2 SNP is p1 ref base
-                    pileups['likely_ref_s1'].append((p1, p2))
-                else:
-                    problematic += 1 # p2 SNP is not p1 ref base but p1 ref confirmed
-                    pileups['problematic'].append((p1, p2))
-            elif p2.base_call() == p1.base_call():
-                snps += 1 # both snps and same snp called
-                pileups['snps'].append((p1, p2))
-        else:
-            if p1.confirmed():
-                likely_ref_s1 += 1 # amb call in p2 but p1 ref
-                pileups['likely_ref_s1'].append((p1, p2))
-            elif p1.base_call():
-                problematic += 1 # amb call in p2 but snp in p1
-                pileups['problematic'].append((p1, p2))
-            else:
-                ambs += 1 # amb call in both
-                pileups['ambs'].append((p1, p2))
+#         if not p1.covered():
+#             s2_only += 1 # not covered in p2
+#             pileups['s2_only'].append((p1, p2))
+#             continue
+#         if not p2.covered():
+#             s1_only += 1 # not covered in p1
+#             pileups['s1_only'].append((p1, p2))
+#             continue
+#         if p2.confirmed():
+#             if p1.confirmed():
+#                 if p1.refbase == p2.refbase:
+#                     confirmed += 1 # confirmed ref bases and same
+#                     pileups['confirmed'].append((p1, p2))
+#                 else:
+#                     problematic += 1 # confirmed diff ref bases
+#                     pileups['problematic'].append((p1, p2))
+#             elif p1.base_call() == p2.refbase:
+#                 likely_ref_s2 += 1 # p1 SNP is actually ref base
+#                 pileups['likely_ref_s2'].append((p1, p2))
+#             elif p1.base_call():
+#                 problematic += 1 # p1 SNP but p1 REF but diff SNP
+#                 pileups['problematic'].append((p1, p2))
+#             else:
+#                 likely_ref_s2 += 1 # amb call in p1 but ref p2
+#                 pileups['likely_ref_s2'].append((p1, p2))
+#         elif p2.base_call():
+#             if p1.confirmed():
+#                 if p1.refbase == p2.base_call():
+#                     likely_ref_s1 += 1 # p2 SNP is p1 ref base
+#                     pileups['likely_ref_s1'].append((p1, p2))
+#                 else:
+#                     problematic += 1 # p2 SNP is not p1 ref base but p1 ref confirmed
+#                     pileups['problematic'].append((p1, p2))
+#             elif p2.base_call() == p1.base_call():
+#                 snps += 1 # both snps and same snp called
+#                 pileups['snps'].append((p1, p2))
+#         else:
+#             if p1.confirmed():
+#                 likely_ref_s1 += 1 # amb call in p2 but p1 ref
+#                 pileups['likely_ref_s1'].append((p1, p2))
+#             elif p1.base_call():
+#                 problematic += 1 # amb call in p2 but snp in p1
+#                 pileups['problematic'].append((p1, p2))
+#             else:
+#                 ambs += 1 # amb call in both
+#                 pileups['ambs'].append((p1, p2))
 
-    s1_pileups = 0
-    s2_pileups = 0
-    for read in s1_reads:
-        for pos in s1_reads[read]:
-            hit = s1_reads[read][pos]
-            if hit not in p1_analyzed:
-                s1_pileups += 1 # pileup not found previously
-                pileups['s1_pileups'].append(s1.pileups[hit[0]][hit[1]])
+#     s1_pileups = 0
+#     s2_pileups = 0
+#     for read in s1_reads:
+#         for pos in s1_reads[read]:
+#             hit = s1_reads[read][pos]
+#             if hit not in p1_analyzed:
+#                 s1_pileups += 1 # pileup not found previously
+#                 pileups['s1_pileups'].append(s1.pileups[hit[0]][hit[1]])
     
-    for read in s2_reads:
-        for pos in s2_reads[read]:
-            hit = s2_reads[read][pos]
-            if hit not in p2_analyzed:
-                s2_pileups += 1 # pileup not found previously
-                pileups['s2_pileups'].append(s2.pileups[hit[0]][hit[1]])
+#     for read in s2_reads:
+#         for pos in s2_reads[read]:
+#             hit = s2_reads[read][pos]
+#             if hit not in p2_analyzed:
+#                 s2_pileups += 1 # pileup not found previously
+#                 pileups['s2_pileups'].append(s2.pileups[hit[0]][hit[1]])
 
 
-    return (pileups, confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, s1_only, s2_only, problematic, len(s1_reads), len(s2_reads), s1_pileups, s2_pileups)
+#     return (pileups, confirmed, snps, ambs, likely_ref_s1, likely_ref_s2, s1_only, s2_only, problematic, len(s1_reads), len(s2_reads), s1_pileups, s2_pileups)
+
+
+def ambiguous_to_refs(pileup1, pileup2):
+    others1 = pileup1.sort_alts()
+    others2 = pileup2.sort_alts()
+
+    if others1[0] != others2[0] and others1[1] != others2[1]:
+        if others1[1] != others2[0] and others1[0] != others2[1]:
+            return 'diff_amb'
+
+    if others1[0] == pileup1.refbase:
+        if others1[1] == pileup2.refbase:
+            return 'ref1_ref2_amb'
+        else:
+            return 'ref1_unknown_amb'
+    elif others1[0] == pileup2.refbase:
+        if others1[1] == pileup1.refbase:
+            return 'ref2_ref1_amb'
+        else:
+            return 'ref2_unknown_amb'
+    
+
+
+
+def compare_pileups(pileup1, pileup2):
+    if pileup1.covered():
+        if pileup2.covered():
+            if pileup1.confirmed():
+                if pileup2.confirmed():
+                    if pileup1.refbase == pileup2.refbase:
+                        return 'ref_confirmed'
+                    else:
+                        return 'diff_confirmed'
+                else:
+                    snp2 = pileup2.base_call()
+                    if snp2:
+                        if snp2 == pileup1.refbase:
+                            return 'likely_ref1'
+                        else:
+                            return 'ref1_diff_snp2'
+                    else:
+                        return 'ref1_amb2'
+            
+            # pileup1 not ref confirmed
+            else:
+                snp1 = pileup1.base_call()
+                if pileup2.confirmed():
+                    if snp1:
+                        if snp1 == pileup2.refbase:
+                            return 'likely_ref2'
+                        else:
+                            return 'ref2_diff_snp1'
+                    else:
+                        return 'ref2_amb1'
+                
+                # pileup2 not ref confirmed
+                else:
+                    snp2 = pileup2.base_call()
+                    if snp2:
+                        if snp2 == snp1:
+                            return 'same_snp'
+                        else:
+                            return 'diff_snp'
+                    else:
+                        if snp1:
+                            return 'snp1_amb2'
+                        else:
+                            return ambiguous_to_refs(pileup1, pileup2)
+
+        # pileup1 covered, pileup2 not
+        else:
+            return 'ref1_covered'
+    
+    # pileup1 not covered
+    else:
+        if pileup2.covered():
+            return 'ref2_covered'
+        else:
+            return 'uncovered'
+
+
+def match_pileups(matching, ref1, ref2):
+    results = {}
+    for (scaffold, refpos) in matching.keys():
+        comparison = None
+        # only one pileup matches between references
+        if len(matching[(scaffold, refpos)]) == 1:
+            scaffold2, refpos2 = matching[(scaffold, refpos)].keys()[0]
+            comparison = compare_pileups(ref1.pileups[scaffold][refpos], ref2.pileups[scaffold2][refpos2])
+        
+        # more than one pileup matches
+        else:
+            top = max(matching[(scaffold, refpos)], key = lambda x: matching[(scaffold, refpos)][x])
+            # there is a majority of one pileup
+            if matching[(scaffold, refpos)][top] > 0.5 * sum(matching[(scaffold, refpos)].values()):
+                scaffold2, refpos2 = top
+                comparison = compare_pileups(ref1.pileups[scaffold][refpos], ref2.pileups[scaffold2][refpos2])
+        
+        if comparison:
+            if comparison not in results:
+                results[comparison] = []
+            results[comparison].append((scaffold, refpos, scaffold2, refpos2))
+
+    return results
+        
+def compare_read(matching, read, ref1, ref2):
+    for pos in ref1.reads[read]:
+        (base, scaffold, refpos) = ref1.reads[read][pos]
+        (scaffold2, refpos2) = ref2.reads[read][pos][1:]
+        if (scaffold, refpos) not in matching:
+            matching[(scaffold, refpos)] = {}
+        if (scaffold2, refpos2) not in matching[(scaffold, refpos)]:
+            matching[(scaffold, refpos)][(scaffold2, refpos2)] = 0
+        matching[(scaffold, refpos)][(scaffold2, refpos2)] += 1
+
+def compare_references(ref1, ref2):
+
+    r1_reads = []
+    r2_reads = []
+    matching = {}
+    for read in ref1.reads:
+        if read not in ref2.reads:
+            r1_reads.append(read)
+            continue
+        compare_read(matching, read, ref1, ref2)
+    
+    for read in ref2.reads:
+        if read not in ref1.reads:
+            r2_reads.append(read)
+    
+    match_pileups(matching)
 
 
 
@@ -632,20 +761,20 @@ def compare_references(s1, s2):
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("--references", action='store_true', help="Compare between references (within samples)")
-parser.add_argument("--minconfirm", type=int, default=50, help='minimum pileup quality sum to confirm reference or SNP')
-parser.add_argument("--consensus", type=float, default=0.9, help='minimum fraction of reads to confirm reference or SNP')
+parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
+parser.add_argument("--consensus", type=float, help='minimum fraction of read quality to confirm reference or SNP')
 parser.add_argument('out', help='Output results to file')
-parser.add_argument("file", nargs='+', help="file from straingr tool")
+parser.add_argument("file", nargs='+', help="file from straingr tool (vcf or pkl)")
 args = parser.parse_args()
 
 if args.verbose:
-    verbose = args.verbose
+    verbose = grtools.verbose
 
 if args.references:
     if args.minconfirm:
-        min_confirm = args.minconfirm
+        min_confirm = grtools.minconfirm
     if args.consensus:
-        consensus = args.consensus
+        consensus = grtools.consensus
     
     print "Comparing within samples between references"
     all_pileups = {}

@@ -6,8 +6,8 @@ import pysam
 import numpy as np
 import gzip
 import cPickle
-import kmertools
 
+import kmertools
 import grtools
 
 from datetime import date
@@ -15,10 +15,10 @@ from datetime import date
 
 
 # globals
-min_gap = 2000
+# min_gap = 2000
 verbose = False
 
-bases = "ACGT"
+# bases = "ACGT"
 
 vcf_header = \
 """##fileformat=VCFv4.0
@@ -53,217 +53,220 @@ def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ
     return string+"\n"
 
 
-def pct(numerator, denominator):
-    """Makes into a percent"""
-    if numerator > 0 and denominator > 0:
-        return (100.0 * numerator) / denominator
-    return 0.0
+# def pct(numerator, denominator):
+#     """Makes into a percent"""
+#     if numerator > 0 and denominator > 0:
+#         return (100.0 * numerator) / denominator
+#     return 0.0
 
-def process_scaffold(bam, scaffold, refseq):
-    """Scan the pileups for each locus in the scaffold"""
-    length = len(refseq)
-    print "Processing", scaffold, length
-    confirmed = 0
-    covered = 0
-    snps = 0
-    unmapped = 0
-    goodcoverage = 0
-    #badcoverage = 0
-    #unmappable = 0
+# def process_scaffold(bam, scaffold, refseq):
+#     """Scan the pileups for each locus in the scaffold"""
+#     length = len(refseq)
+#     print "Processing", scaffold, length
+#     confirmed = 0
+#     covered = 0
+#     snps = 0
+#     unmapped = 0
+#     goodcoverage = 0
+#     #badcoverage = 0
+#     #unmappable = 0
 
-    #pileups = [grtools.Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
-    pileups = []
+#     #pileups = [grtools.Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
+#     pileups = []
 
-    last_covered = -1
-    gaps = []
+#     last_covered = -1
+#     gaps = []
     
-    for column in bam.pileup(scaffold):
-        refpos = column.reference_pos
-        pileup = grtools.Pileup(column.reference_name, refseq, refpos, column.pileups)
-        if verbose:
-            refbase = refseq[refpos]
-            print "Ref:", column.reference_name, refpos, refbase, column.nsegments
-        goodcoverage += pileup.count
-        #badcoverage += pileup.bad
-        #unmappable += pileup.unmapped
-        if pileup.covered():
-            covered += 1
-            if pileup.confirmed():
-                confirmed += 1
-            elif pileup.base_call():
-                snps += 1
-            if refpos - last_covered > min_gap:
-                gap = (last_covered + 1, refpos - last_covered)
-                print "Coverage gap:", gap[0], gap[1]
-                gaps.append(gap)
-            last_covered = refpos
-        elif pileup.unmappable():
-            unmapped += 1
-            # not a real gap, just can't map to this region
-            if refpos - last_covered > min_gap:
-                gap = (last_covered + 1, refpos - last_covered)
-                print "Coverage gap:", gap[0], gap[1]
-                gaps.append(gap)
-            last_covered = refpos
+#     for column in bam.pileup(scaffold):
+#         refpos = column.reference_pos
+#         pileup = grtools.Pileup(column.reference_name, refseq, refpos, column.pileups)
+#         if verbose:
+#             refbase = refseq[refpos]
+#             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
+#         goodcoverage += pileup.count
+#         #badcoverage += pileup.bad
+#         #unmappable += pileup.unmapped
+#         if pileup.covered():
+#             covered += 1
+#             if pileup.confirmed():
+#                 confirmed += 1
+#             elif pileup.base_call():
+#                 snps += 1
+#             if refpos - last_covered > min_gap:
+#                 gap = (last_covered + 1, refpos - last_covered)
+#                 print "Coverage gap:", gap[0], gap[1]
+#                 gaps.append(gap)
+#             last_covered = refpos
+#         elif pileup.unmappable():
+#             unmapped += 1
+#             # not a real gap, just can't map to this region
+#             if refpos - last_covered > min_gap:
+#                 gap = (last_covered + 1, refpos - last_covered)
+#                 print "Coverage gap:", gap[0], gap[1]
+#                 gaps.append(gap)
+#             last_covered = refpos
         
-        if verbose:
-            print pileup, pileup.confirmed()
-        pileups.append(pileup)
+#         if verbose:
+#             print pileup, pileup.confirmed()
+#         pileups.append(pileup)
 
-    #total = length
-    coverage = float(goodcoverage) / float(length)
-    #total_coverage = float(goodcoverage + badcoverage + unmappable) / length
-    #pct_good = total_coverage and 100.0 * coverage / total_coverage
-    mixed = covered - (confirmed + snps)
+#     #total = length
+#     coverage = float(goodcoverage) / float(length)
+#     #total_coverage = float(goodcoverage + badcoverage + unmappable) / length
+#     #pct_good = total_coverage and 100.0 * coverage / total_coverage
+#     mixed = covered - (confirmed + snps)
 
-    print "good coverage: %.1fx" % (coverage,)
-    print "covered: %d %.1f%%" % (covered, pct(covered, length))
-    print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
-    print "snps: %d %.3f%%" % (snps, pct(snps, covered))
-    if snps > 0:
-        print "snp rate: %.0f" % (float(covered) / float(snps))
-    print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
-    if mixed > 0:
-        mixed_rate = float(covered) / float(mixed)
-        if mixed_rate > 0:
-            mixed_quality = math.log10(mixed_rate) * 10.0
-        else:
-            mixed_quality = 0
-        print "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
-    print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
-    print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
+#     print "good coverage: %.1fx" % (coverage,)
+#     print "covered: %d %.1f%%" % (covered, pct(covered, length))
+#     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
+#     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
+#     if snps > 0:
+#         print "snp rate: %.0f" % (float(covered) / float(snps))
+#     print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
+#     if mixed > 0:
+#         mixed_rate = float(covered) / float(mixed)
+#         if mixed_rate > 0:
+#             mixed_quality = math.log10(mixed_rate) * 10.0
+#         else:
+#             mixed_quality = 0
+#         print "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
+#     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
+#     print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
     
-    if len(pileups):
-        avg_count = goodcoverage / len(pileups)
-        if avg_count > 3:
-            # threshold is 99.9999%ile of poissons distribution at average coverage
-            threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.9999))
-        else:
-            # at lower coverages, just set it to 15
-            threshold = 15
-        for pileup in pileups:
-            pileup.high_coverage(threshold)
+#     if len(pileups):
+#         avg_count = goodcoverage / len(pileups)
+#         if avg_count > 3:
+#             # threshold is 99.9999%ile of poissons distribution at average coverage
+#             threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.9999))
+#         else:
+#             # at lower coverages, just set it to 15
+#             threshold = 15
+#         for pileup in pileups:
+#             pileup.high_coverage(threshold)
     
-    return pileups
+#     return pileups
 
 
 def write_vcf(pileups, output=None, date=date.today(), reference=None):
     """Write SNPs to a VCF file"""
     with open(output, 'wb') as w:
         w.write(vcf_header.format(date=date, ref=reference))
-        for pileup in pileups:
-            af = ''
-            sbq = ''
-            smq = ''
-            ALT = '.'
-            
-            # start with qual as ref
-            if pileup.ref_count:
-                QUAL = np.sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
-            else:
-                QUAL = 0
-            
-            # higher pileup than expected by random chance
-            if pileup.hc:
-                FILTER = "hc"
-            
-            # not enough reads to say anything
-            elif not pileup.covered():
-                # due to not being mappable
-                if pileup.unmappable():
-                    FILTER = 'um'
-                # just not covered enough
-                else:
-                    FILTER = "cv"
-            
-            # reference has been confirmed
-            elif pileup.confirmed():
-                FILTER="PASS"
-            
-            # reference not confirmed and there are other alleles
-            elif pileup.others:
-                snp = pileup.base_call()
+        # for pileup in pileups:
+        for scaffold in pileups.pileups:
+            for refpos in pileups.pileups[scaffold]:
+                pileup = pileups.pileups[scaffold][refpos]
+                af = ''
+                sbq = ''
+                smq = ''
+                ALT = '.'
                 
-                # confirmed a snp
-                if snp:
-                    QUAL = np.sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
-                    FILTER="PASS"
-                    ALT = snp
-                    af = format(float(pileup.others[snp][0])/pileup.count, ".3f").rstrip('0').rstrip('.')
-                    sbq = format(QUAL, ".0f")
-                    smq = format(np.sqrt(float(pileup.others[snp][2])/pileup.others[snp][0]), ".0f")
-                
-                # ambiguous call
+                # start with qual as ref
+                if pileup.ref_count:
+                    QUAL = np.sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
                 else:
                     QUAL = 0
-                    snp_count = 0
-                    for _snp in pileup.others:
-                        QUAL += pileup.others[_snp][1]
-                        snp_count += pileup.others[_snp][0]
-                    # qual is RMS of all SNPs... is this right?
-                    # perhaps qual of reference is better, but not sure
-                    QUAL = np.sqrt(float(QUAL)/snp_count)
-                    FILTER="amb"
                 
-                    sorted_alt = pileup.sort_alts()
-                    ALT = ','.join(sorted_alt)
+                # higher pileup than expected by random chance
+                if pileup.hc:
+                    FILTER = "hc"
+                
+                # not enough reads to say anything
+                elif not pileup.covered():
+                    # due to not being mappable
+                    if pileup.unmappable():
+                        FILTER = 'um'
+                    # just not covered enough
+                    else:
+                        FILTER = "cv"
+                
+                # reference has been confirmed
+                elif pileup.confirmed():
+                    FILTER="PASS"
+                
+                # reference not confirmed and there are other alleles
+                elif pileup.others:
+                    snp = pileup.base_call()
                     
-                    for alt in sorted_alt:
-                        temp = pileup.others[alt]
-                        if af:
-                            af += ','
-                            sbq += ','
-                            smq += ','
-                        af += format(float(temp[0])/pileup.count, ".3f").rstrip('0').rstrip('.')
-                        sbq += format(np.sqrt(float(temp[1])/temp[0]), ".0f")
-                        smq += format(np.sqrt(float(temp[2])/temp[0]), ".0f")
-            
-            # else should not have any cases...
-            else:
-                print "Uh oh...", str(pileup)
-            
-            if pileup.count:
-                BQ = np.sqrt(float(pileup.qual_ss)/pileup.count)
-                MQ = np.sqrt(float(pileup.mq_ss)/pileup.count)
-            else:
-                BQ = 0
-                MQ = 0
-            
-            
-            w.write(vcf_row(CHROM=pileup.chrom,
-                                   POS=pileup.pos,
-                                   ID='.',
-                                   REF=pileup.refbase,
-                                   ALT=ALT,
-                                   QUAL=QUAL,
-                                   FILTER=FILTER,
-                                   DP=pileup.count,
-                                   RF=pileup.ref_fraction(),
-                                   BQ=BQ,
-                                   MQ=MQ,
-                                   AF=af,
-                                   SBQ=sbq,
-                                   SMQ=smq,
-                                  ))
+                    # confirmed a snp
+                    if snp:
+                        QUAL = np.sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
+                        FILTER="PASS"
+                        ALT = snp
+                        af = format(float(pileup.others[snp][0])/pileup.count, ".3f").rstrip('0').rstrip('.')
+                        sbq = format(QUAL, ".0f")
+                        smq = format(np.sqrt(float(pileup.others[snp][2])/pileup.others[snp][0]), ".0f")
+                    
+                    # ambiguous call
+                    else:
+                        QUAL = 0
+                        snp_count = 0
+                        for _snp in pileup.others:
+                            QUAL += pileup.others[_snp][1]
+                            snp_count += pileup.others[_snp][0]
+                        # qual is RMS of all SNPs... is this right?
+                        # perhaps qual of reference is better, but not sure
+                        QUAL = np.sqrt(float(QUAL)/snp_count)
+                        FILTER="amb"
+                    
+                        sorted_alt = pileup.sort_alts()
+                        ALT = ','.join(sorted_alt)
+                        
+                        for alt in sorted_alt:
+                            temp = pileup.others[alt]
+                            if af:
+                                af += ','
+                                sbq += ','
+                                smq += ','
+                            af += format(float(temp[0])/pileup.count, ".3f").rstrip('0').rstrip('.')
+                            sbq += format(np.sqrt(float(temp[1])/temp[0]), ".0f")
+                            smq += format(np.sqrt(float(temp[2])/temp[0]), ".0f")
+                
+                # else should not have any cases...
+                else:
+                    print "Uh oh...", str(pileup)
+                
+                if pileup.count:
+                    BQ = np.sqrt(float(pileup.qual_ss)/pileup.count)
+                    MQ = np.sqrt(float(pileup.mq_ss)/pileup.count)
+                else:
+                    BQ = 0
+                    MQ = 0
+                
+                
+                w.write(vcf_row(CHROM=pileup.chrom,
+                                    POS=pileup.pos,
+                                    ID='.',
+                                    REF=pileup.refbase,
+                                    ALT=ALT,
+                                    QUAL=QUAL,
+                                    FILTER=FILTER,
+                                    DP=pileup.count,
+                                    RF=pileup.ref_fraction(),
+                                    BQ=BQ,
+                                    MQ=MQ,
+                                    AF=af,
+                                    SBQ=sbq,
+                                    SMQ=smq,
+                                    ))
 
 
 
-def process_bamfile(reference, bamfile):
-    """Process a bamfile
-    """
-    print "Scanning BAM file: %s" % bamfile
-    bam = pysam.AlignmentFile(bamfile, "rb")
-    all_pileups = []
-    for scaffold in bam.references:
-        try:
-            pileups = process_scaffold(bam, scaffold, reference[scaffold])
-            all_pileups.extend(pileups)
-        except KeyboardInterrupt:
-            raise e
-        except Exception as e:
-            print "Error in straingr: %s" % e
-            continue
-    return all_pileups
+# def process_bamfile(reference, bamfile):
+#     """Process a bamfile
+#     """
+#     print "Scanning BAM file: %s" % bamfile
+#     bam = pysam.AlignmentFile(bamfile, "rb")
+#     all_pileups = []
+#     for scaffold in bam.references:
+#         try:
+#             pileups = process_scaffold(bam, scaffold, reference[scaffold])
+#             all_pileups.extend(pileups)
+#         except KeyboardInterrupt:
+#             raise e
+#         except Exception as e:
+#             print "Error in straingr: %s" % e
+#             continue
+#     return all_pileups
 
 
 
@@ -294,7 +297,7 @@ if args.minmq:
 if args.minconfirm:
     grtools.min_confirm = args.minconfirm
 if args.mingap:
-    min_gap = args.mingap
+    grtools.min_gap = args.mingap
 if args.consensus:
     grtools.consensus = args.consensus
 
@@ -304,14 +307,15 @@ reference = {scaffold.name: scaffold.seq.upper() for scaffold in kmertools.openS
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
 for file in args.bam:
-    all_pileups = process_bamfile(reference, file)
-    if not all_pileups:
+    #all_pileups = process_bamfile(reference, file)
+    pileups = grtools.Pileups(reference, file)
+    if not len(pileups):
         print "Error: no pileups for %s" % file
         continue
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
-    write_vcf(all_pileups, vcf_out, date=date.today(), reference=args.reference)
+    write_vcf(pileups, vcf_out, date=date.today(), reference=args.reference)
     if args.pickle:
         pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
         print "Writing to pickle file: %s" % pkl_out
-        grtools.save_pileups(all_pileups, pkl_out)
+        grtools.save_pileups(pileups, pkl_out)

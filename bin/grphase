@@ -4,7 +4,64 @@
 import os
 import argparse
 
+import networkx as nx
 import grtools
+
+class HaplotypeGraph:
+    def __init__(self, reads=None):
+        self.nodes = {}
+        self.edges = {}
+        self.graphs = {}
+        self.paths = {}
+        if reads:
+            for read in reads:
+                self.add_read(read)
+    
+    def add_read(self, read):
+        prev = None
+        for allele in read:
+            scaffold = allele['scaffold']
+            if scaffold not in self.nodes:
+                self.nodes[scaffold] = {}
+            if scaffold not in self.edges:
+                self.edges[scaffold] = {}
+            refpos = allele['refpos']
+            base = allele['base']
+            node = (refpos, base)
+
+            if node not in self.nodes[scaffold]:
+                self.nodes[scaffold][node] = 0
+            self.nodes[scaffold][node] += 1
+            
+            if prev:
+                edge = (prev, node)
+                if edge not in self.edges[scaffold]:
+                    self.edges[scaffold][edge] = 0
+                self.edges[scaffold][edge] += 1
+            
+            prev = node
+        
+    
+    def phase_haplotypes(self):
+        if self.paths:
+            print "Re-phasing haplotypes"
+        
+        self.paths = {}
+        for scaffold in self.nodes:
+            self.paths[scaffold] = {}
+            graph = nx.DiGraph()
+            for node in self.nodes[scaffold]:
+                graph.add_node(node, count=self.nodes[scaffold][node])
+            for edge in self.edges[scaffold]:
+                graph.add_edge(*edge, weight=self.edges[scaffold][edge])
+            self.graphs[scaffold] = graph
+
+        
+        
+
+                
+            
+
 
 def phase_ambiguous(pileups):
     """Phase ambiguous pileups based on read information"""
@@ -44,10 +101,14 @@ def phase_ambiguous(pileups):
                 
                 in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos,  mate=i, base=base))
         
-        if len(in_phase) > 1:
+        # look for in_phase ambiguous calls at more than one refpos
+        if len(set([variant['refpos'] for variant in in_phase])) > 1:
             phased_ambs[pair] = in_phase
     
     return phased_ambs
+
+def count_haplotypes(phased_ambs):
+
 
 def write_text(phased_ambs, out):
     if not phased_ambs:

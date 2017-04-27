@@ -108,7 +108,7 @@ def phase_ambiguous(pileups):
     return phased_ambs
 
 def count_haplotypes(phased_ambs):
-
+    pass
 
 def write_text(phased_ambs, out):
     if not phased_ambs:

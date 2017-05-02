@@ -92,10 +92,11 @@ def phase_ambiguous(pileups):
             read = "%s.%i" % (pair, i)
             if read not in pileups.reads:
                 continue
+            scaffold = pileups.reads[read]['scaffold']
+            if scaffold not in amb_pileups:
+                continue
             for pos in pileups.reads[read]:
-                (base, scaffold, refpos) = pileups.reads[read][pos]
-                if scaffold not in amb_pileups:
-                    break # rest of read won't be ambiguous either
+                (base, refpos) = pileups.reads[read]['pileups'][pos]
                 if refpos not in amb_pileups[scaffold]:
                     continue
                 

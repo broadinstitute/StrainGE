@@ -302,9 +302,9 @@ class Pileups:
 
             for read in pileup.reads:
                 if read not in self.reads:
-                    self.reads[read] = {}
+                    self.reads[read] = {"pileups": {}, "scaffold": scaffold}
                 (pos, base) = pileup.reads[read]
-                self.reads[read][pos] = (base, scaffold, refpos)
+                self.reads[read]["pileups"][pos] = (base, refpos)
             
             # don't keep this info, as it's redundant
             del pileup.reads

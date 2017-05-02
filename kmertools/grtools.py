@@ -376,7 +376,7 @@ class Pileups:
             for refpos in self.pileups[scaffold]:
                 highcoverage += self.pileups[scaffold][refpos].high_coverage(threshold)
             
-            print "Abnormally high coverage: %d %.1f%% (expect 0.01%% false positive)" % (highcoverage, pct(highcoverage, length))
+            print "Abnormally high coverage: %d %.2f%% (expect 0.01%% false positive)" % (highcoverage, pct(highcoverage, length))
 
             self.highcoverage += highcoverage
 

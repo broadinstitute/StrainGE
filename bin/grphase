@@ -96,11 +96,11 @@ def phase_ambiguous(pileups):
             if scaffold not in amb_pileups:
                 continue
             for pos in pileups.reads[read]:
-                (base, refpos) = pileups.reads[read]['pileups'][pos]
+                temp = pileups.reads[read]['pileups'][pos]
+                refpos = temp['refpos']
                 if refpos not in amb_pileups[scaffold]:
                     continue
-                
-                in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos,  mate=i, base=base))
+                in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos,  mate=i, base=temp['base']))
         
         # look for in_phase ambiguous calls at more than one refpos
         if len(set([variant['refpos'] for variant in in_phase])) > 1:

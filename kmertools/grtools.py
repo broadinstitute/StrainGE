@@ -304,7 +304,7 @@ class Pileups:
                 if read not in self.reads:
                     self.reads[read] = {"pileups": {}, "scaffold": scaffold}
                 (pos, base) = pileup.reads[read]
-                self.reads[read]["pileups"][pos] = (base, refpos)
+                self.reads[read]["pileups"][pos] = dict(base=base, refpos=refpos)
             
             # don't keep this info, as it's redundant
             del pileup.reads
@@ -380,10 +380,6 @@ class Pileups:
 
             self.highcoverage += highcoverage
 
-        
-
-        
-
 
 def pct(numerator, denominator):
     """Makes into a percent"""
@@ -408,9 +404,3 @@ def load_pileups(pkl_file):
         #     return
         return pileups
 
-# def load_pileups(pkl_file, keep_covered=False):
-#     """Load straingr pileups"""
-#     with gzip.open(pkl_file) as f:
-#         pileups = Pileups(cPickle.load(f), name=os.path.basename(pkl_file), keep_covered=keep_covered)
-
-#         return pileups

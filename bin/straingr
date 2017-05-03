@@ -1,24 +1,12 @@
 #!/usr/bin/env python
 """StrainGR"""
 import argparse
-import math
-import pysam
 import numpy as np
-import gzip
-import cPickle
 
 import kmertools
 import grtools
 
 from datetime import date
-
-
-
-# globals
-# min_gap = 2000
-verbose = False
-
-# bases = "ACGT"
 
 vcf_header = \
 """##fileformat=VCFv4.0
@@ -41,6 +29,7 @@ vcf_header = \
 """
 
 vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};RF={RF:g};BQ={BQ:.0f};MQ={MQ:.0f}"
+
 def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ=None, SMQ=None):
     string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP, RF=RF, BQ=BQ, MQ=MQ)
     if AF:
@@ -51,100 +40,6 @@ def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ
         string += ";SMQ={}".format(SMQ)
     
     return string+"\n"
-
-
-# def pct(numerator, denominator):
-#     """Makes into a percent"""
-#     if numerator > 0 and denominator > 0:
-#         return (100.0 * numerator) / denominator
-#     return 0.0
-
-# def process_scaffold(bam, scaffold, refseq):
-#     """Scan the pileups for each locus in the scaffold"""
-#     length = len(refseq)
-#     print "Processing", scaffold, length
-#     confirmed = 0
-#     covered = 0
-#     snps = 0
-#     unmapped = 0
-#     goodcoverage = 0
-#     #badcoverage = 0
-#     #unmappable = 0
-
-#     #pileups = [grtools.Pileup(refseq, column.reference_pos, column.pileups) for column in bam.pileup(scaffold)]
-#     pileups = []
-
-#     last_covered = -1
-#     gaps = []
-    
-#     for column in bam.pileup(scaffold):
-#         refpos = column.reference_pos
-#         pileup = grtools.Pileup(column.reference_name, refseq, refpos, column.pileups)
-#         if verbose:
-#             refbase = refseq[refpos]
-#             print "Ref:", column.reference_name, refpos, refbase, column.nsegments
-#         goodcoverage += pileup.count
-#         #badcoverage += pileup.bad
-#         #unmappable += pileup.unmapped
-#         if pileup.covered():
-#             covered += 1
-#             if pileup.confirmed():
-#                 confirmed += 1
-#             elif pileup.base_call():
-#                 snps += 1
-#             if refpos - last_covered > min_gap:
-#                 gap = (last_covered + 1, refpos - last_covered)
-#                 print "Coverage gap:", gap[0], gap[1]
-#                 gaps.append(gap)
-#             last_covered = refpos
-#         elif pileup.unmappable():
-#             unmapped += 1
-#             # not a real gap, just can't map to this region
-#             if refpos - last_covered > min_gap:
-#                 gap = (last_covered + 1, refpos - last_covered)
-#                 print "Coverage gap:", gap[0], gap[1]
-#                 gaps.append(gap)
-#             last_covered = refpos
-        
-#         if verbose:
-#             print pileup, pileup.confirmed()
-#         pileups.append(pileup)
-
-#     #total = length
-#     coverage = float(goodcoverage) / float(length)
-#     #total_coverage = float(goodcoverage + badcoverage + unmappable) / length
-#     #pct_good = total_coverage and 100.0 * coverage / total_coverage
-#     mixed = covered - (confirmed + snps)
-
-#     print "good coverage: %.1fx" % (coverage,)
-#     print "covered: %d %.1f%%" % (covered, pct(covered, length))
-#     print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
-#     print "snps: %d %.3f%%" % (snps, pct(snps, covered))
-#     if snps > 0:
-#         print "snp rate: %.0f" % (float(covered) / float(snps))
-#     print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
-#     if mixed > 0:
-#         mixed_rate = float(covered) / float(mixed)
-#         if mixed_rate > 0:
-#             mixed_quality = math.log10(mixed_rate) * 10.0
-#         else:
-#             mixed_quality = 0
-#         print "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
-#     print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
-#     print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
-    
-#     if len(pileups):
-#         avg_count = goodcoverage / len(pileups)
-#         if avg_count > 3:
-#             # threshold is 99.9999%ile of poissons distribution at average coverage
-#             threshold = int(np.percentile(np.random.poisson(avg_count, len(pileups)), 99.9999))
-#         else:
-#             # at lower coverages, just set it to 15
-#             threshold = 15
-#         for pileup in pileups:
-#             pileup.high_coverage(threshold)
-    
-#     return pileups
 
 
 def write_vcf(pileups, output=None, date=date.today(), reference=None):
@@ -250,33 +145,12 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                                     ))
 
 
-
-# def process_bamfile(reference, bamfile):
-#     """Process a bamfile
-#     """
-#     print "Scanning BAM file: %s" % bamfile
-#     bam = pysam.AlignmentFile(bamfile, "rb")
-#     all_pileups = []
-#     for scaffold in bam.references:
-#         try:
-#             pileups = process_scaffold(bam, scaffold, reference[scaffold])
-#             all_pileups.extend(pileups)
-#         except KeyboardInterrupt:
-#             raise e
-#         except Exception as e:
-#             print "Error in straingr: %s" % e
-#             continue
-#     return all_pileups
-
-
-
 ##################################
 ### Main
 ##################################
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-# parser.add_argument("--pickle", help="Output pkl files for downstream analysis", action="store_true")
 parser.add_argument("--minqual", type=int, help='minimum base quality score to consider')
 parser.add_argument("--minmq", type=int, help='minimum read mapping quality score to consider')
 parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
@@ -288,7 +162,6 @@ args = parser.parse_args()
 
 # set global options
 if args.verbose:
-    verbose = args.verbose
     grtools.verbose = args.verbose
 if args.minqual:
     grtools.min_qual = args.minqual
@@ -307,7 +180,6 @@ reference = {scaffold.name: scaffold.seq.upper() for scaffold in kmertools.openS
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
 for file in args.bam:
-    #all_pileups = process_bamfile(reference, file)
     pileups = grtools.Pileups(reference, file)
     if not len(pileups):
         print "Error: no pileups for %s" % file
@@ -315,7 +187,6 @@ for file in args.bam:
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
     write_vcf(pileups, vcf_out, date=date.today(), reference=args.reference)
-    # if args.pickle:
     pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
     print "Writing to pickle file: %s" % pkl_out
     grtools.save_pileups(pileups, pkl_out)

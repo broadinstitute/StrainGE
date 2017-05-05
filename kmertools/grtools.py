@@ -6,6 +6,7 @@ import math
 import pysam
 import gzip
 import cPickle
+#import sqlite3
 import numpy as np
 
 min_qual = 5
@@ -15,7 +16,7 @@ consensus = 0.9
 min_gap = 2000
 verbose = False
 
-bases = dict(A=0, C=1, G=2, T=3)
+bases = "ACGT"
 
 class Pileup:
     """
@@ -49,7 +50,7 @@ class Pileup:
         # reads with other than reference base; list of tuples (base, qual, mq)
         self.others = {}
 
-        self.refbase = bases.get(scaffold[pos])
+        self.refbase = scaffold[pos]
         if not pileup_reads:
             print "No reads for pileup"
             return
@@ -85,8 +86,8 @@ class Pileup:
             return
 
         # base call must be real base (e.g., not N)
-        base = bases.get(alignment.query_sequence[pos])
-        if not base:
+        base = alignment.query_sequence[pos]
+        if base not in bases:
             self.bad += 1
             return
 
@@ -114,8 +115,8 @@ class Pileup:
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
-            self.add_other(4, qual, mq)
-            self.reads[read_name] = (pos, 4)
+            self.add_other("N", qual, mq)
+            self.reads[read_name] = (pos, "del")
             
         else:
             self.reads[read_name] = (pos, base)
@@ -129,7 +130,7 @@ class Pileup:
             else:
                 self.add_other(base, qual, mq)
                 if verbose:
-                    print "ACGT"[base], qual, mq
+                    print base, qual, mq
 
     def add_other(self, base, bq, mq):
         """
@@ -218,7 +219,7 @@ class Pileup:
         """Call another base...just print out stats for now"""
         rf = self.ref_fraction()
         if rf < consensus:
-            if verbose: print 'SNP?', self.pos, 'ACGT'[self.refbase], self.count, self.bad, rf, self.others
+            if verbose: print 'SNP?', self.pos, self.refbase, self.count, self.bad, rf, self.others
             
             if len(self.others) == 0:
                 if verbose: print "No evidence of SNPs"
@@ -228,7 +229,7 @@ class Pileup:
                 #if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
                 if snp_base and (float(self.others[snp_base][3]) / self.qual_total) >= consensus and self.others[snp_base][3] >= min_confirm:
                     # 90% of base quality matches SNP
-                    if verbose: print "SNP confirmed %s" % "ACGT"[snp_base]
+                    if verbose: print "SNP confirmed %s" % snp_base
                     return snp_base
                 else:
                     # no consensus
@@ -252,6 +253,14 @@ class Pileup:
 class Pileups:
     """Class of Pileups and reads for straingr"""
     def __init__(self, reference, bamfile):
+        
+        # connect to database & create table
+        # if os.path.isfile(bamfile+".db"):
+        #     print "Deleting old database file"
+        #     os.remove(bamfile+".db")
+        # self.con = sqlite3.connect(bamfile+".db")
+        # self.con.execute("CREATE TABLE reads (read TEXT, readpos INTEGER, scaffold TEXT, pos INTEGER, base TEXT)")
+
         self.pileups = {}
         self.reads = {}
         self.nPileups = 0
@@ -270,7 +279,7 @@ class Pileups:
             try:
                 self.process_scaffold(bam, scaffold, reference[scaffold])
             except KeyboardInterrupt:
-                raise e
+                raise
             except Exception as e:
                 print "Error in straingr: %s" % e
                 continue
@@ -278,14 +287,26 @@ class Pileups:
     def __len__(self):
         return self.nPileups
 
+    def insert_into_db(self, pileup):
+        # reads = []
+        # for read in pileup.reads:
+        #     (pos, base) = pileup.reads[read]
+        #     reads.append((read, pos, pileup.chrom, pileup.pos, base))
+        # self.con.executemany("INSERT INTO reads(read, readpos, scaffold, pos, base) VALUES(?, ?, ?, ?, ?)", reads)
+        for read in pileup.reads:
+            if read not in self.reads:
+                self.reads[read] = {"pileups": {}, "scaffold": pileup.chrom}
+            (pos, base) = pileup.reads[read]
+            self.reads[read]["pileups"][pos] = dict(base=base, refpos=pileup.pos)
+
     def process_scaffold(self, bam, scaffold, refseq):
         """Scan the pileups for each locus in the scaffold"""
 
         self.pileups[scaffold] = {}
         length = len(refseq)
         print "Processing", scaffold, length
-        confirmed = 0
         covered = 0
+        confirmed = 0
         snps = 0
         unmapped = 0
         goodcoverage = 0
@@ -299,25 +320,21 @@ class Pileups:
             refpos = column.reference_pos
             pileup = Pileup(column.reference_name, refseq, refpos, column.pileups)
 
-            for read in pileup.reads:
-                if read not in self.reads:
-                    self.reads[read] = {"pileups": {}, "scaffold": scaffold}
-                (pos, base) = pileup.reads[read]
-                self.reads[read]["pileups"][pos] = dict(base=base, refpos=refpos)
             
-            # don't keep this info, as it's redundant
-            del pileup.reads
 
             if verbose:
-                refbase = "ACGT"[refseq[refpos]]
+                refbase = refseq[refpos]
                 print "Ref:", column.reference_name, refpos, refbase, column.nsegments
             goodcoverage += pileup.count
             if pileup.covered():
                 covered += 1
                 if pileup.confirmed():
                     confirmed += 1
-                elif pileup.base_call():
-                    snps += 1
+                else:
+                    # keep read info for covered, non-ref alleles
+                    self.insert_into_db(pileup)
+                    if pileup.base_call():
+                        snps += 1
                 if refpos - last_covered > min_gap:
                     gap = (last_covered + 1, refpos - last_covered)
                     print "Coverage gap:", gap[0], gap[1]
@@ -331,6 +348,7 @@ class Pileups:
                     print "Coverage gap:", gap[0], gap[1]
                     gaps.append(gap)
                 last_covered = refpos
+                
             
             if verbose:
                 print pileup, pileup.confirmed()
@@ -378,6 +396,8 @@ class Pileups:
             print "Abnormally high coverage: %d %.2f%% (expect 0.01%% false positive)" % (highcoverage, pct(highcoverage, length))
 
             self.highcoverage += highcoverage
+        
+        del pileup.reads
 
 
 def pct(numerator, denominator):

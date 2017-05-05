@@ -320,8 +320,6 @@ class Pileups:
             refpos = column.reference_pos
             pileup = Pileup(column.reference_name, refseq, refpos, column.pileups)
 
-            
-
             if verbose:
                 refbase = refseq[refpos]
                 print "Ref:", column.reference_name, refpos, refbase, column.nsegments
@@ -348,7 +346,8 @@ class Pileups:
                     print "Coverage gap:", gap[0], gap[1]
                     gaps.append(gap)
                 last_covered = refpos
-                
+            
+            del pileup.reads
             
             if verbose:
                 print pileup, pileup.confirmed()
@@ -397,7 +396,7 @@ class Pileups:
 
             self.highcoverage += highcoverage
         
-        del pileup.reads
+        
 
 
 def pct(numerator, denominator):

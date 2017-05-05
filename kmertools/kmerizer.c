@@ -1,5 +1,5 @@
 #include <Python.h>
-#include <python2.7/numpy/ndarrayobject.h>
+#include <numpy/ndarrayobject.h>
 
 #define A 0
 #define C 1

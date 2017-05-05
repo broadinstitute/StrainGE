@@ -15,7 +15,7 @@ consensus = 0.9
 min_gap = 2000
 verbose = False
 
-bases = "ACGT"
+bases = dict(A=0, C=1, G=2, T=3)
 
 class Pileup:
     """
@@ -49,7 +49,7 @@ class Pileup:
         # reads with other than reference base; list of tuples (base, qual, mq)
         self.others = {}
 
-        self.refbase = scaffold[pos]
+        self.refbase = bases.get(scaffold[pos])
         if not pileup_reads:
             print "No reads for pileup"
             return
@@ -85,9 +85,8 @@ class Pileup:
             return
 
         # base call must be real base (e.g., not N)
-        base = alignment.query_sequence[pos]
-        index = bases.find(base)
-        if index < 0:
+        base = bases.get(alignment.query_sequence[pos])
+        if not base:
             self.bad += 1
             return
 
@@ -115,8 +114,8 @@ class Pileup:
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
-            self.add_other("N", qual, mq)
-            self.reads[read_name] = (pos, 'del')
+            self.add_other(4, qual, mq)
+            self.reads[read_name] = (pos, 4)
             
         else:
             self.reads[read_name] = (pos, base)
@@ -130,7 +129,7 @@ class Pileup:
             else:
                 self.add_other(base, qual, mq)
                 if verbose:
-                    print base, qual, mq
+                    print "ACGT"[base], qual, mq
 
     def add_other(self, base, bq, mq):
         """
@@ -219,7 +218,7 @@ class Pileup:
         """Call another base...just print out stats for now"""
         rf = self.ref_fraction()
         if rf < consensus:
-            if verbose: print 'SNP?', self.pos, self.refbase, self.count, self.bad, rf, self.others
+            if verbose: print 'SNP?', self.pos, 'ACGT'[self.refbase], self.count, self.bad, rf, self.others
             
             if len(self.others) == 0:
                 if verbose: print "No evidence of SNPs"
@@ -229,7 +228,7 @@ class Pileup:
                 #if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
                 if snp_base and (float(self.others[snp_base][3]) / self.qual_total) >= consensus and self.others[snp_base][3] >= min_confirm:
                     # 90% of base quality matches SNP
-                    if verbose: print "SNP confirmed %s" % snp_base
+                    if verbose: print "SNP confirmed %s" % "ACGT"[snp_base]
                     return snp_base
                 else:
                     # no consensus
@@ -310,7 +309,7 @@ class Pileups:
             del pileup.reads
 
             if verbose:
-                refbase = refseq[refpos]
+                refbase = "ACGT"[refseq[refpos]]
                 print "Ref:", column.reference_name, refpos, refbase, column.nsegments
             goodcoverage += pileup.count
             if pileup.covered():

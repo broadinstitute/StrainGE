@@ -8,6 +8,8 @@ import grtools
 
 from datetime import date
 
+bases = "ACGTN"
+
 vcf_header = \
 """##fileformat=VCFv4.0
 ##fileDate={date}
@@ -86,7 +88,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                     if snp:
                         QUAL = np.sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
                         FILTER="PASS"
-                        ALT = snp
+                        ALT = bases[snp]
                         af = format(float(pileup.others[snp][0])/pileup.count, ".3f").rstrip('0').rstrip('.')
                         sbq = format(QUAL, ".0f")
                         smq = format(np.sqrt(float(pileup.others[snp][2])/pileup.others[snp][0]), ".0f")
@@ -104,7 +106,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                         FILTER="amb"
                     
                         sorted_alt = pileup.sort_alts()
-                        ALT = ','.join(sorted_alt)
+                        ALT = ','.join([bases[x] for x in sorted_alt])
                         
                         for alt in sorted_alt:
                             temp = pileup.others[alt]

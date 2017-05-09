@@ -7,153 +7,14 @@ import numpy as np
 
 import grtools
 
-info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+),Description="(.*)">')
-filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 
+
 
 # globals
 # min_confirm = None
 # consensus = None
 # verbose = False
 
-class VCF:
-    def __init__(self, name=None, reference=None, source=None, date=None):
-        self.name = name
-        self.reference = reference
-        self.source = source
-        self.date = date
-        self.info = {}
-        self.filters = {}
-        self.data = {}
-        self.positions = 0
-        self.passed = 0
-        self.confirmed = 0
-        self.snps = 0
-    
-    def add(self, line):
-        temp = line.strip().split("\t")
-        chrom = temp[0]
-        pos = int(temp[1])
-        id = temp[2]
-        ref = temp[3]
-        alt = temp[4]
-        if temp[5] != '.':
-            qual = int(temp[5])
-        else:
-            qual = 0
-        filt = temp[6]
-        if filt != "PASS" and filt not in self.filters:
-            print "Unknown filter", filt
-            return
-        inf = temp[7]
-        info = {}
-        for pair in inf.split(';'):
-            key, value = pair.split('=')
-            if key not in self.info:
-                print "Unknown info key", key
-                continue
-            
-            number = self.info[key]['Number']
-            _type = self.info[key]['Type']
-            if _type == 'Float':
-                convert = float
-            elif _type == 'Integer':
-                convert = int
-            else:
-                convert = str
-            if number == '1':
-                info[key] = convert(value)
-            else:
-                _value = [convert(v) for v in value.split(",")]
-                info[key] = _value
-        
-        if chrom not in self.data:
-            self.data[chrom] = {}
-        
-        if pos in self.data[chrom]:
-            print "Warning: position %s, %d found more than once" % (chrom, pos)
-        else:
-            self.positions += 1
-        
-        self.data[chrom][pos] = { 'ref': ref, 'alt': alt, 'qual': qual, 'filter': filt, 'info': info }
-        if filt == 'PASS':
-            self.passed += 1
-            if alt == '.':
-                self.confirmed += 1
-            else:
-                self.snps += 1
-        else:
-            self.filters[filt]['count'] += 1
-    
-    def get_confirmed(self):
-        confirmed = []
-        for chrom in sorted(self.data):
-            for pos in sorted(self.data[chrom]):
-                if self.data[chrom][pos]['filter'] == 'PASS' and self.data[chrom][pos]['alt'] == '.':
-                    confirmed.append( (chrom, pos, None) )
-        
-        return confirmed
-    
-    def get_snps(self):
-        snps = []
-        for chrom in sorted(self.data):
-            for pos in sorted(self.data[chrom]):
-                if self.data[chrom][pos]['filter'] == 'PASS' and self.data[chrom][pos]['alt'] != '.':
-                    snps.append( (chrom, pos, self.data[chrom][pos]['alt']) )
-        return snps
-    
-    def get_ambiguous(self):
-        amb = []
-        for chrom in sorted(self.data):
-            for pos in sorted(self.data[chrom]):
-                if self.data[chrom][pos]['filter'] == 'amb':
-                    amb.append( (chrom, pos, self.data[chrom][pos]['alt']) )
-        return amb
-    
-    def __len__(self):
-        return self.positions
-    
-    def __str__(self):
-        return "VCF <source=%s reference=%s %d info %d filters %d chromosomes %d positions>" % (self.source, self.reference, len(self.info), len(self.filters), len(self.data), self.positions)
 
-def parse_vcf_file(file):
-    vcf = VCF(name=os.path.basename(file))
-    with open(file, 'rb') as f:
-        for line in f:
-            if line[0] == '#':
-                if line[1] == '#':
-                    if 'fileDate' in line:
-                        vcf.date = line.strip().split('=')[1]
-                    elif 'source' in line:
-                        vcf.source = line.strip().split('=')[1]
-                    elif 'reference' in line:
-                        vcf.reference = line.strip().split('=')[1]
-                    elif '##INFO' in line:
-                        temp = info_line.match(line)
-                        if not temp:
-                            print "Invalid info line", line
-                            continue
-                        (id, number, type, description) = temp.groups()
-                        vcf.info[id] = {'Number': number, 'Type': type, 'Description': description}
-                    elif '##FILTER' in line:
-                        temp = filter_line.match(line)
-                        if not temp:
-                            print "Invalid filter line", line
-                            continue
-                        (id, description) = temp.groups()
-                        vcf.filters[id] = {'description': description, 'count': 0}
-                    else:
-                        pass
-                        #print "Unknown line!", line
-                else:
-                    # header def line
-                    header = line.strip().split("\t")
-                    if header[:8] != ['#CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']:
-                        print "Invalid header line!", line
-                        return
-            else:
-                vcf.add(line)
-    
-    return vcf
 
 
 def get_overlapping_pos(v1, v2, exact=True):
@@ -483,6 +344,6 @@ if args.references:
 else:
     vcfs = []
     for file in args.file:
-        vcfs.append(parse_vcf_file(file))
+        vcfs.append(grtools.parse_vcf_file(file))
 
     compare_vcf_files(vcfs)

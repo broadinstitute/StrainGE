@@ -150,12 +150,13 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
 ##################################
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--minqual", type=int, help='minimum base quality score to consider')
-parser.add_argument("--minmq", type=int, help='minimum read mapping quality score to consider')
-parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
-parser.add_argument("--mingap", type=int, help='minimum contiguous uncovered region to flag')
-parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
+parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
+parser.add_argument("-q", "--minqual", type=int, help='minimum base Quality score to consider')
+parser.add_argument("-m", "--minmq", type=int, help='minimum read Mapping quality score to consider')
+parser.add_argument("-p", "--minconfirm", type=int, help='minimum Pileup quality sum to confirm reference or SNP')
+parser.add_argument("-g", "--mingap", type=int, help='minimum contiguous uncovered (Gap) region to flag')
+parser.add_argument("-c", "--consensus", type=float, help='minimum fraction of reads to Confirm reference or SNP')
+# parser.add_argument("-k", "--keep", help="Keep all pileups (high memory requirement)", action="store_true")
 parser.add_argument('reference', help='reference FASTA file')
 parser.add_argument('bam', nargs='+', help='bam file of reads aligned to reference (sorted & indexed)')
 args = parser.parse_args()
@@ -180,13 +181,14 @@ reference = {scaffold.name: scaffold.seq.upper() for scaffold in kmertools.openS
 print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
 for file in args.bam:
-    pileups = grtools.Pileups(reference, file)
+    # pileups = grtools.Pileups(reference, file, keep=args.keep)
+    pileups  = grtools.Pileups(reference, file)
     if not len(pileups):
         print "Error: no pileups for %s" % file
         continue
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
     print "Writing to vcf file: %s" % vcf_out
     write_vcf(pileups, vcf_out, date=date.today(), reference=args.reference)
-    pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
-    print "Writing to pickle file: %s" % pkl_out
-    grtools.save_pileups(pileups, pkl_out)
+    # pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
+    # print "Writing to pickle file: %s" % pkl_out
+    # grtools.save_pileups(pileups, pkl_out)

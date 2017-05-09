@@ -6,6 +6,7 @@ import math
 import pysam
 import gzip
 import cPickle
+import re
 #import sqlite3
 import numpy as np
 
@@ -16,7 +17,7 @@ consensus = 0.9
 min_gap = 2000
 verbose = False
 
-bases = "ACGT"
+bases = set(list("ACGT"))
 
 class Pileup:
     """
@@ -33,7 +34,7 @@ class Pileup:
         """
         self.chrom = chrom
         self.pos = pos
-        self.reads = {}
+        # self.reads = {}
         self.count = 0
         self.unmapped = 0
         self.bad = 0
@@ -105,21 +106,21 @@ class Pileup:
         self.qual_total += qual
         # keep track of the reads in this pileup and the position in that read
         
-        read_name = alignment.query_name
-        if alignment.is_read1:
-            read_name += ".1"
-        else:
-            read_name += ".2"
+        # read_name = alignment.query_name
+        # if alignment.is_read1:
+        #     read_name += ".1"
+        # else:
+        #     read_name += ".2"
         
         # self.reads[read_name] = pos
         if read.is_del:
             # using N as marker for deletion...
             # workaround until we can write actual deletions into vcf format
             self.add_other("N", qual, mq)
-            self.reads[read_name] = (pos, "del")
+            # self.reads[read_name] = (pos, "del")
             
         else:
-            self.reads[read_name] = (pos, base)
+            # self.reads[read_name] = (pos, base)
             if base == self.refbase:
                 self.ref_count += 1
                 self.ref_qual_ss += qual**2
@@ -252,7 +253,7 @@ class Pileup:
 
 class Pileups:
     """Class of Pileups and reads for straingr"""
-    def __init__(self, reference, bamfile):
+    def __init__(self, reference, bamfile, keep = False):
         
         # connect to database & create table
         # if os.path.isfile(bamfile+".db"):
@@ -262,7 +263,7 @@ class Pileups:
         # self.con.execute("CREATE TABLE reads (read TEXT, readpos INTEGER, scaffold TEXT, pos INTEGER, base TEXT)")
 
         self.pileups = {}
-        self.reads = {}
+        #self.reads = {}
         self.nPileups = 0
         self.length = 0
         self.confirmed = 0
@@ -277,7 +278,7 @@ class Pileups:
     
         for scaffold in bam.references:
             try:
-                self.process_scaffold(bam, scaffold, reference[scaffold])
+                self.process_scaffold(bam, scaffold, reference[scaffold], keep=keep)
             except KeyboardInterrupt:
                 raise
             except Exception as e:
@@ -299,7 +300,7 @@ class Pileups:
             (pos, base) = pileup.reads[read]
             self.reads[read]["pileups"][pos] = dict(base=base, refpos=pileup.pos)
 
-    def process_scaffold(self, bam, scaffold, refseq):
+    def process_scaffold(self, bam, scaffold, refseq, keep = False):
         """Scan the pileups for each locus in the scaffold"""
 
         self.pileups[scaffold] = {}
@@ -330,7 +331,7 @@ class Pileups:
                     confirmed += 1
                 else:
                     # keep read info for covered, non-ref alleles
-                    self.insert_into_db(pileup)
+                    # self.insert_into_db(pileup)
                     if pileup.base_call():
                         snps += 1
                 if refpos - last_covered > min_gap:
@@ -338,16 +339,20 @@ class Pileups:
                     print "Coverage gap:", gap[0], gap[1]
                     gaps.append(gap)
                 last_covered = refpos
-            elif pileup.unmappable():
-                unmapped += 1
-                # not a real gap, just can't map to this region
-                if refpos - last_covered > min_gap:
-                    gap = (last_covered + 1, refpos - last_covered)
-                    print "Coverage gap:", gap[0], gap[1]
-                    gaps.append(gap)
-                last_covered = refpos
+            else:
+                if pileup.unmappable():
+                    unmapped += 1
+                    # not a real gap, just can't map to this region
+                    if refpos - last_covered > min_gap:
+                        gap = (last_covered + 1, refpos - last_covered)
+                        print "Coverage gap:", gap[0], gap[1]
+                        gaps.append(gap)
+                    last_covered = refpos
+                # if keep:
+                    # keep all pileups anyway
+                    # self.insert_into_db(pileup)
             
-            del pileup.reads
+            # del pileup.reads
             
             if verbose:
                 print pileup, pileup.confirmed()
@@ -397,6 +402,148 @@ class Pileups:
             self.highcoverage += highcoverage
         
         
+class VCF:
+    def __init__(self, name=None, reference=None, source=None, date=None):
+        self.name = name
+        self.reference = reference
+        self.source = source
+        self.date = date
+        self.info = {}
+        self.filters = {}
+        self.data = {}
+        self.positions = 0
+        self.passed = 0
+        self.confirmed = 0
+        self.snps = 0
+    
+    def add(self, line):
+        temp = line.strip().split("\t")
+        chrom = temp[0]
+        pos = int(temp[1])
+        id = temp[2]
+        ref = temp[3]
+        alt = temp[4]
+        if temp[5] != '.':
+            qual = int(temp[5])
+        else:
+            qual = 0
+        filt = temp[6]
+        if filt != "PASS" and filt not in self.filters:
+            print "Unknown filter", filt
+            return
+        inf = temp[7]
+        info = {}
+        for pair in inf.split(';'):
+            key, value = pair.split('=')
+            if key not in self.info:
+                print "Unknown info key", key
+                continue
+            
+            number = self.info[key]['Number']
+            _type = self.info[key]['Type']
+            if _type == 'Float':
+                convert = float
+            elif _type == 'Integer':
+                convert = int
+            else:
+                convert = str
+            if number == '1':
+                info[key] = convert(value)
+            else:
+                _value = [convert(v) for v in value.split(",")]
+                info[key] = _value
+        
+        if chrom not in self.data:
+            self.data[chrom] = {}
+        
+        if pos in self.data[chrom]:
+            print "Warning: position %s, %d found more than once" % (chrom, pos)
+        else:
+            self.positions += 1
+        
+        self.data[chrom][pos] = { 'ref': ref, 'alt': alt, 'qual': qual, 'filter': filt, 'info': info }
+        if filt == 'PASS':
+            self.passed += 1
+            if alt == '.':
+                self.confirmed += 1
+            else:
+                self.snps += 1
+        else:
+            self.filters[filt]['count'] += 1
+    
+    def get_confirmed(self):
+        confirmed = []
+        for chrom in sorted(self.data):
+            for pos in sorted(self.data[chrom]):
+                if self.data[chrom][pos]['filter'] == 'PASS' and self.data[chrom][pos]['alt'] == '.':
+                    confirmed.append( (chrom, pos, None) )
+        
+        return confirmed
+    
+    def get_snps(self):
+        snps = []
+        for chrom in sorted(self.data):
+            for pos in sorted(self.data[chrom]):
+                if self.data[chrom][pos]['filter'] == 'PASS' and self.data[chrom][pos]['alt'] != '.':
+                    snps.append( (chrom, pos, self.data[chrom][pos]['alt']) )
+        return snps
+    
+    def get_ambiguous(self):
+        amb = []
+        for chrom in sorted(self.data):
+            for pos in sorted(self.data[chrom]):
+                if self.data[chrom][pos]['filter'] == 'amb':
+                    amb.append( (chrom, pos, self.data[chrom][pos]['alt']) )
+        return amb
+    
+    def __len__(self):
+        return self.positions
+    
+    def __str__(self):
+        return "VCF <source=%s reference=%s %d info %d filters %d chromosomes %d positions>" % (self.source, self.reference, len(self.info), len(self.filters), len(self.data), self.positions)
+
+def parse_vcf_file(file):
+    info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+),Description="(.*)">')
+    filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 
+    vcf = VCF(name=os.path.basename(file))
+    with open(file, 'rb') as f:
+        for line in f:
+            if line[0] == '#':
+                if line[1] == '#':
+                    if 'fileDate' in line:
+                        vcf.date = line.strip().split('=')[1]
+                    elif 'source' in line:
+                        vcf.source = line.strip().split('=')[1]
+                    elif 'reference' in line:
+                        vcf.reference = line.strip().split('=')[1]
+                    elif '##INFO' in line:
+                        temp = info_line.match(line)
+                        if not temp:
+                            print "Invalid info line", line
+                            continue
+                        (id, number, type, description) = temp.groups()
+                        vcf.info[id] = {'Number': number, 'Type': type, 'Description': description}
+                    elif '##FILTER' in line:
+                        temp = filter_line.match(line)
+                        if not temp:
+                            print "Invalid filter line", line
+                            continue
+                        (id, description) = temp.groups()
+                        vcf.filters[id] = {'description': description, 'count': 0}
+                    else:
+                        pass
+                        #print "Unknown line!", line
+                else:
+                    # header def line
+                    header = line.strip().split("\t")
+                    if header[:8] != ['#CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']:
+                        print "Invalid header line!", line
+                        return
+            else:
+                vcf.add(line)
+    
+    return vcf
+
 
 
 def pct(numerator, denominator):

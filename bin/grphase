@@ -3,7 +3,7 @@
 
 import os
 import argparse
-
+import pysam
 import networkx as nx
 import grtools
 
@@ -57,13 +57,8 @@ class HaplotypeGraph:
             self.graphs[scaffold] = graph
 
         
-        
 
-                
-            
-
-
-def phase_ambiguous(pileups):
+def phase_ambiguous_old(pileups):
     """Phase ambiguous pileups based on read information"""
 
     # only look for ambiguous pileups
@@ -108,6 +103,72 @@ def phase_ambiguous(pileups):
     
     return phased_ambs
 
+def qc_read(read):
+    alignment = read.alignment
+    if (not alignment.is_paired) or (not alignment.is_proper_pair):
+        return
+
+    # restrict ourselves to full-length alignments (not clipped)
+    if alignment.query_alignment_length != alignment.query_length:
+        # alignment is clipped
+        return
+
+    # check that inferred insert size is at least read length
+    tlen = alignment.template_length
+    if abs(tlen) < alignment.query_length:
+        return
+    
+    # check for decent mapping quality
+    mq = alignment.mapping_quality
+    if mq < grtools.min_mq:
+        return
+    
+    # get base quality (note this is next base if deletion)
+    pos = read.query_position_or_next
+    qual = alignment.query_qualities[pos]
+    if qual < grtools.min_qual:
+        return
+
+    # base call must be real base (e.g., not N)
+    base = alignment.query_sequence[pos]
+    if base not in grtools.bases:
+        return
+
+    return (alignment.query_name, alignment.is_read1, pos, base)
+
+def phase_ambiguous(bamfile, amb_pileups):
+    
+    bam = pysam.AlignmentFile(bamfile, "rb")
+    phased = {}
+    for scaffold in bam.references:
+        reads = {}
+        if scaffold not in amb_pileups:
+            continue
+        for column in bam.pileup(scaffold):
+            refpos = column.reference_pos
+            if refpos not in amb_pileups[scaffold]:
+                continue
+            for read in column.pileups:
+                temp = qc_read(read)
+                if not temp:
+                    continue
+                (name, read1, pos, base) = temp
+                if name not in reads:
+                    reads[name] = {}
+                position = (read1, pos)
+                reads[name][position] = (refpos, base)
+        for name in reads.keys():
+            if len(reads[name]) > 1:
+                phased[name] = []
+                for position in reads[name]:
+                    (read1, pos) = position
+                    (refpos, base) = reads[name][position]
+                    phased[name].append(dict(scaffold=scaffold, refpos=refpos, pos=pos, read1=read1, base=base))
+            del reads[name]
+
+    return phased        
+
+
 def count_haplotypes(phased_ambs):
     pass
 
@@ -125,7 +186,10 @@ def write_text(phased_ambs, out):
                 scaffold = result['scaffold']
                 refpos = result['refpos']
                 pos = result['pos']
-                mate = result['mate']
+                if result['read1']:
+                    mate = '1'
+                else:
+                    mate = '2'
                 base = result['base']
                 w.write(line.format(pair=pair, mate=mate, scaffold=scaffold, refpos=refpos, pos=pos, base=base))
 
@@ -228,33 +292,56 @@ def write_text(phased_ambs, out):
 
 parser = argparse.ArgumentParser()
 # parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
-parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
-parser.add_argument("file", nargs='+', help="pickle file from straingr tool")
+# parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
+# parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
+parser.add_argument("-q", "--minqual", type=int, help='minimum base Quality score to consider')
+parser.add_argument("-m", "--minmq", type=int, help='minimum read Mapping quality score to consider')
+parser.add_argument("-o", "--out", help="Text output filename")
+parser.add_argument("vcf", help="vcf file from straingr tool")
+parser.add_argument("bamfile", help="BAM file used to generate vcf file (index & sorted)")
+# parser.add_argument("pickle", help="pickle file from straingr tool")
 args = parser.parse_args()
 
+if args.minqual:
+    grtools.min_qual = args.minqual
+if args.minmq:
+    grtools.min_mq = args.minmq
 
 # if args.verbose:
 #     verbose = args.verbose
-if args.minconfirm:
-    min_confirm = grtools.min_confirm
-if args.consensus:
-    consensus = grtools.consensus
+# if args.minconfirm:
+#     min_confirm = grtools.min_confirm
+# if args.consensus:
+#     consensus = grtools.consensus
 
-for pkl_file in args.file:
-    try:
-        print "Loading", pkl_file
-        pileups = grtools.load_pileups(pkl_file)
-        # print "Getting SNPs in phase"
-        print "Phasing ambiguous base calls"
-        # phased_snps = phase_snps(pileups)
-        phased_ambs = phase_ambiguous(pileups)
-        # out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
-        out = '.'.join(os.path.basename(pkl_file).split(".")[:-1])+'.phased_ambs.tsv'
-        print "Writing to", out
-        # write_text(phased_snps, out)
-        write_text(phased_ambs, out)
-    except KeyboardInterrupt:
-        break
-    except Exception as e:
-        print e
+# for pkl_file in args.file:
+#     try:
+#         print "Loading", pkl_file
+#         pileups = grtools.load_pileups(pkl_file)
+#         # print "Getting SNPs in phase"
+#         print "Phasing ambiguous base calls"
+#         # phased_snps = phase_snps(pileups)
+#         phased_ambs = phase_ambiguous(pileups)
+#         # out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
+#         out = '.'.join(os.path.basename(pkl_file).split(".")[:-1])+'.phased_ambs.tsv'
+#         print "Writing to", out
+#         # write_text(phased_snps, out)
+#         write_text(phased_ambs, out)
+#     except KeyboardInterrupt:
+#         break
+#     except Exception as e:
+#         print e
+
+
+vcf = grtools.parse_vcf_file(args.vcf)
+
+ambs = {}
+for (scaffold, pos, _) in vcf.get_ambiguous():
+    if scaffold not in ambs:
+        ambs[scaffold] = set()
+    ambs[scaffold].add(pos)
+
+phased_ambs = phase_ambiguous(args.bamfile, ambs)
+
+if args.out:
+    write_text(phased_ambs, args.out)

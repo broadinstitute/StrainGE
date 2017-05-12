@@ -7,6 +7,8 @@ import pysam
 import networkx as nx
 import grtools
 
+verbose = False
+
 class HaplotypeGraph:
     def __init__(self, reads=None):
         self.nodes = {}
@@ -56,52 +58,6 @@ class HaplotypeGraph:
                 graph.add_edge(*edge, weight=self.edges[scaffold][edge])
             self.graphs[scaffold] = graph
 
-        
-
-def phase_ambiguous_old(pileups):
-    """Phase ambiguous pileups based on read information"""
-
-    # only look for ambiguous pileups
-    amb_pileups = {}
-    for scaffold in pileups.pileups:
-        for refpos in pileups.pileups[scaffold]:
-            pileup = pileups.pileups[scaffold][refpos]
-            if not pileup.covered():
-                continue
-            if pileup.confirmed():
-                continue
-            if pileup.base_call():
-                continue
-            if scaffold not in amb_pileups:
-                amb_pileups[scaffold] = set()
-            amb_pileups[scaffold].add(refpos) 
-    
-    phased_ambs = {}
-    # loop through reads
-
-    reads = set([read[:-2] for read in pileups.reads])
-
-    for pair in reads:
-        in_phase = []
-        for i in xrange(1,3):
-            read = "%s.%i" % (pair, i)
-            if read not in pileups.reads:
-                continue
-            scaffold = pileups.reads[read]['scaffold']
-            if scaffold not in amb_pileups:
-                continue
-            for pos in pileups.reads[read]:
-                temp = pileups.reads[read]['pileups'][pos]
-                refpos = temp['refpos']
-                if refpos not in amb_pileups[scaffold]:
-                    continue
-                in_phase.append(dict(scaffold=scaffold, refpos=refpos, pos=pos,  mate=i, base=temp['base']))
-        
-        # look for in_phase ambiguous calls at more than one refpos
-        if len(set([variant['refpos'] for variant in in_phase])) > 1:
-            phased_ambs[pair] = in_phase
-    
-    return phased_ambs
 
 def qc_read(read):
     alignment = read.alignment
@@ -148,6 +104,8 @@ def phase_ambiguous(bamfile, amb_pileups):
             refpos = column.reference_pos
             if refpos not in amb_pileups[scaffold]:
                 continue
+            if verbose:
+                print "Ambiguous pileup", scaffold, refpos
             for read in column.pileups:
                 temp = qc_read(read)
                 if not temp:
@@ -160,6 +118,7 @@ def phase_ambiguous(bamfile, amb_pileups):
         for name in reads.keys():
             if len(reads[name]) > 1:
                 phased[name] = []
+                print "Read with multiple ambiguous pileups", name
                 for position in reads[name]:
                     (read1, pos) = position
                     (refpos, base) = reads[name][position]
@@ -178,9 +137,9 @@ def write_text(phased_ambs, out):
     
     if not out:
         return
-    line = '{pair}\t{mate}\t{scaffold}\t{refpos}\t{pos}\t{base}\n'
+    line = '{scaffold}\t{refpos}\t{base}\t{pair}\t{mate}\t{pos}\t\n'
     with open(out, 'wb') as w:
-        w.write("Read\tMate\tScaffold\tRefpos\tPos\tBase\n")
+        w.write("Scaffold\tRefpos\tBase\tRead\tMate\tPos\n")
         for pair in sorted(phased_ambs):
             for result in sorted(phased_ambs[pair], key = lambda x: (x['refpos'])):
                 scaffold = result['scaffold']
@@ -291,7 +250,7 @@ def write_text(phased_ambs, out):
 
 
 parser = argparse.ArgumentParser()
-# parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
+parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
 # parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
 # parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument("-q", "--minqual", type=int, help='minimum base Quality score to consider')
@@ -302,6 +261,9 @@ parser.add_argument("bamfile", help="BAM file used to generate vcf file (index &
 # parser.add_argument("pickle", help="pickle file from straingr tool")
 args = parser.parse_args()
 
+if args.verbose:
+    verbose = True
+    grtools.verbose = True
 if args.minqual:
     grtools.min_qual = args.minqual
 if args.minmq:
@@ -333,14 +295,17 @@ if args.minmq:
 #         print e
 
 
+print "Parsing VCF file", args.vcf
 vcf = grtools.parse_vcf_file(args.vcf)
 
+print "Obtaining ambiguous pileups"
 ambs = {}
 for (scaffold, pos, _) in vcf.get_ambiguous():
     if scaffold not in ambs:
         ambs[scaffold] = set()
     ambs[scaffold].add(pos)
 
+print "Phasing ambiguous pileups based on reads in", args.bamfile
 phased_ambs = phase_ambiguous(args.bamfile, ambs)
 
 if args.out:

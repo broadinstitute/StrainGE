@@ -14,10 +14,10 @@ parser.add_argument('sequences', nargs='+',
                     help='Input sequence files (fasta or fastq by default; optionally compressed with gz or bz2)')
 parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
 parser.add_argument("-o", "--output", help="Output file (hdf5 or npz)")
-parser.add_argument("-f", "--fingerprint", help="Include kmer fingerprint in output file for quick matching",
+parser.add_argument("-f", "--fingerprint", help="No longer used",
                     action="store_true")
 parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
-parser.add_argument("-c", "--compress", help="Compress output file", action="store_true")
+parser.add_argument("-c", "--compress", help="No longer used", action="store_true")
 parser.add_argument("--npz", help="Store output in npz format (default hdf5)", action="store_true")
 parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
                     action="store_true")
@@ -54,10 +54,9 @@ if args.filter:
         print 'Keeping kmers with frequency in the range', thresholds
     kset.printStats()
 
-if args.fingerprint:
-    kset.minHash(args.fraction)
+kset.minHash(args.fraction)
 
 if args.output:
     print 'Writing output to', args.output
-    kset.save(args.output, compress=args.compress, npz=args.npz)
+    kset.save(args.output, compress=True, npz=args.npz)
 

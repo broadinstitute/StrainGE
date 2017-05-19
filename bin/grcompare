@@ -304,7 +304,7 @@ parser.add_argument("--verbose", help="increase output verbosity", action="store
 #parser.add_argument("-r", "--references", action='store_true', help="Compare between references (within samples)")
 parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--consensus", type=float, help='minimum fraction of read quality to confirm reference or SNP')
-parser.add_argument('-o', '--out', nargs=1, help='Output results to file')
+parser.add_argument('-o', '--out', help='Output results to file')
 parser.add_argument("file", nargs='+', help="file from straingr tool (vcf or pkl)")
 args = parser.parse_args()
 

@@ -89,12 +89,12 @@ if args.sample:
 
         result = (strain, nunique, nucounts, covered, coverRate, coverage)
         results.append(result)
-        print "\t".join([str(r) for r in sorted(result, key = lambda x: x[-1])])
+        print "\t".join([str(r) for r in result])
 
     if args.sampleout:
         results.sort(lambda a, b: cmp(b[3], a[3]))
         with open(args.sampleout, 'w') as sampleout:
-            for result in results:
+            for result in sorted(results, key = lambda x: x[-1]):
                 print >>sampleout, "\t".join([str(r) for r in result])
 
 

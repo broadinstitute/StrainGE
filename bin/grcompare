@@ -94,6 +94,16 @@ def compare_vcf_files(vcfs):
     return comps
 
 
+def write_vcf_comparisons(comparisons, out):
+    if not comparisons:
+        return
+    
+    with open(out, 'wb') as w:
+        w.write("Sample1\tSample2\tConfirmed\tSNPs\tAmbiguous\tNon-reference\tConflicts\n")
+        for (v1, v2) in sorted(comparisons.keys()):
+            w.write("%s\t%s\t%s\n" % (v1, v2, '\t'.join([str(x) for x in comparisons[(v1, v2)]])))
+
+
 def easy_compare(s1, s2):
     """Compare two samples from same reference"""
     i = 0
@@ -291,10 +301,10 @@ def len2(data):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-parser.add_argument("-r", "--references", action='store_true', help="Compare between references (within samples)")
+#parser.add_argument("-r", "--references", action='store_true', help="Compare between references (within samples)")
 parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
 parser.add_argument("--consensus", type=float, help='minimum fraction of read quality to confirm reference or SNP')
-parser.add_argument('out', help='Output results to file')
+parser.add_argument('-o', '--out', nargs=1, help='Output results to file')
 parser.add_argument("file", nargs='+', help="file from straingr tool (vcf or pkl)")
 args = parser.parse_args()
 
@@ -303,47 +313,49 @@ print "Will output results to", args.out
 if args.verbose:
     verbose = grtools.verbose
 
-if args.references:
-    if args.minconfirm:
-        min_confirm = grtools.min_confirm
-    if args.consensus:
-        consensus = grtools.consensus
+# if args.references:
+#     if args.minconfirm:
+#         min_confirm = grtools.min_confirm
+#     if args.consensus:
+#         consensus = grtools.consensus
     
-    print "Comparing within samples between references"
-    all_pileups = {}
-    for pkl_file in args.file:
-        print "Loading file", pkl_file
-        all_pileups[pkl_file] = grtools.load_pileups(pkl_file)        
+#     print "Comparing within samples between references"
+#     all_pileups = {}
+#     for pkl_file in args.file:
+#         print "Loading file", pkl_file
+#         all_pileups[pkl_file] = grtools.load_pileups(pkl_file)        
 
-    line = "{ref1}\t{ref2}\t{confirmed}\t{snps}\t{ref1_mixed}\t{ref2_mixed}\t{ref1_ref}\t{ref2_ref}\t{ref1_un}\t{ref2_un}\t{ref1_reads}\t{ref2_reads}\n"
-    with open(args.out, 'wb') as w:
-        w.write("Ref1\tRef2\tConfirmed\tSNPs\tRef1_mixed\tRef2_mixed\tRef1_ref\tRef2_ref\tRef1_unmatched\tRef2_unmatched\tRef1_reads\tRef2_reads\n")
-        for (r1, r2) in itertools.combinations(all_pileups.keys(), 2):
-            print "Comparing", r1, "to", r2
-            comparison, r1_reads, r2_reads = compare_references(all_pileups[r1], all_pileups[r2])
-            if comparison:
-                confirmed = len2(comparison.get('ref_confirmed'))
-                snps = len2(comparison.get('same_snp'))
-                ref1_mixed = len2(comparison.get('ref1_ref2_amb'))
-                ref2_mixed = len2(comparison.get('ref2_ref1_amb'))
-                ref1_ref = len2(comparison.get('likely_ref1'))
-                ref2_ref = len2(comparison.get('likely_ref2'))
-                ref1_un = len2(comparison.get('unmatched1'))
-                ref2_un = len2(comparison.get('unmatched2'))
-                ref1_reads = len(r1_reads)
-                ref2_reads = len(r2_reads)
+#     line = "{ref1}\t{ref2}\t{confirmed}\t{snps}\t{ref1_mixed}\t{ref2_mixed}\t{ref1_ref}\t{ref2_ref}\t{ref1_un}\t{ref2_un}\t{ref1_reads}\t{ref2_reads}\n"
+#     with open(args.out, 'wb') as w:
+#         w.write("Ref1\tRef2\tConfirmed\tSNPs\tRef1_mixed\tRef2_mixed\tRef1_ref\tRef2_ref\tRef1_unmatched\tRef2_unmatched\tRef1_reads\tRef2_reads\n")
+#         for (r1, r2) in itertools.combinations(all_pileups.keys(), 2):
+#             print "Comparing", r1, "to", r2
+#             comparison, r1_reads, r2_reads = compare_references(all_pileups[r1], all_pileups[r2])
+#             if comparison:
+#                 confirmed = len2(comparison.get('ref_confirmed'))
+#                 snps = len2(comparison.get('same_snp'))
+#                 ref1_mixed = len2(comparison.get('ref1_ref2_amb'))
+#                 ref2_mixed = len2(comparison.get('ref2_ref1_amb'))
+#                 ref1_ref = len2(comparison.get('likely_ref1'))
+#                 ref2_ref = len2(comparison.get('likely_ref2'))
+#                 ref1_un = len2(comparison.get('unmatched1'))
+#                 ref2_un = len2(comparison.get('unmatched2'))
+#                 ref1_reads = len(r1_reads)
+#                 ref2_reads = len(r2_reads)
 
-                w.write(line.format(ref1=r1, ref2=r2, confirmed=confirmed, snps=snps, ref1_mixed=ref1_mixed, 
-                                    ref2_mixed=ref2_mixed, ref1_ref=ref1_ref, ref2_ref=ref2_ref, ref1_un=ref1_un,
-                                    ref2_un=ref2_un, ref1_reads=ref1_reads, ref2_reads=ref2_reads))
+#                 w.write(line.format(ref1=r1, ref2=r2, confirmed=confirmed, snps=snps, ref1_mixed=ref1_mixed, 
+#                                     ref2_mixed=ref2_mixed, ref1_ref=ref1_ref, ref2_ref=ref2_ref, ref1_un=ref1_un,
+#                                     ref2_un=ref2_un, ref1_reads=ref1_reads, ref2_reads=ref2_reads))
 
-                # w.write('%s\t%s\t%s\n' % (s1, s2, '\t'.join([str(x) for x in comparison[1:]])))
+#                 # w.write('%s\t%s\t%s\n' % (s1, s2, '\t'.join([str(x) for x in comparison[1:]])))
 
 
 
-else:
-    vcfs = []
-    for file in args.file:
-        vcfs.append(grtools.parse_vcf_file(file))
+# else:
+vcfs = []
+for file in args.file:
+    print "Parsing", file
+    vcfs.append(grtools.parse_vcf_file(file))
 
-    compare_vcf_files(vcfs)
+comparisons = compare_vcf_files(vcfs)
+write_vcf_comparisons(comparisons, args.out)

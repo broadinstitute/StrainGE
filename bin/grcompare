@@ -62,7 +62,7 @@ def compare_vcf_files(vcfs):
     
     # for each pair of vcf
     comps = {}
-    for (v1, v2) in itertools.combinations(snps.keys(), 2):
+    for (v1, v2) in itertools.combinations(sorted(snps.keys()), 2):
         print "Comparing %s to %s" % (v1, v2)
         if refs[v1] != refs[v2]:
             print "Different references", refs[v1], refs[v2]

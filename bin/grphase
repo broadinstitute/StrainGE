@@ -4,6 +4,7 @@
 import os
 import argparse
 import pysam
+import itertools
 import networkx as nx
 import grtools
 
@@ -15,48 +16,112 @@ class HaplotypeGraph:
         self.edges = {}
         self.graphs = {}
         self.paths = {}
-        if reads:
-            for read in reads:
-                self.add_read(read)
+        try:
+            if reads:
+                for i, read in enumerate(reads):
+                    if verbose and i % 1000 == 0:
+                        print "Processing %6i\%6i reads\r" % (i, len(reads)),
+                    self.add_read(read)
+                print "\nFinished."
+                self.build_graph()
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            print e
+
     
     def add_read(self, read):
-        prev = None
+        nodes = []
         for allele in read:
-            scaffold = allele['scaffold']
-            if scaffold not in self.nodes:
-                self.nodes[scaffold] = {}
-            if scaffold not in self.edges:
-                self.edges[scaffold] = {}
-            refpos = allele['refpos']
-            base = allele['base']
-            node = (refpos, base)
+            node = (allele['scaffold'], allele['refpos'], allele['base'])
+            nodes.append(node)
 
-            if node not in self.nodes[scaffold]:
-                self.nodes[scaffold][node] = 0
-            self.nodes[scaffold][node] += 1
-            
-            if prev:
-                edge = (prev, node)
-                if edge not in self.edges[scaffold]:
-                    self.edges[scaffold][edge] = 0
-                self.edges[scaffold][edge] += 1
-            
-            prev = node
+            if node not in self.nodes:
+                self.nodes[node] = dict(qual=0, count=0)
+            self.nodes[node]['qual'] += allele['qual']
+            self.nodes[node]['count'] += 1
         
-    
+        for edge in itertools.combinations(sorted(nodes), 2):
+            if edge[0] == edge[1]:
+                continue # no cycles
+            if edge not in self.edges:
+                self.edges[edge] = 0
+            self.edges[edge] += 1
+        
+
+
+    def build_graph(self):
+        self.graph = nx.DiGraph()
+        print "Adding nodes"
+        self.graph.add_nodes_from([(node, self.nodes[node]) for node in self.nodes])
+        print "Added %i nodes" % self.graph.number_of_nodes()
+        print "Adding edges"
+        self.graph.add_weighted_edges_from([(edge[0], edge[1], self.edges[edge]) for edge in self.edges])
+        print "Added %i edges" % self.graph.number_of_edges()
+
+
+
+    def filter_graph(self, min_node=50, min_edge=2):
+        if min_node > 0:
+            removed = 0
+            print "Filtering nodes below", min_node
+            for node in self.graph.nodes():
+                if self.graph.node[node]['qual'] < min_node:
+                    self.graph.remove_node(node)
+                    removed += 1
+                    
+            print "Removed %i nodes" % removed
+        
+        if min_edge > 1:
+            removed = 0
+            print "Filtering edges below", min_edge
+            for n, nbrs in self.graph.adjacency_iter():
+                for nbr, eattr in nbrs.items():
+                    if eattr['weight'] < min_edge:
+                        self.graph.remove_edge(n, nbr)
+                        removed += 1
+            print "Removed %i edges" % removed
+        
+            removed = 0
+            for node in self.graph.nodes():
+                if not self.graph.in_edges(node) and not self.graph.out_edges(node):
+                    self.graph.remove_node(node)
+                    removed += 1                
+            
+            print "Removed %i unconnected nodes" % removed
+                    
+        
+
+
+        
+
     def phase_haplotypes(self):
         if self.paths:
             print "Re-phasing haplotypes"
         
         self.paths = {}
-        for scaffold in self.nodes:
-            self.paths[scaffold] = {}
-            graph = nx.DiGraph()
-            for node in self.nodes[scaffold]:
-                graph.add_node(node, count=self.nodes[scaffold][node])
-            for edge in self.edges[scaffold]:
-                graph.add_edge(*edge, weight=self.edges[scaffold][edge])
-            self.graphs[scaffold] = graph
+        self.graph.add_nodes_from(['s', 't'])
+        for node in self.graph.nodes_iter():
+            if node == 's' or node == 't':
+                continue
+            if not self.graph.in_edges(node):
+                self.graph.add_edge('s', node)
+                for node2 in self.graph.neighbors(node):
+                    if not self.graph.out_edges(node2):
+                        self.graph.add_edge(node2, 't')
+        
+        #i = 0
+        #while self.graph.number_of_edges() > 0:
+            #path = nx.maximum_flow(self.graph, 's', 't', capacity='weight')
+
+
+
+
+            
+                    
+        
+        
+                
 
 
 def qc_read(read):
@@ -90,7 +155,7 @@ def qc_read(read):
     if base not in grtools.bases:
         return
 
-    return (alignment.query_name, alignment.is_read1, pos, base)
+    return (alignment.query_name, alignment.is_read1, pos, base, qual)
 
 def phase_ambiguous(bamfile, amb_pileups):
     
@@ -110,22 +175,23 @@ def phase_ambiguous(bamfile, amb_pileups):
                 temp = qc_read(read)
                 if not temp:
                     continue
-                (name, read1, pos, base) = temp
+                (name, read1, pos, base, qual) = temp
                 if name not in reads:
                     reads[name] = {}
                 position = (read1, pos)
-                reads[name][position] = (refpos, base)
+                reads[name][position] = (refpos, base, qual)
         for name in reads.keys():
-            if len(reads[name]) > 1:
+            if len(reads[name]):
                 phased[name] = []
-                print "Read with multiple ambiguous pileups", name
+                if verbose:
+                    print "Read with multiple ambiguous pileups", name
                 for position in reads[name]:
                     (read1, pos) = position
-                    (refpos, base) = reads[name][position]
-                    phased[name].append(dict(scaffold=scaffold, refpos=refpos, pos=pos, read1=read1, base=base))
+                    (refpos, base, qual) = reads[name][position]
+                    phased[name].append(dict(scaffold=scaffold, refpos=refpos, pos=pos, read1=read1, base=base, qual=qual))
             del reads[name]
 
-    return phased        
+    return phased
 
 
 def count_haplotypes(phased_ambs):
@@ -137,9 +203,9 @@ def write_text(phased_ambs, out):
     
     if not out:
         return
-    line = '{scaffold}\t{refpos}\t{base}\t{pair}\t{mate}\t{pos}\t\n'
+    line = '{scaffold}\t{refpos}\t{base}\t{pair}\t{mate}\t{pos}\t{qual}\n'
     with open(out, 'wb') as w:
-        w.write("Scaffold\tRefpos\tBase\tRead\tMate\tPos\n")
+        w.write("Scaffold\tRefpos\tBase\tRead\tMate\tPos\tQual\n")
         for pair in sorted(phased_ambs):
             for result in sorted(phased_ambs[pair], key = lambda x: (x['refpos'])):
                 scaffold = result['scaffold']
@@ -150,115 +216,18 @@ def write_text(phased_ambs, out):
                 else:
                     mate = '2'
                 base = result['base']
-                w.write(line.format(pair=pair, mate=mate, scaffold=scaffold, refpos=refpos, pos=pos, base=base))
+                qual = result['qual']
+                w.write(line.format(pair=pair, mate=mate, scaffold=scaffold, refpos=refpos, pos=pos, base=base, qual=qual))
 
-
-# def phase_snps(pileups):
-#     """Look for SNPs and ambiguous calls in phase"""
-
-#     phased_snps = {}
-    
-#     # go through scaffolds
-#     for scaffold in pileups.pileups:
-#         # go through positions in scaffolds
-#         scaf_pileups = pileups.pileups[scaffold]
-#         for pos in sorted(scaf_pileups):
-            
-#             # if ambiguous
-#             if not scaf_pileups[pos].hc and scaf_pileups[pos].covered() and not ( scaf_pileups[pos].confirmed() or scaf_pileups[pos].base_call() ):
-#                 # loop through all reads in that pileup
-#                 reads = scaf_pileups[pos].reads
-#                 reads2 = {}
-#                 for read in reads:
-#                     if read[-2:] == '.1':
-#                         read2 = read[-2:]+'.2'
-#                     else:
-#                         read2 = read[-2:]+'.1'
-#                     if read2 in scaf_pileups[pos].reads:
-#                         reads2[read] = read2
-#                 for read in reads.keys():
-#                     base1 = scaf_pileups[pos].reads[read][1]
-#                     # loop through every position in that read
-#                     for read_pos in sorted(pileups.reads[read]):
-#                         # get pileup location for that position
-#                         (scaffold2, pos2) = pileups.reads[read][read_pos]
-#                         if scaffold2 != scaffold:
-#                             print 'Read found on two scaffolds!'
-#                             continue
-#                         if pos2 <= pos:
-#                             # don't look back
-#                             continue
-#                         # if this pileup also ambigous!
-#                         if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
-
-#                             if scaffold not in phased_snps:
-#                                 phased_snps[scaffold] = {}
-#                             if pos not in phased_snps[scaffold]:
-#                                 phased_snps[scaffold][pos] = {}
-                            
-#                             if pos2 not in phased_snps[scaffold][pos]:
-#                                 phased_snps[scaffold][pos][pos2] = {}
-                            
-#                             base2 = scaf_pileups[pos2].reads[read][1]
-#                             if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
-#                                 phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
-#                             phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
-                    
-#                     if read not in reads2:
-#                         # paired read not in data
-#                         continue
-#                     read2 = reads2[read]
-#                     # do this for the other paired read
-#                     for read_pos in sorted(pileups.reads[read2]):
-#                         # get pileup location for that position
-#                         (scaffold2, pos2) = pileups.reads[read2][read_pos]
-#                         if scaffold2 != scaffold:
-#                             print 'Read found on two scaffolds!'
-#                             continue
-#                         if pos2 <= pos:
-#                             # don't look back
-#                             continue
-#                         # if this pileup also ambigous!
-#                         if not scaf_pileups[pos2].hc and scaf_pileups[pos2].covered() and not (scaf_pileups[pos2].confirmed() or scaf_pileups[pos2].base_call()):
-
-#                             if scaffold not in phased_snps:
-#                                 phased_snps[scaffold] = {}
-#                             if pos not in phased_snps[scaffold]:
-#                                 phased_snps[scaffold][pos] = {}
-                            
-#                             if pos2 not in phased_snps[scaffold][pos]:
-#                                 phased_snps[scaffold][pos][pos2] = {}
-                            
-#                             base2 = scaf_pileups[pos2].reads[read2][1]
-#                             if (base1, base2) not in phased_snps[scaffold][pos][pos2]:
-#                                 phased_snps[scaffold][pos][pos2][(base1, base2)] = 0
-#                             phased_snps[scaffold][pos][pos2][(base1, base2)] += 1
-
-#     return phased_snps
-
-# def write_text(phased_snps, out):
-#     """Write phased snps to text"""
-
-#     with open(out, 'wb') as w:
-#         w.write("Scaffold\tPos1\tPos2\tCount\tBase1\tBase2\n")
-#         for scaffold in sorted(phased_snps):
-#             for pos1 in sorted(phased_snps[scaffold]):
-#                 for pos2 in sorted(phased_snps[scaffold][pos1]):
-#                     for (base1, base2) in sorted(phased_snps[scaffold][pos1][pos2]):
-#                         count = phased_snps[scaffold][pos1][pos2][(base1, base2)]
-#                         w.write('%s\t%i\t%i\t%i\t%s\t%s\n' % (scaffold, pos1, pos2, count, base1, base2))
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
-# parser.add_argument("--minconfirm", type=int, help='minimum pileup quality sum to confirm reference or SNP')
-# parser.add_argument("--consensus", type=float, help='minimum fraction of reads to confirm reference or SNP')
 parser.add_argument("-q", "--minqual", type=int, help='minimum base Quality score to consider')
 parser.add_argument("-m", "--minmq", type=int, help='minimum read Mapping quality score to consider')
 parser.add_argument("-o", "--out", help="Text output filename")
 parser.add_argument("vcf", help="vcf file from straingr tool")
 parser.add_argument("bamfile", help="BAM file used to generate vcf file (index & sorted)")
-# parser.add_argument("pickle", help="pickle file from straingr tool")
 args = parser.parse_args()
 
 if args.verbose:
@@ -269,34 +238,9 @@ if args.minqual:
 if args.minmq:
     grtools.min_mq = args.minmq
 
-# if args.verbose:
-#     verbose = args.verbose
-# if args.minconfirm:
-#     min_confirm = grtools.min_confirm
-# if args.consensus:
-#     consensus = grtools.consensus
-
-# for pkl_file in args.file:
-#     try:
-#         print "Loading", pkl_file
-#         pileups = grtools.load_pileups(pkl_file)
-#         # print "Getting SNPs in phase"
-#         print "Phasing ambiguous base calls"
-#         # phased_snps = phase_snps(pileups)
-#         phased_ambs = phase_ambiguous(pileups)
-#         # out = '.'.join(pkl_file.split(".")[:-1])+'.phased_snps.tsv'
-#         out = '.'.join(os.path.basename(pkl_file).split(".")[:-1])+'.phased_ambs.tsv'
-#         print "Writing to", out
-#         # write_text(phased_snps, out)
-#         write_text(phased_ambs, out)
-#     except KeyboardInterrupt:
-#         break
-#     except Exception as e:
-#         print e
-
 
 print "Parsing VCF file", args.vcf
-vcf = grtools.parse_vcf_file(args.vcf)
+vcf = grtools.parse_vcf_file(args.vcf, filters='amb')
 
 print "Obtaining ambiguous pileups"
 ambs = {}
@@ -310,3 +254,6 @@ phased_ambs = phase_ambiguous(args.bamfile, ambs)
 
 if args.out:
     write_text(phased_ambs, args.out)
+
+graph = HaplotypeGraph(reads=phased_ambs.values())
+graph.filter_graph()

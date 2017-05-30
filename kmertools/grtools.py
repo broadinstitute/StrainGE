@@ -416,7 +416,7 @@ class VCF:
         self.confirmed = 0
         self.snps = 0
     
-    def add(self, line):
+    def add(self, line, filters=None):
         temp = line.strip().split("\t")
         chrom = temp[0]
         pos = int(temp[1])
@@ -430,6 +430,8 @@ class VCF:
         filt = temp[6]
         if filt != "PASS" and filt not in self.filters:
             print "Unknown filter", filt
+            return
+        if filters and filt not in filters:
             return
         inf = temp[7]
         info = {}
@@ -502,7 +504,7 @@ class VCF:
     def __str__(self):
         return "VCF <source=%s reference=%s %d info %d filters %d chromosomes %d positions>" % (self.source, self.reference, len(self.info), len(self.filters), len(self.data), self.positions)
 
-def parse_vcf_file(file):
+def parse_vcf_file(file, filters=None):
     info_line = re.compile(r'##INFO=<ID=([A-Za-z0-9]+),Number=([0-9]+|\.),Type=(\w+),Description="(.*)">')
     filter_line = re.compile(r'##FILTER=<ID=([A-Za-z0-9]+),Description="(.*)">') 
     vcf = VCF(name=os.path.basename(file))
@@ -540,7 +542,7 @@ def parse_vcf_file(file):
                         print "Invalid header line!", line
                         return
             else:
-                vcf.add(line)
+                vcf.add(line, filters=filters)
     
     return vcf
 

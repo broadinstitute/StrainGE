@@ -196,7 +196,7 @@ class KmerSet:
         return self.k == other.k and np.array_equal(self.fingerprint, other.fingerprint) \
                and np.array_equal(self.kmers, other.kmers) and np.array_equal(self.counts, other.counts)
 
-    def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True):
+    def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True, prune=0):
         seqFile = openSeqFile(fileName)
         batch = np.empty(batchSize, dtype=np.uint64)
 
@@ -204,6 +204,7 @@ class KmerSet:
         nBases = 0
         nKmers = 0
         nBatch = 0 # kmers in this batch
+        pruned = False
 
         for seq in seqFile:
             nSeqs += 1
@@ -211,12 +212,17 @@ class KmerSet:
             nBases += seqLength
             if nKmers + seqLength > batchSize:
                 self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
+                if prune and self.singletons > prune:
+                    self.pruneSingletons(verbose)
+                    pruned = True
                 nSeqs = 0
                 nBases = 0
                 nKmers = 0
             nKmers += kmerizer.kmerize_into_array(self.k, str(seq.seq), batch, nKmers)
         seqFile.close()
         self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
+        if pruned:
+            self.pruneSingletons(verbose)
 
     def kmerizeSeq(self, seq):
         kmers = kmerizer.kmerize(self.k, seq)
@@ -238,8 +244,16 @@ class KmerSet:
         else:
             self.kmers, self.counts = kmerizer.merge_counts(self.kmers, self.counts, newKmers, newCounts)
 
+        self.singletons = np.count_nonzero(self.counts == 1)
         if verbose:
             self.printStats()
+
+    def pruneSingletons(self, verbose=False):
+        keepers = self.counts > 1
+        self.kmers = self.kmers[keepers]
+        self.counts = self.counts[keepers]
+        if verbose:
+            print 'Pruned singletons:', self.kmers.size, 'distinct kmers remain'
 
     def mergeKmerSet(self, other):
         """Create new KmerSet by merging this with another"""
@@ -249,7 +263,7 @@ class KmerSet:
 
     def printStats(self):
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
-            'Distinct:', self.kmers.size, 'Singletons:', np.count_nonzero(self.counts == 1)
+            'Distinct:', self.kmers.size, 'Singletons:', self.singletons
 
     def minHash(self, frac = 0.002):
         nkmers = int(round(self.kmers.size * frac))

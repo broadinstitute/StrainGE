@@ -14,7 +14,7 @@ parser.add_argument('sequences', nargs='+',
                     help='Input sequence files (fasta or fastq by default; optionally compressed with gz or bz2)')
 parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
 parser.add_argument("-o", "--output", help="Output file (hdf5 or npz)")
-parser.add_argument("-f", "--fingerprint", help="No longer used",
+parser.add_argument("-f", "--fingerprint", help="Compute and save minhash fingerprint (sketch)",
                     action="store_true")
 parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
 parser.add_argument("-c", "--compress", help="No longer used", action="store_true")
@@ -22,10 +22,22 @@ parser.add_argument("--npz", help="Store output in npz format (default hdf5)", a
 parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
                     action="store_true")
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
+parser.add_argument("-p", "--prune", help="Prune singletons after accumulating this many (can have suffix of M or G)")
 parser.add_argument("--histogram", help="Histogram output file (count of kmers by frequency)")
 parser.add_argument("--kmerset", help="Input is kmerset in hdf5 or npz format", action="store_true")
 args = parser.parse_args()
 
+def parseMegaGiga(str, mult = 1):
+    """Parse argument of the kind 100M --> 100,000,000"""
+    if not str:
+        return 0
+    suffix = str[-1]
+    if suffix in ('M', 'm'):
+        return parseMegaGiga(str[:-1], 1000000)
+    elif suffix in ('G', 'g'):
+        return parseMegaGiga(str[:-1], 1000000000)
+    else:
+        return int(str) * mult
 
 
 if args.kmerset:
@@ -36,7 +48,7 @@ else:
     kset = kmertools.KmerSet(args.K)
     for arg in args.sequences:
         print 'Kmerizing', arg
-        kset.kmerizeFile(arg)
+        kset.kmerizeFile(arg, prune=parseMegaGiga(args.prune))
 
 if args.histogram:
     kset.writeHistogram(args.histogram)
@@ -44,6 +56,7 @@ if args.histogram:
 if args.spectrum:
     thresholds = kset.spectrumMinMax()
     if thresholds:
+
         kset.plotSpectrum(args.spectrum, thresholds[2])
     else:
         kset.plotSpectrum(args.spectrum)
@@ -54,7 +67,8 @@ if args.filter:
         print 'Keeping kmers with frequency in the range', thresholds
     kset.printStats()
 
-kset.minHash(args.fraction)
+if args.fingerprint:
+    kset.minHash(args.fraction)
 
 if args.output:
     print 'Writing output to', args.output

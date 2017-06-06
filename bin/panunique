@@ -7,7 +7,7 @@ import kmerizer
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
+parser.add_argument("--sample", "-s", help="Compare similarity of this vs the other strains instead of all vs all")
 parser.add_argument("--input", "-i", help="Input hdf5 files with per-strain unique kmers")
 parser.add_argument("--output", "-o", help="Output hdf5 files with per-strain unique kmers")
 parser.add_argument("--sampleout", help="Sample score output file (tsv)")
@@ -32,7 +32,7 @@ def panUnique(files):
             mergedSet = kset
         else:
             mergedSet = mergedSet.mergeKmerSet(kset)
-    return mergedSet.kmers[mergedSet.counts == 1]
+    return mergedSet.kmers[mergedSet.counts == 1] if mergedSet else None
 
 
 def uniqueInStrain(strainFile, singletons):
@@ -76,6 +76,8 @@ if args.sample:
     print "Finding unique in strains"
     for strain, unique in strainUnique.iteritems():
         nunique = len(unique)
+        if nunique == 0:
+            continue
         ucounts = kmerizer.intersect_counts(sample.kmers, sample.counts, unique)
         nucounts = len(ucounts)
         total = sum(ucounts)

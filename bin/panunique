@@ -65,8 +65,9 @@ else:
         unique = uniqueInStrain(strain, singletons)
         if output:
             print name, len(unique)
-            output.create_dataset(name, data=unique, compression="gzip")
-            strainUnique[name] = unique
+            if len(unique) > 0:
+                output.create_dataset(name, data=unique, compression="gzip")
+                strainUnique[name] = unique
 
 if args.sample:
     print "Loading sample", args.sample

@@ -80,7 +80,7 @@ for record in bt2sam:
         barcode_aligned = False
 
     # add this to the barcode set
-    if (not record.is_paired) or record.is_proper_pair:
+    if record.mapping_quality > 10 and (record.is_proper_pair or not record.is_paired):
         aligned_reads += 1
         barcode_aligned = True
     barcode_set.append(record)

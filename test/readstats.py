@@ -61,7 +61,7 @@ def compute_stats(reference_file, bamfile):
                 mismatches = []
                 qsum = 0
                 matchsum = 0
-                if len(column.pileups) > 100:
+                if len(column.pileups) > 500:
                     continue
                 for read in column.pileups:
                     alignment = read.alignment
@@ -116,6 +116,7 @@ def crunch_stats(stats):
                     calledsum += qual * qtotal
                     match += qmatch
                     mismatch += qmismatch
+
             total = match + mismatch
             if not total:
                 break
@@ -126,7 +127,8 @@ def crunch_stats(stats):
         ax1.plot(calledmean, label="Read " + str(read + 1) + " mean")
         ax1.plot(calledqual, label="Read " + str(read + 1) + " expected")
         ax1.plot(effqual, label="Read " + str(read + 1) + " actual")
-    ax1.legend(loc=1)
+    ax1.legend(loc=3)
+    ax1.set_ylim(0, 50)
     ax1.set_ylabel("Base Quality")
     ax1.set_xlabel("Position in Read")
 
@@ -143,6 +145,7 @@ def crunch_stats(stats):
         ax2.scatter([p[0] for p in points], [p[1] for p in points], label="Read " + str(read + 1))
     ax2.plot([0, QUALS], [0, QUALS])
     ax2.legend()
+    ax1.set_ylim(0, 50)
     ax2.set_ylabel("Effective Base Quality")
     ax2.set_xlabel("Called Base Quality")
     if args.graph:

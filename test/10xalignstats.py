@@ -17,15 +17,17 @@ for read in bam:
         bc = barcode(read)
         bcrange = barcodes.get(bc)
         if bcrange:
-            start = min(read.reference_start, bcrange[0])
-            end = max(read.reference_end, bcrange[1])
-            print bc, barcodes[bc], (start, end)
-            barcodes[bc] = (start, end)
+            count, start, end = bcrange
+            start = min(read.reference_start, start)
+            end = max(read.reference_end, end)
+            #print bc, barcodes[bc], (start, end)
+            count += 1
+            barcodes[bc] = (count, start, end)
         else:
-            barcodes[bc] = (read.reference_start, read.reference_end)
-            print bc, barcodes[bc]
+            barcodes[bc] = (1, read.reference_start, read.reference_end)
+            #print bc, barcodes[bc]
         #print bc, barcodes[bc]
 
 for bc in barcodes:
-    bcrange = barcodes[bc]
-    print bc, bcrange[1] - bcrange[0]
+    count, start, end = barcodes[bc]
+    print bc, count, end - start

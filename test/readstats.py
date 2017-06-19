@@ -127,7 +127,7 @@ def crunch_stats(stats):
         ax1.plot(calledmean, label="Read " + str(read + 1) + " mean")
         ax1.plot(calledqual, label="Read " + str(read + 1) + " expected")
         ax1.plot(effqual, label="Read " + str(read + 1) + " actual")
-    ax1.legend(loc=3)
+    ax1.legend(loc=1)
     ax1.set_ylim(0, 50)
     ax1.set_ylabel("Base Quality")
     ax1.set_xlabel("Position in Read")

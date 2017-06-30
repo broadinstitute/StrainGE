@@ -8,7 +8,6 @@ barcodes = []
 
 # pass 1: collect barcodes with good alignments
 with pysam.AlignmentFile(sys.argv[1], "rb") as bam:
-    for scaffold in bam:
     for read in bam:
         barcode = read.get_tag("BX") if read.has_tag("BX") else None
         if barcode and read.has_tag("AS") and read.get_tag("AS") > -10:

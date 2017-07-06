@@ -15,6 +15,8 @@ with open(sys.argv[2], "w") as fastq:
             seq = Seq(read.query_sequence)
             record = SeqRecord(Seq(read.query_sequence), id=read.query_name, description=barcode)
             record.letter_annotations['phred_quality'] = read.query_qualities
+            if read.is_reverse:
+                record = record.reverse_complement(id=True, description=True)
             readlist.append(record)
     readlist.sort(lambda a, b: cmp(a.description, b.description) or cmp(a.id, b.id) or cmp(len(a), len(b)))
     SeqIO.write(readlist, fastq, "fastq")

@@ -2,31 +2,54 @@
 
 
 import sys
+import argparse
 import pysam
 
-goodbarcodes = []
-poorbarcodes = []
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--score", "-s", type=int, default=-10, help="Minimum alignment score")
+parser.add_argument("--edge", "-e", type=int, default=250, help="Allow unpaired alignments this close to the edge of contigs")
+parser.add_argument("--insert", "-i", type=int, default=-1, help="Minimum insert (fragment) size")
+parser.add_argument("--contig", "-c", type=int, default=-1, help="Only filter based on this contig (index)")
+parser.add_argument('input', help='input BAM file')
+parser.add_argument('output', help='output BAM file')
+args = parser.parse_args()
+
+goodbarcodes = set()
+poorbarcodes = set()
 
 # pass 1: collect barcodes with good alignments
-with pysam.AlignmentFile(sys.argv[1], "rb") as bam:
+with pysam.AlignmentFile(args.input, "rb") as bam:
+    reflengths = bam.lengths
     for read in bam:
         barcode = read.get_tag("BX") if read.has_tag("BX") else None
-        if barcode and read.has_tag("NM") and read.has_tag("AS"):
-            pos = read.get_reference_positions(full_length=True)
-            #minpos = min(pos)
-            #maxpos = max(pos)
-            #conserved = maxpos > 800 and maxpos < 1000 or minpos > 800 and minpos < 1000
-            conserved = False
-            #mismatches = read.get_tag("NM")
+        if barcode and not read.is_unmapped:
+            if args.contig >= 0 and read.reference_id != args.contig:
+                continue
+            good = True
             score = read.get_tag("AS")
-            if score > -10 and not conserved:
-                goodbarcodes.append(barcode)
-            elif score <= -10:
-                poorbarcodes.append(barcode)
+            if score <= args.score:
+                good = False
+            elif read.is_paired:
+                if read.mate_is_unmapped:
+                    if read.is_reverse:
+                        if read.reference_start > args.edge:
+                            good = False
+                    else:
+                        reflength = reflengths[read.reference_id]
+                        if read.reference_end < reflength - args.edge:
+                            good = False
+                else:
+                    if not read.is_proper_pair or abs(read.template_length) < args.insert:
+                        good = False
+            if good:
+                goodbarcodes.add(barcode)
+            else:
+                poorbarcodes.add(barcode)
 
 # pass 2: copy reads with good alignment barcodes
-with pysam.AlignmentFile(sys.argv[1], "rb") as bam:
-    with pysam.AlignmentFile(sys.argv[2], "wb", template=bam) as out:
+with pysam.AlignmentFile(args.input, "rb") as bam:
+    with pysam.AlignmentFile(args.output, "wb", template=bam) as out:
         for read in bam:
             barcode = read.get_tag("BX") if read.has_tag("BX") else None
             if barcode in goodbarcodes and barcode not in poorbarcodes:

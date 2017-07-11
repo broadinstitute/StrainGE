@@ -15,8 +15,9 @@ parser.add_argument("--fastq2", "-2", help="read 2 input fastq with BX barcode t
 parser.add_argument("--unpaired", "-U", help="read input fastq wiht BX barcode tags")
 parser.add_argument("--reference", "-r", "-x", required=True, help="reference file prefix for bowtie2")
 parser.add_argument("--threads", "-p", type=int, default=1, help="number of bowtie2 alignment threads")
+parser.add_argument("--minmq", "-m", type=int, default=10, help="minimum mapping quality")
 parser.add_argument("--output", "-o", help="output bam")
-parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
+parser.add_argument("--improper", "-i", help="non-proper pairs ok", action="store_true")
 args = parser.parse_args()
 
 if args.fastq1 and args.fastq2:
@@ -80,7 +81,7 @@ for record in bt2sam:
         barcode_aligned = False
 
     # add this to the barcode set
-    if record.mapping_quality > 10 and (record.is_proper_pair or not record.is_paired):
+    if record.mapping_quality >= args.minmq and (args.improper or record.is_proper_pair or not record.is_paired):
         aligned_reads += 1
         barcode_aligned = True
     barcode_set.append(record)

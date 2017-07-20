@@ -12,7 +12,7 @@ import kmertools
 def _compare_seqs(args):
     try:
         (q, cmd) = args
-        #time.sleep(0.1)
+        time.sleep(0.01)
         pair, similarityScore, simscore = cmd
         strain1, strain2 = pair
         s1name, s1kmers = strain1

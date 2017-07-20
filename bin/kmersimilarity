@@ -62,7 +62,9 @@ else:
     if args.simscore == 'reference':
         print >>sys.stderr, "'reference' similarity score meaningless in pairwise similarity scoring"
         sys.exit(1)
+    print >>sys.stderr, 'Loading kmers from files'
     strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
+    print >>sys.stderr, 'Comparing kmers to each other'
     if args.threads > 1:
         p = multiprocessing.Pool(args.threads)
         m = multiprocessing.Manager()
@@ -87,9 +89,9 @@ else:
                 scores.append(result)
             n_finished += 1
             if n_finished % 100 == 0:
-                print 'Completed %6i/%i comparisons.\r' % (n_finished, n_cmds),
+                print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (n_finished, n_cmds),
             elif n_finished == n_cmds:
-                print "\nDone."
+                print >>sys.stderr, "\nDone."
                 break
 
     else:

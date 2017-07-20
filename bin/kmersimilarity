@@ -21,8 +21,8 @@ def _compare_seqs(args):
         s1name, s1kmers = strain1
         s2name, s2kmers = strain2
         result = (s1name, s2name, similarityScore(s1kmers, s2kmers, simscore))
-        return result
         q.put(True)
+        return result
     except KeyboardInterrupt:
         raise e
     except Exception as e:
@@ -94,7 +94,7 @@ else:
                 print >>sys.stderr, "\nDone."
                 break
             qsize = q.qsize() 
-            if qsize % 100 == 0:
+            if qsize and qsize % 100 == 0 :
                 print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (qsize, n_cmds),
             time.sleep(5)
 

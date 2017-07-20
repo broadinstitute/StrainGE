@@ -76,8 +76,11 @@ else:
         
         cmds = [pair for pair in combinations(xrange(len(strains)), 2)]
         map_async = p.map_async(_compare_seqs, cmds)
+        
         scores = map_async.get()
+
         p.close()
+        p.join()
 
     else:
         scores = []

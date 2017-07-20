@@ -85,12 +85,14 @@ else:
             else:
                 scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
 
+print >>sys.stderr, 'Sorting scores'
 if args.fraction:
     #scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1]))
     scores.sort(lambda a, b: cmp(b[2][0], a[2][0]))
 else:
     scores.sort(lambda a, b: cmp(b[2], a[2]))
 
+print >>sys.stderr, 'Writing output'
 if args.similarity:
     output = open(args.similarity, 'w')
 else:

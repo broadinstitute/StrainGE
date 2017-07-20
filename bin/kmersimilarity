@@ -115,6 +115,7 @@ else:
         p.close()
 
     else:
+        scores = []
         for pair in combinations(strains, 2):
             strain1, strain2 = pair
             s1name, s1kmers = strain1

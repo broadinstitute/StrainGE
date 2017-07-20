@@ -2,35 +2,30 @@
 import sys
 import argparse
 import csv
-# import multiprocessing
-# import Queue
-# import time
+import multiprocessing
+import Queue
+import time
 from itertools import combinations
 import kmertools
 
-# global strains
+global args
+global strains
+global similarityScore
 
-# def _compare_seqs(args):
-#     try:
-#         (q, cmd) = args
-#         time.sleep(0.1)
-#         pair, similarityScore, simscore = cmd
-#         strain1 = strains[pair[0]]
-#         strain2 = strains[pair[1]]
-#         #strain1, strain2 = pair
-#         s1name, s1kmers = strain1
-#         s2name, s2kmers = strain2
-#         result = (s1name, s2name, similarityScore(s1kmers, s2kmers, simscore))
-#         q.put(True)
-#         return result
-#     except KeyboardInterrupt:
-#         raise e
-#     except Exception as e:
-#         print '\nError: failed at processing %s %s\n' % (s1name, s2name)
-#         print e
-#         q.put(False) # put something in queue if fails
-    
-#     return
+def _compare_seqs(pair):
+    try:
+        i, j = pair
+        #time.sleep(0.1)
+        s1name, s1kmers = strains[i]
+        s2name, s2kmers = strains[j]
+        result = (s1name, s2name, similarityScore(s1kmers, s2kmers, args.simscore))
+        return result
+    except KeyboardInterrupt:
+        raise e
+    except Exception as e:
+        print '\nError: failed at processing %s vs %s\n' % (s1name, s2name)
+        print e    
+    return
 
 
 parser = argparse.ArgumentParser()
@@ -40,7 +35,7 @@ parser.add_argument("--sample", help="Compare similarity of this vs the other st
 parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize", "reference"], default="jaccard")
 parser.add_argument("--fraction", action="store_true", help="Output numerator and denomintor in fraction instead of calculating score")
-# parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
+parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
 parser.add_argument('strains', nargs='+',
                     help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
@@ -69,61 +64,31 @@ else:
     print >>sys.stderr, 'Loading kmers from files'
     strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
     print >>sys.stderr, 'Comparing kmers to each other'
-    # if args.threads > 1:
-        
-    #     #strains_mp = m.Array(strains, lock=False)
-        
-    #     p = multiprocessing.Pool(args.threads)
-    #     m = multiprocessing.Manager()
-    #     q = m.Queue()
+    if args.threads > 1:        
+        p = multiprocessing.Pool(args.threads)
+        m = multiprocessing.Manager()
+        q = m.Queue()
 
-    #     if args.fraction:
-    #         similarityScore = kmertools.similarityNumeratorDenominator
-    #     else:
-    #         similarityScore = kmertools.similarityScore
-        
-    #     cmds = [(q, (pair, similarityScore, args.simscore)) for pair in combinations(xrange(len(strains)), 2)]
-    #     map_async = p.map_async(_compare_seqs, cmds)
-
-    #     n_cmds = len(cmds)
-    #     # n_finished = 0
-    #     # loop while processing and there's results in the queue
-        
-    #     while True:
-    #         if map_async.ready():
-    #             print >>sys.stderr, "\nDone."
-    #             break
-    #         qsize = q.qsize() 
-    #         if qsize and qsize % 100 == 0 :
-    #             print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (qsize, n_cmds),
-    #         time.sleep(5)
-
-            
-
-    #     scores = map_async.get()
-    #     # while True:
-    #     #     result = q.get()
-    #     #     if result:
-    #     #         scores.append(result)
-    #     #     n_finished += 1
-    #     #     if n_finished % 100 == 0:
-    #     #         print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (n_finished, n_cmds),
-    #     #     elif n_finished == n_cmds:
-    #     #         print >>sys.stderr, "\nDone."
-    #     #         break
-
-    #     p.close()
-
-    # else:
-    scores = []
-    for pair in combinations(strains, 2):
-        strain1, strain2 = pair
-        s1name, s1kmers = strain1
-        s2name, s2kmers = strain2
         if args.fraction:
-            scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
+            similarityScore = kmertools.similarityNumeratorDenominator
         else:
-            scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
+            similarityScore = kmertools.similarityScore
+        
+        cmds = [pair for pair in combinations(xrange(len(strains)), 2)]
+        map_async = p.map_async(_compare_seqs, cmds)
+        scores = map_async.get()
+        p.close()
+
+    else:
+        scores = []
+        for pair in combinations(strains, 2):
+            strain1, strain2 = pair
+            s1name, s1kmers = strain1
+            s2name, s2kmers = strain2
+            if args.fraction:
+                scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
+            else:
+                scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
 
 if args.fraction:
     #scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1]))

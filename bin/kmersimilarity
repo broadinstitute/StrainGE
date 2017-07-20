@@ -4,6 +4,7 @@ import argparse
 import csv
 import multiprocessing
 import Queue
+import time
 from itertools import combinations
 import kmertools
 

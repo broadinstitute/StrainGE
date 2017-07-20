@@ -112,6 +112,8 @@ else:
         #         print >>sys.stderr, "\nDone."
         #         break
 
+        p.close()
+
     else:
         for pair in combinations(strains, 2):
             strain1, strain2 = pair

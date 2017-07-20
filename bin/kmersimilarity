@@ -14,7 +14,9 @@ def _compare_seqs(args):
         (q, cmd) = args
         time.sleep(0.01)
         pair, similarityScore, simscore = cmd
-        strain1, strain2 = pair
+        strain1 = strains[pair[0]]
+        strain2 = strains[pair[1]]
+        #strain1, strain2 = pair
         s1name, s1kmers = strain1
         s2name, s2kmers = strain2
         result = (s1name, s2name, similarityScore(s1kmers, s2kmers, simscore))
@@ -67,6 +69,9 @@ else:
     strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
     print >>sys.stderr, 'Comparing kmers to each other'
     if args.threads > 1:
+        
+        #strains_mp = m.Array(strains, lock=False)
+        
         p = multiprocessing.Pool(args.threads)
         m = multiprocessing.Manager()
         q = m.Queue()
@@ -76,7 +81,7 @@ else:
         else:
             similarityScore = kmertools.similarityScore
         
-        cmds = [(q, (pair, similarityScore, args.simscore)) for pair in combinations(strains, 2)]
+        cmds = [(q, (pair, similarityScore, args.simscore)) for pair in combinations(xrange(len(strains)), 2)]
         map_async = p.map_async(_compare_seqs, cmds)
 
         n_cmds = len(cmds)

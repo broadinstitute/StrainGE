@@ -12,19 +12,20 @@ import kmertools
 def _compare_seqs(args):
     try:
         (q, cmd) = args
-        time.sleep(0.1)
+        #time.sleep(0.1)
         pair, similarityScore, simscore = cmd
         strain1, strain2 = pair
         s1name, s1kmers = strain1
         s2name, s2kmers = strain2
         result = (s1name, s2name, similarityScore(s1kmers, s2kmers, simscore))
-        q.put(result)
+        return result
+        q.put(True)
     except KeyboardInterrupt:
         raise e
     except Exception as e:
         print '\nError: failed at processing %s %s\n' % (s1name, s2name)
         print e
-        q.put(None) # put something in queue if fails
+        q.put(False) # put something in queue if fails
     
     return
 
@@ -79,20 +80,31 @@ else:
         map_async = p.map_async(_compare_seqs, cmds)
 
         n_cmds = len(cmds)
-        n_finished = 0
+        # n_finished = 0
         # loop while processing and there's results in the queue
         
-        scores = []
         while True:
-            result = q.get()
-            if result:
-                scores.append(result)
-            n_finished += 1
-            if n_finished % 100 == 0:
-                print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (n_finished, n_cmds),
-            elif n_finished == n_cmds:
+            if map_async.ready():
                 print >>sys.stderr, "\nDone."
                 break
+            qsize = q.qsize() 
+            if qsize % 100 == 0:
+                print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (qsize, n_cmds)
+            time.sleep(1)
+
+            
+
+        scores = map_async.get()
+        # while True:
+        #     result = q.get()
+        #     if result:
+        #         scores.append(result)
+        #     n_finished += 1
+        #     if n_finished % 100 == 0:
+        #         print >>sys.stderr, 'Completed %6i/%i comparisons.\r' % (n_finished, n_cmds),
+        #     elif n_finished == n_cmds:
+        #         print >>sys.stderr, "\nDone."
+        #         break
 
     else:
         for pair in combinations(strains, 2):

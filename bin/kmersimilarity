@@ -10,7 +10,6 @@ import kmertools
 
 global args
 global strains
-global similarityScore
 
 def _compare_seqs(pair):
     try:
@@ -18,6 +17,10 @@ def _compare_seqs(pair):
         #time.sleep(0.1)
         s1name, s1kmers = strains[i]
         s2name, s2kmers = strains[j]
+        if args.fraction:
+            similarityScore = kmertools.similarityNumeratorDenominator
+        else:
+            similarityScore = kmertools.similarityScore
         result = (s1name, s2name, similarityScore(s1kmers, s2kmers, args.simscore))
         return result
     except KeyboardInterrupt:
@@ -69,10 +72,7 @@ else:
         m = multiprocessing.Manager()
         q = m.Queue()
 
-        if args.fraction:
-            similarityScore = kmertools.similarityNumeratorDenominator
-        else:
-            similarityScore = kmertools.similarityScore
+        
         
         cmds = [pair for pair in combinations(xrange(len(strains)), 2)]
         map_async = p.map_async(_compare_seqs, cmds)

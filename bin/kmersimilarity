@@ -8,12 +8,19 @@ import kmertools
 
 global args
 global strains
+global loader
 
 def _compare_seqs(pair):
     try:
         i, j = pair
-        s1name, s1kmers = strains[i]
-        s2name, s2kmers = strains[j]
+        if args.lowmem:
+            s1name = kmertools.nameFromPath(strains[i])
+            s1kmers = loader(strains[i])
+            s2name = kmertools.nameFromPath(strains[j])
+            s2kmers = loader(strains[j])
+        else:
+            s1name, s1kmers = strains[i]
+            s2name, s2kmers = strains[j]
         if args.fraction:
             similarityScore = kmertools.similarityNumeratorDenominator
         else:
@@ -36,6 +43,7 @@ parser.add_argument("--similarity", help="Similarity score output file (default 
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize", "reference"], default="jaccard")
 parser.add_argument("--fraction", action="store_true", help="Output numerator and denomintor in fraction instead of calculating score")
 parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
+parser.add_argument("--lowmem", action='store_true', help="Load kmers on the fly for low memory (slower!)")
 parser.add_argument('strains', nargs='+',
                     help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
@@ -62,7 +70,10 @@ else:
         print >>sys.stderr, "'reference' similarity score meaningless in pairwise similarity scoring"
         sys.exit(1)
     print >>sys.stderr, 'Loading kmers from files'
-    strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
+    if args.lowmem:
+        strains = args.strains
+    else:
+        strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
     print >>sys.stderr, 'Comparing kmers to each other'
     if args.threads > 1:        
         p = multiprocessing.Pool(args.threads)
@@ -78,8 +89,14 @@ else:
         scores = []
         for pair in combinations(strains, 2):
             strain1, strain2 = pair
-            s1name, s1kmers = strain1
-            s2name, s2kmers = strain2
+            if args.lowmem:
+                s1name = kmertools.nameFromPath(strain1)
+                s1kmers = loader(strain1)
+                s2name = kmertools.nameFromPath(strain2)
+                s2kmers = loader(strain2)
+            else:
+                s1name, s1kmers = strain1
+                s2name, s2kmers = strain2
             if args.fraction:
                 scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
             else:

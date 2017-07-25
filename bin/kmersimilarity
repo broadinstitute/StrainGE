@@ -69,10 +69,11 @@ else:
     if args.simscore == 'reference':
         print >>sys.stderr, "'reference' similarity score meaningless in pairwise similarity scoring"
         sys.exit(1)
-    print >>sys.stderr, 'Loading kmers from files'
+    
     if args.lowmem:
         strains = args.strains
     else:
+        print >>sys.stderr, 'Loading kmers from files'
         strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
     print >>sys.stderr, 'Comparing kmers to each other'
     if args.threads > 1:        

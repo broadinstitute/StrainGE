@@ -389,7 +389,7 @@ def saveText(pathScores, out, random_score = None, only_complete=False):
             strains = ""
             non_zero = False
             for strain in pathScores[path][1]:
-                if strain[1] > 0:
+                if strain[1] >= 0.001:
                     non_zero = True
                 elif non_zero:
                     break

@@ -2,8 +2,37 @@
 import sys
 import argparse
 import csv
+import multiprocessing
 from itertools import combinations
 import kmertools
+
+global args
+global strains
+global loader
+
+def _compare_seqs(pair):
+    try:
+        i, j = pair
+        if args.lowmem:
+            s1name = kmertools.nameFromPath(strains[i])
+            s1kmers = loader(strains[i])
+            s2name = kmertools.nameFromPath(strains[j])
+            s2kmers = loader(strains[j])
+        else:
+            s1name, s1kmers = strains[i]
+            s2name, s2kmers = strains[j]
+        if args.fraction:
+            similarityScore = kmertools.similarityNumeratorDenominator
+        else:
+            similarityScore = kmertools.similarityScore
+        result = (s1name, s2name, similarityScore(s1kmers, s2kmers, args.simscore))
+        return result
+    except KeyboardInterrupt:
+        raise e
+    except Exception as e:
+        print '\nError: failed at processing %s vs %s\n' % (s1name, s2name)
+        print e    
+    return
 
 
 parser = argparse.ArgumentParser()
@@ -13,6 +42,8 @@ parser.add_argument("--sample", help="Compare similarity of this vs the other st
 parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize", "reference"], default="jaccard")
 parser.add_argument("--fraction", action="store_true", help="Output numerator and denomintor in fraction instead of calculating score")
+parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
+parser.add_argument("--lowmem", action='store_true', help="Load kmers on the fly for low memory (slower!)")
 parser.add_argument('strains', nargs='+',
                     help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
@@ -38,23 +69,48 @@ else:
     if args.simscore == 'reference':
         print >>sys.stderr, "'reference' similarity score meaningless in pairwise similarity scoring"
         sys.exit(1)
-    strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
-    scores = []
-    for pair in combinations(strains, 2):
-        strain1, strain2 = pair
-        s1name, s1kmers = strain1
-        s2name, s2kmers = strain2
-        if args.fraction:
-            scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
-        else:
-            scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
+    
+    if args.lowmem:
+        strains = args.strains
+    else:
+        print >>sys.stderr, 'Loading kmers from files'
+        strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
+    print >>sys.stderr, 'Comparing kmers to each other'
+    if args.threads > 1:        
+        p = multiprocessing.Pool(args.threads)
 
+        cmds = [pair for pair in combinations(xrange(len(strains)), 2)]
+        map_async = p.map_async(_compare_seqs, cmds)
+        scores = map_async.get()
+
+        p.close()
+        p.join()
+
+    else:
+        scores = []
+        for pair in combinations(strains, 2):
+            strain1, strain2 = pair
+            if args.lowmem:
+                s1name = kmertools.nameFromPath(strain1)
+                s1kmers = loader(strain1)
+                s2name = kmertools.nameFromPath(strain2)
+                s2kmers = loader(strain2)
+            else:
+                s1name, s1kmers = strain1
+                s2name, s2kmers = strain2
+            if args.fraction:
+                scores.append((s1name, s2name, kmertools.similarityNumeratorDenominator(s1kmers, s2kmers, args.simscore)))
+            else:
+                scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
+
+print >>sys.stderr, 'Sorting scores'
 if args.fraction:
     #scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1]))
     scores.sort(lambda a, b: cmp(b[2][0], a[2][0]))
 else:
     scores.sort(lambda a, b: cmp(b[2], a[2]))
 
+print >>sys.stderr, 'Writing output'
 if args.similarity:
     output = open(args.similarity, 'w')
 else:

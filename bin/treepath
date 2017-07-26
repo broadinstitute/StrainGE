@@ -480,9 +480,9 @@ def process_tree(filein, tree, out=None, dot=None, overwrite=False):
         graph.write_png(dot)
 
 
-####
-# Christine's methods
-####
+###
+### Christine's methods
+###
 def getparent(node, amountup = 1):
     """returns the parent node from a given amount of steps"""
     thisnode = node
@@ -643,6 +643,71 @@ def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
         graph.write_png(dot)
 
 
+
+###
+### StrainSeeker method
+###
+
+def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
+    scoreSample(tree, sampleKmers, method, recurse = False)
+
+	cp = copy.deepcopy(currentpath)
+	cp.append(tree.name)
+	if tree.score > thresh :
+		if tree.isLeaf():
+			print "Winner"
+			finalpaths["|".join(cp)] = tree.name
+		else:
+			childsum = 0
+			childprod = 0
+			for child in tree.children:
+				scoreSample(child, sampleKmers, method, recurse = False)
+				childsum += child.score
+				childprod = childprod * child.score
+			
+			if childsum == childprod == 0:
+				print "nores"
+			else:
+				oe = tree.score / float(childsum - childprod)
+				if 0.8 <= oe <= 1.20 :
+					for child in tree.children:
+						newscore(child,sampleKmers,method, thresh, cp, finalpaths)
+				elif oe > 1.2 :
+					finalpaths["|".join(cp)] = getchildren(tree, [], 2, 0)
+				else:
+					print "Not in db"
+	 
+	return (finalpaths)
+		
+		
+		
+def sspm(filein, tree, out=None, dot=None, overwrite=False):
+    sampleKmers = kmertools.loadKmers(filein)
+	posspaths = newscore(tree, sampleKmers, 0.1, [], {})
+	if out:
+		printoutss(filein, posspaths, out, overwrite=overwrite)
+	if dot:
+		graph = pydot.Dot(graph_type='graph', rankdir='LR')
+		graphTree(graph, tree, None)
+		graph.write_png(dot)
+	
+	
+	
+ 
+def printoutss (filein, pathdict, out, overwrite=False):
+    if overwite:
+        w = open(out, 'wb')
+        w.write("Path,Complete,Strains\n")
+    else:
+        w = open(out, 'ab')
+    for key, value in pathdict.items():
+        if len(value) > 1 and isinstance(value, list):
+            w.write('{0},{1},{2},{3}\n'.format(filein, key, "no", ' |'.join(value)) )
+        else:
+            w.write('{0},{1},{2},{3}\n'.format(filein, key, "yes", value)) 
+    
+    w.close()
+
 ###
 ### Main
 ###
@@ -702,7 +767,7 @@ if not args.each:
         elif args.detection == 'consecutive':
             w.write("Input,Path,Complete,Strains,score\n")
         else:
-            pass
+            w.write("Path,Complete,Strains\n")
         
     
 if args.sample:
@@ -714,7 +779,8 @@ if args.sample:
             out = name + '.csv'
         elif args.out:
             out = args.out
-        process_sample(tree, sample)
+        if args.detection != 'strainseeker':
+            process_sample(tree, sample)
         if args.hdf5:
             print "Saving scored tree to hdf5 file..."
             with h5py.File(name+'_scored.hdf5', 'w') as h5:
@@ -724,7 +790,7 @@ if args.sample:
         elif args.detection == 'consecutive':
             pathdetection(sample, tree, out=out, dot=dot, overwrite=args.each)
         else:
-            pass
+            sspm(sample, tree, out=out, dot=dot, overwrite=args.each)
             
             
 else:
@@ -735,7 +801,12 @@ else:
         out = args.out
     if args.dot:
         dot = args.input + '.png'
-    process_tree(args.input, tree, out=out, dot=out, overwrite=True)
+    if args.detection == 'allpaths':
+        process_tree(sample, tree, out=out, dot=dot, overwrite=True)
+    elif args.detection == 'consecutive':
+        pathdetection(sample, tree, out=out, dot=dot, overwrite=True)
+    else:
+        raise Exception("strainseeker NYI on pre-generated tree")
 
 
 

@@ -374,37 +374,42 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     return np.percentile(random_scores, 99)
     
 
-def saveText(pathScores, out, random_score = None, only_complete=False):
+def saveText(filein, pathScores, out, random_score = None, only_complete=False, overwrite=False):
     """Save path scores to text file"""
-    with open(out, 'wb') as w:
-        w.write("Path,Score,Complete,Significant,Strains\n")
-        for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
-            if len(pathScores[path][1]) == 1:
-                complete = 'complete'
-            elif only_complete:
-                break # keep only complete
+    if overwrite:
+        w = open(out, 'wb')
+        w.write("Input,Path,Score,Complete,Significant,Strains\n")
+    else:
+        # append, and don't write header
+        w = open(out, 'ab')
+    for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
+        if len(pathScores[path][1]) == 1:
+            complete = 'complete'
+        elif only_complete:
+            break # keep only complete
+        else:
+            complete = 'incomplete'
+        
+        strains = ""
+        non_zero = False
+        for strain in pathScores[path][1]:
+            if strain[1] >= 0.001:
+                non_zero = True
+            elif non_zero:
+                break
+            if strains: strains += " "
+            strains += "%s:%.3f" % (strain[0], strain[1])
+        
+        if random_score:
+            if pathScores[path][0][1] > random_score:
+                significance = 'True'
             else:
-                complete = 'incomplete'
-            
-            strains = ""
-            non_zero = False
-            for strain in pathScores[path][1]:
-                if strain[1] >= 0.001:
-                    non_zero = True
-                elif non_zero:
-                    break
-                if strains: strains += " "
-                strains += "%s:%.3f" % (strain[0], strain[1])
-            
-            if random_score:
-                if pathScores[path][0][1] > random_score:
-                    significance = 'True'
-                else:
-                    significance = 'False'
-            else:
-                significance = "NA"
-            
-            w.write("%s,%.3f,%s,%s,%s\n" % (path, pathScores[path][0][0], complete, significance, strains))
+                significance = 'False'
+        else:
+            significance = "NA"
+        
+        w.write("%s,%s,%.3f,%s,%s,%s\n" % (filein, path, pathScores[path][0][0], complete, significance, strains))
+        w.close()
     
 
 def graphTree(graph, tree, parentNode):
@@ -438,7 +443,7 @@ def process_sample(tree, sample):
     scoreSample(tree, sampleKmers, method, min_unique, calc_p)
 
 
-def process_tree(tree, out=None, dot=None):
+def process_tree(filein, tree, out=None, dot=None, overwrite=False):
     """"After sample scored to tree, calculate paths and output results"""
     if calc_random:
         print "Estimating threshold for significant path..."
@@ -467,12 +472,175 @@ def process_tree(tree, out=None, dot=None):
         print "%.3f" % pathScores[path][0][0]
     
     if out:
-        saveText(pathScores, out, random_score, complete)
+        saveText(filein, pathScores, out, random_score, complete, overwrite=overwrite)
     
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)
         graph.write_png(dot)
+
+
+####
+# Christine's methods
+####
+def getparent(node, amountup = 1):
+    """returns the parent node from a given amount of steps"""
+	thisnode = node
+	i = 0
+	while i!=amountup:
+		thisnode = thisnode.parent
+		i += 1
+	return (thisnode)
+	
+
+
+def getchildren(node, childrenlist, limit, steps):
+    """returns all the children of a node within a given limit of steps down"""
+	children = childrenlist
+	for child in node.children:
+		stepnum = steps
+		if child.isLeaf():
+			children.append(child.name)
+		else:
+			if stepnum != limit:
+				stepnum += 1
+				getchildren(child, children, limit, stepnum)  
+	return (children)
+
+def getpath(node):
+    """returns the path node of a given node """
+	path = [node.name]
+	thisnode = node
+	i = 0
+	while thisnode.parent is not None:
+		thisnode = thisnode.parent
+		path.append(thisnode.name)
+	return (path)
+
+def isleafthere(node, scorelist):
+    """checks if path passes suitablity threshold"""
+	nodethresh = int(round(len(scorelist) * min_nodes)) #needs to have at least this many nodes consecutively with a score
+	
+	isgood = all(i > 0.1 for i in scorelist[0:nodethresh]) #low thresh of 0.1 for the node to be supported)
+	
+	if isgood:
+		 #finds last node in path node is supported.
+		 
+		firstabove = next(((idx, score) for idx,score in enumerate(scorelist[len(scorelist): nodethresh-1: -1]) if score > 0.1), None)
+		limit =  len(scorelist) - nodethresh + 1
+		
+		if firstabove is None:
+			lastsupport = getparent(node, len(scorelist) - nodethresh)
+		elif firstabove[0] == 0:
+			#if the leafnode is the last supported, then returns the node name along with 
+			#other nodes that shouldn't be considered
+			thisnode = node
+			nixlist = getpath(node)
+			return ({node.name:nixlist[1:]}) 
+		else: 
+			lastsupport = getparent(node, firstabove[0])
+	  	if lastsupport.parent is None:
+	  		print node.name + " has last support of root node"
+		else:
+			chilren = getchildren(lastsupport, [], limit , 0)
+		
+			#returns the node of last support and all the children passing a limit/distance threshold of that node
+			return ({lastsupport.name:chilren})
+	
+	else:
+		return (None)
+
+def getsupportedpath(node, currentscore, scoredict):
+    """Get supported paths in a scored tree"""
+	cs = copy.deepcopy(currentscore)
+	cs.append(node.score)
+
+	if node.isLeaf():
+		node.pathscore = sum(cs)/len(cs)
+		results = isleafthere(node, cs) #runs function that checks if path is suitable
+		
+		if results is not None:
+			scoredict.update(results) #saves results in dict of results
+	else:
+		for child in node.children:
+			getsupportedpath(child, cs, scoredict)
+	  
+	return (scoredict)  
+
+
+def getpath(node):
+    """returns the path node of a given node"""
+	path = [node.name]
+	thisnode = node
+	i = 0
+	while thisnode.parent is not None:
+		thisnode = thisnode.parent
+		path.append(thisnode.name)
+	return (path)
+
+def processres(res, tree):
+    """Process results"""    
+
+	for key in res.keys():
+		if "node" in key:
+			if key in sum(res.values(), []):
+				del res[key]
+			else:
+				thenode = getnode(tree, key)
+				
+				nodepath = getpath(thenode)
+				for i in nodepath[1:]:
+					if i in res.keys():
+						del res[i]
+						
+				step = 0
+				while step < 2:
+					if thenode.parent is not None:
+						thenode = thenode.parent
+						if thenode.name in sum(res.values(), []):
+							del res[key]
+							step = 2
+						else:
+							step += 1
+					else:
+						step = 2
+	
+	finaldict = {}
+	for key in res.keys():
+		if "node" in key:
+			finaldict[key] = dict()
+			for child in res[key]:
+				thenode = getnode(tree, child)
+				finaldict[key][child] = thenode.pathscore
+		else:
+			thenode = getnode(tree, key)
+			finaldict[key] = thenode.pathscore
+		
+	return finaldict
+
+def printout (pathdict, filein, out):
+    """Print output for path detection"""
+    with open(out, 'a') as f:
+		for key, value in pathdict.items():
+			if "node" in key:
+				for strain , score in value.items():
+					f.write('{0},{1},{2},{3}, {4}\n'.format(filein,key, "no", strain, score)) 
+			else:
+				f.write('{0},{1},{2},{3}, {4}\n'.format(filein,key, "yes", key, value)) 
+
+def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
+    """Christine's consecutive method"""
+    posspaths = getsupportedpath(tree, [] , {})
+	cleanedpaths = processres(posspaths, tree)
+	if out:
+        if overwrite:
+            with open(out, 'w') as f:
+			    f.write("Input,Path,Complete,Strains,score\n")
+		printout(cleanedpaths, filein, out)
+	if dot:
+		graph = pydot.Dot(graph_type='graph', rankdir='LR')
+		graphTree(graph, tree, None)
+		graph.write_png(dot)
 
 
 ###
@@ -484,9 +652,12 @@ parser.add_argument("-v", "--verbose", help="increase output verbosity",
                     action="store_true")
 parser.add_argument("input", help="HDF5 tree input file (can be previously scored tree!)")
 parser.add_argument("sample", nargs='*', help="sample hdf5 to calculate paths in tree")
-parser.add_argument("-o", "--out", action='store_true', help="Output results to csv file")
+parser.add_argument("-o", "--out", help="Output results to this csv file")
+parser.add_argument("--each", action='store_true', help="Store results into one csv file for each sample")
 parser.add_argument("--dot", action='store_true', help="Save graphviz dot-style tree graph")
 parser.add_argument("--hdf5", action='store_true', help="HDF5 tree score output (useful to re-analyze paths with different options)")
+parser.add_argument("-d", "--dectection", help="Specify path detection method", 
+                    default="allpaths", choices=['allpaths', 'consecutive', 'strainseeker'])
 parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'])
 parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers per node to use unique score (default: 100)", type=int)
 parser.add_argument("-p", "--calc_p", help="Calculate p value for nodes fewer than this many kmers (default: 1000)", type=int)
@@ -505,6 +676,8 @@ if args.min_unique:
     min_unique = args.min_unique
 if args.calc_p:
     calc_p = args.calc_p
+if args.min_nodes:
+    min_nodes = args.min_nodes
 if args.min_score:
     min_score = args.min_score
 if args.complete:
@@ -522,26 +695,47 @@ with h5py.File(args.input, 'r') as h5:
     tree = treeFromHdf5(h5)
     assert tree != None, 'Could not load tree!'
 
+if not args.each:
+    with open(args.out, 'wb') as w:
+        if args.detection == 'allpaths':
+            w.write("Input,Path,Score,Complete,Significant,Strains\n")
+        elif args.detection == 'consecutive':
+            w.write("Input,Path,Complete,Strains,score\n")
+        else:
+            pass
+        
+    
 if args.sample:
     for sample in args.sample:
         name = os.path.basename(args.input) + '_' + os.path.basename(sample)
         if args.dot:
             dot = name + '.png'
-        if args.out:
+        if args.each:
             out = name + '.csv'
+        elif args.out:
+            out = args.out
         process_sample(tree, sample)
         if args.hdf5:
             print "Saving scored tree to hdf5 file..."
             with h5py.File(name+'_scored.hdf5', 'w') as h5:
                 tree.saveSampleHdf5(h5)
-        process_tree(tree, out=out, dot=dot)
+        if args.detection == 'allpaths':
+            process_tree(sample, tree, out=out, dot=dot, overwrite=args.each)
+        elif args.detection == 'consecutive':
+            pathdetection(sample, tree, out=out, dot=dot, overwrite=args.each)
+        else:
+            pass
+            
+            
 else:
     assert tree.score != None, "No score value for this tree. Did you forget to specify samples?"
-    if args.out:
-        out = args.input+'.csv'
+    if args.each:
+        out = args.input + '.csv'
+    elif args.out:
+        out = args.out
     if args.dot:
-        dot = args.input+'.png'
-    process_tree(tree, out=out, dot=out)
+        dot = args.input + '.png'
+    process_tree(args.input, tree, out=out, dot=out, overwrite=True)
 
 
 

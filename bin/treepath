@@ -9,6 +9,7 @@ import numpy as np
 from itertools import chain, imap
 import random
 import pydot
+import copy
 
 # globals
 verbose = False
@@ -651,48 +652,48 @@ def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
 def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
     scoreSample(tree, sampleKmers, method, recurse = False)
 
-	cp = copy.deepcopy(currentpath)
-	cp.append(tree.name)
-	if tree.score > thresh :
-		if tree.isLeaf():
-			print "Winner"
-			finalpaths["|".join(cp)] = tree.name
-		else:
-			childsum = 0
-			childprod = 0
-			for child in tree.children:
-				scoreSample(child, sampleKmers, method, recurse = False)
-				childsum += child.score
-				childprod = childprod * child.score
-			
-			if childsum == childprod == 0:
-				print "nores"
-			else:
-				oe = tree.score / float(childsum - childprod)
-				if 0.8 <= oe <= 1.20 :
-					for child in tree.children:
-						newscore(child,sampleKmers,method, thresh, cp, finalpaths)
-				elif oe > 1.2 :
-					finalpaths["|".join(cp)] = getchildren(tree, [], 2, 0)
-				else:
-					print "Not in db"
-	 
-	return (finalpaths)
-		
-		
-		
+    cp = copy.deepcopy(currentpath)
+    cp.append(tree.name)
+    if tree.score > thresh :
+        if tree.isLeaf():
+            print "Winner"
+            finalpaths["|".join(cp)] = tree.name
+        else:
+            childsum = 0
+            childprod = 0
+            for child in tree.children:
+                scoreSample(child, sampleKmers, method, recurse = False)
+                childsum += child.score
+                childprod = childprod * child.score
+            
+            if childsum == childprod == 0:
+                print "nores"
+            else:
+                oe = tree.score / float(childsum - childprod)
+                if 0.8 <= oe <= 1.20 :
+                    for child in tree.children:
+                        newscore(child,sampleKmers,method, thresh, cp, finalpaths)
+                elif oe > 1.2 :
+                    finalpaths["|".join(cp)] = getchildren(tree, [], 2, 0)
+                else:
+                    print "Not in db"
+     
+    return (finalpaths)
+        
+        
+        
 def sspm(filein, tree, out=None, dot=None, overwrite=False):
     sampleKmers = kmertools.loadKmers(filein)
-	posspaths = newscore(tree, sampleKmers, 0.1, [], {})
-	if out:
-		printoutss(filein, posspaths, out, overwrite=overwrite)
-	if dot:
-		graph = pydot.Dot(graph_type='graph', rankdir='LR')
-		graphTree(graph, tree, None)
-		graph.write_png(dot)
-	
-	
-	
+    posspaths = newscore(tree, sampleKmers, 0.1, [], {})
+    if out:
+        printoutss(filein, posspaths, out, overwrite=overwrite)
+    if dot:
+        graph = pydot.Dot(graph_type='graph', rankdir='LR')
+        graphTree(graph, tree, None)
+        graph.write_png(dot)
+    
+    
+    
  
 def printoutss (filein, pathdict, out, overwrite=False):
     if overwite:

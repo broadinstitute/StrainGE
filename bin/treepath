@@ -539,7 +539,7 @@ def isleafthere(node, scorelist):
             return ({node.name:nixlist[1:]}) 
         else: 
             lastsupport = getparent(node, firstabove[0])
-          if lastsupport.parent is None:
+        if lastsupport.parent is None:
               print node.name + " has last support of root node"
         else:
             chilren = getchildren(lastsupport, [], limit , 0)

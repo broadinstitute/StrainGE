@@ -387,7 +387,12 @@ def saveText(pathScores, out, random_score = None, only_complete=False):
                 complete = 'incomplete'
             
             strains = ""
+            non_zero = False
             for strain in pathScores[path][1]:
+                if strain[1] > 0:
+                    non_zero = True
+                elif non_zero:
+                    break
                 if strains: strains += " "
                 strains += "%s:%.3f" % (strain[0], strain[1])
             

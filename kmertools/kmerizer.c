@@ -24,7 +24,7 @@ int check_k(int k) {
 int kmerizer_kmerize_internal(int k, char *seq, int length, kmer_t *kmers) {
   int kcount = 0;
 
-  kmer_t mask = ((kmer_t) 1 << (2 * k)) - 1;
+  kmer_t mask = (k < 32) ? ((kmer_t) 1 << (2 * k)) - 1 : -1;
   int shift = 2 * (k - 1);
 
   int n = 0;

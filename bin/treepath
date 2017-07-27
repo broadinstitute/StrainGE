@@ -780,6 +780,7 @@ if not args.each:
 if args.sample:
     for sample in args.sample:
         name = os.path.basename(args.input) + '_' + os.path.basename(sample)
+        samplename =  os.path.basename(sample)
         if args.dot:
             dot = name + '.png'
         if args.each:
@@ -793,11 +794,11 @@ if args.sample:
             with h5py.File(name+'_scored.hdf5', 'w') as h5:
                 tree.saveSampleHdf5(h5)
         if args.detection == 'allpaths':
-            process_tree(sample, tree, out=out, dot=dot, overwrite=args.each)
+            process_tree(samplename, tree, out=out, dot=dot, overwrite=args.each)
         elif args.detection == 'consecutive':
-            pathdetection(sample, tree, out=out, dot=dot, overwrite=args.each)
+            pathdetection(samplename, tree, out=out, dot=dot, overwrite=args.each)
         else:
-            sspm(sample, tree, out=out, dot=dot, overwrite=args.each)
+            sspm(samplename, tree, out=out, dot=dot, overwrite=args.each)
             
             
 else:

@@ -635,7 +635,7 @@ def printout (pathdict, filein, out):
             else:
                 f.write('{0},{1},{2},{3}, {4}\n'.format(filein,value['path'], "yes", key, value['score'])) 
 
-def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
+def consecutive_paths(filein, tree, out = None, dot = None, overwrite = False):
     """Christine's consecutive method"""
     posspaths = getsupportedpath(tree, [] , {})
     cleanedpaths = processres(posspaths, tree)
@@ -655,7 +655,7 @@ def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
 ### StrainSeeker method
 ###
 
-def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
+def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
     scoreSample(tree, sampleKmers, method, recurse = False)
 
     cp = copy.deepcopy(currentpath)
@@ -678,7 +678,7 @@ def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
                 oe = tree.score / float(childsum - childprod)
                 if 0.8 <= oe <= 1.20 :
                     for child in tree.children:
-                        newscore(child,sampleKmers,method, thresh, cp, finalpaths)
+                        strain_seeker_score(child,sampleKmers,method, thresh, cp, finalpaths)
                 elif oe > 1.2 :
                     finalpaths["|".join(cp)] = getchildren(tree, [], 2, 0)
                 else:
@@ -688,11 +688,11 @@ def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
         
         
         
-def sspm(filein, tree, out=None, dot=None, overwrite=False):
+def strain_seeker(filein, tree, out=None, dot=None, overwrite=False):
     sampleKmers = kmertools.loadKmers(filein)
-    posspaths = newscore(tree, sampleKmers, 0.1, [], {})
+    posspaths = strain_seeker_score(tree, sampleKmers, 0.1, [], {})
     if out:
-        printoutss(filein, posspaths, out, overwrite=overwrite)
+        output_strain_seeker(filein, posspaths, out, overwrite=overwrite)
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)
@@ -701,7 +701,7 @@ def sspm(filein, tree, out=None, dot=None, overwrite=False):
     
     
  
-def printoutss (filein, pathdict, out, overwrite=False):
+def output_strain_seeker (filein, pathdict, out, overwrite=False):
     if overwite:
         w = open(out, 'wb')
         w.write("Path,Complete,Strains\n")
@@ -796,9 +796,9 @@ if args.sample:
         if args.detection == 'allpaths':
             process_tree(samplename, tree, out=out, dot=dot, overwrite=args.each)
         elif args.detection == 'consecutive':
-            pathdetection(samplename, tree, out=out, dot=dot, overwrite=args.each)
+            consecutive_paths(samplename, tree, out=out, dot=dot, overwrite=args.each)
         else:
-            sspm(samplename, tree, out=out, dot=dot, overwrite=args.each)
+            strain_seeker(samplename, tree, out=out, dot=dot, overwrite=args.each)
             
             
 else:
@@ -812,7 +812,7 @@ else:
     if args.detection == 'allpaths':
         process_tree(sample, tree, out=out, dot=dot, overwrite=True)
     elif args.detection == 'consecutive':
-        pathdetection(sample, tree, out=out, dot=dot, overwrite=True)
+        consecutive_paths(sample, tree, out=out, dot=dot, overwrite=True)
     else:
         raise Exception("strainseeker NYI on pre-generated tree")
 

@@ -508,16 +508,6 @@ def getchildren(node, childrenlist, limit, steps):
                 getchildren(child, children, limit, stepnum)  
     return (children)
 
-def getpath(node):
-    """returns the path node of a given node """
-    path = [node.name]
-    thisnode = node
-    i = 0
-    while thisnode.parent is not None:
-        thisnode = thisnode.parent
-        path.append(thisnode.name)
-    return (path)
-
 def isleafthere(node, scorelist):
     """checks if path passes suitablity threshold"""
     nodethresh = int(round(len(scorelist) * min_nodes)) #needs to have at least this many nodes consecutively with a score
@@ -579,6 +569,19 @@ def getpath(node):
         path.append(thisnode.name)
     return (path)
 
+
+#returns the desired node (whichnode just the name) from a tree
+def getnode(node, whichnode, correct = None):
+    cs = correct
+    if node.name == whichnode:
+        return node
+    else:
+        for child in node.children:
+            res = getnode(child, whichnode, cs)
+            if res is not None:
+                return res
+
+
 def processres(res, tree):
     """Process results"""    
 
@@ -605,17 +608,20 @@ def processres(res, tree):
                             step += 1
                     else:
                         step = 2
-    
     finaldict = {}
     for key in res.keys():
         if "node" in key:
             finaldict[key] = dict()
+            path = getpath(getnode(tree,key))[::-1]
+            finaldict[key]["path"] = "|".join(path)
+            finaldict[key]["strains"] = dict()
             for child in res[key]:
                 thenode = getnode(tree, child)
-                finaldict[key][child] = thenode.pathscore
+                finaldict[key]["strains"][child] = thenode.pathscore
+
         else:
             thenode = getnode(tree, key)
-            finaldict[key] = thenode.pathscore
+            finaldict[key] = dict(score = thenode.pathscore, path = "|".join(getpath(thenode))[::-1])
         
     return finaldict
 
@@ -624,10 +630,10 @@ def printout (pathdict, filein, out):
     with open(out, 'a') as f:
         for key, value in pathdict.items():
             if "node" in key:
-                for strain , score in value.items():
-                    f.write('{0},{1},{2},{3}, {4}\n'.format(filein,key, "no", strain, score)) 
+                for strain , score in value["strains"].items():
+                    f.write('{0},{1},{2},{3}, {4}\n'.format(filein, value["path"], "no", strain, score)) 
             else:
-                f.write('{0},{1},{2},{3}, {4}\n'.format(filein,key, "yes", key, value)) 
+                f.write('{0},{1},{2},{3}, {4}\n'.format(filein,value['path'], "yes", key, value['score'])) 
 
 def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
     """Christine's consecutive method"""
@@ -722,7 +728,7 @@ parser.add_argument("-o", "--out", help="Output results to this csv file")
 parser.add_argument("--each", action='store_true', help="Store results into one csv file for each sample")
 parser.add_argument("--dot", action='store_true', help="Save graphviz dot-style tree graph")
 parser.add_argument("--hdf5", action='store_true', help="HDF5 tree score output (useful to re-analyze paths with different options)")
-parser.add_argument("-d", "--dectection", help="Specify path detection method", 
+parser.add_argument("-d", "--detection", help="Specify path detection method", 
                     default="allpaths", choices=['allpaths', 'consecutive', 'strainseeker'])
 parser.add_argument("-m", "--method", help='Path scoring method', choices=['adjusted', 'weighted', 'unique', 'all'])
 parser.add_argument("-u", "--min_unique", help="Minimum number of unique kmers per node to use unique score (default: 100)", type=int)

@@ -25,7 +25,7 @@ calc_random = False
 
 class RandomTreeNode:
     """Class to support randomizing tree node scores"""
-    def __init__(self, tree=None, root = None):
+    def __init__(self, tree=None, root=None):
         self.score = None
         self.name = None
         self.children = []
@@ -43,7 +43,7 @@ class RandomTreeNode:
     def isLeaf(self):
         return not self.children
         
-    def randomize(self, root = None):
+    def randomize(self, root=None):
         if not root:
             root = self
             root.i = 0
@@ -59,7 +59,7 @@ class RandomTreeNode:
 
 class KmerTreeNode:
     """Class to recursively hold tree representation"""
-    def __init__(self, kmers, name = None, children = [], counts = None, parent = None, score = None, common = None, denominator = None):
+    def __init__(self, kmers, name=None, children=[], counts=None, parent=None, score=None, common=None, denominator=None):
         global treeNodeCount
         if name:
             self.name = name
@@ -93,7 +93,7 @@ class KmerTreeNode:
         
         return sizes
     
-    def saveSampleHdf5(self, h5node, compress = True):
+    def saveSampleHdf5(self, h5node, compress=True):
         if compress is True:
             compress = "gzip"
         h5node.attrs["type"] = np.string_("SampleScoreNode")
@@ -188,7 +188,7 @@ class KmerTreeNode:
                 if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
                     self.score = 0 # assign no score since p >= .05
     
-    def computeRandomScore(self, kmers, n = 100): #n is number of iterations needs to be properly chosen
+    def computeRandomScore(self, kmers, n=100): #n is number of iterations needs to be properly chosen
         """Randomize kmers and score node"""
         n_kmers = kmerizer.count_common(self.kmers, kmers)
         res = []
@@ -201,7 +201,7 @@ class KmerTreeNode:
         return (np.asarray(res))
 
 
-def treeFromHdf5(h5node, parent = None):
+def treeFromHdf5(h5node, parent=None):
     """Construct KmerTree from hdf5 file"""
     #assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
     if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleScoreNode"):
@@ -264,7 +264,7 @@ def get_path_scores(tree, scores=None, leaves=False, min_score=0.1, max_gap=None
     return paths
 
 
-def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
+def filter_paths(paths, min_nodes=0.7, min_score=0.1):
     """Filter to remove low supported paths by both node count and score"""
     if min_nodes <= 0 or min_score <= 0:
         return paths
@@ -331,7 +331,7 @@ def get_strains(tree):
     return answer
 
 
-def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None):
+def scorePathsInSample(tree, min_nodes=0.7, min_score=0.1, max_gap=None):
     """Score kmers of sample to paths in a tree"""
     
     scores = {}
@@ -375,7 +375,7 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     return np.percentile(random_scores, 99)
     
 
-def save_text(filein, pathScores, out, random_score = None, only_complete=False, overwrite=False):
+def save_text(filein, pathScores, out, random_score=None, only_complete=False, overwrite=False):
     """Save path scores to text file"""
     if overwrite:
         w = open(out, 'wb')
@@ -484,7 +484,7 @@ def process_tree(filein, tree, out=None, dot=None, overwrite=False):
 ###
 ### Christine's methods
 ###
-def get_parent(node, amountup = 1):
+def get_parent(node, amountup=1):
     """returns the parent node from a given amount of steps"""
     thisnode = node
     i = 0
@@ -570,7 +570,7 @@ def get_path(node):
     return (path)
 
 
-def get_node(node, whichnode, correct = None):
+def get_node(node, whichnode, correct=None):
     """returns the desired node (whichnode just the name) from a tree"""
     cs = correct
     if node.name == whichnode:
@@ -635,7 +635,7 @@ def output_consecutive_paths (pathdict, filein, out):
             else:
                 f.write('{0},{1},{2},{3}, {4}\n'.format(filein,value['path'], "yes", key, value['score'])) 
 
-def consecutive_paths(filein, tree, out = None, dot = None, overwrite = False):
+def consecutive_paths(filein, tree, out=None, dot=None, overwrite=False):
     """Christine's consecutive method"""
     possible_paths = get_supported_paths(tree, [] , {})
     cleaned_paths = clean_paths(possible_paths, tree)

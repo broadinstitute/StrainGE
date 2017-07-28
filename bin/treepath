@@ -625,8 +625,8 @@ def clean_paths(res, tree):
         
     return finaldict
 
-def printout (pathdict, filein, out):
-    """Print output for path detection"""
+def output_consecutive_paths (pathdict, filein, out):
+    """Print output for consecutive path detection"""
     with open(out, 'a') as f:
         for key, value in pathdict.items():
             if "node" in key:
@@ -643,7 +643,7 @@ def consecutive_paths(filein, tree, out = None, dot = None, overwrite = False):
         if overwrite:
             with open(out, 'w') as f:
                 f.write("Input,Path,Complete,Strains,score\n")
-        printout(cleaned_paths, filein, out)
+        output_consecutive_paths(cleaned_paths, filein, out)
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)

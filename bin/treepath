@@ -570,8 +570,8 @@ def getpath(node):
     return (path)
 
 
-#returns the desired node (whichnode just the name) from a tree
 def getnode(node, whichnode, correct = None):
+    """returns the desired node (whichnode just the name) from a tree"""
     cs = correct
     if node.name == whichnode:
         return node

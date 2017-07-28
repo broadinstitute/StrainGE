@@ -375,7 +375,7 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     return np.percentile(random_scores, 99)
     
 
-def saveText(filein, pathScores, out, random_score = None, only_complete=False, overwrite=False):
+def save_text(filein, pathScores, out, random_score = None, only_complete=False, overwrite=False):
     """Save path scores to text file"""
     if overwrite:
         w = open(out, 'wb')
@@ -473,7 +473,7 @@ def process_tree(filein, tree, out=None, dot=None, overwrite=False):
         print "%.3f" % pathScores[path][0][0]
     
     if out:
-        saveText(filein, pathScores, out, random_score, complete, overwrite=overwrite)
+        save_text(filein, pathScores, out, random_score, complete, overwrite=overwrite)
     
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
@@ -484,7 +484,7 @@ def process_tree(filein, tree, out=None, dot=None, overwrite=False):
 ###
 ### Christine's methods
 ###
-def getparent(node, amountup = 1):
+def get_parent(node, amountup = 1):
     """returns the parent node from a given amount of steps"""
     thisnode = node
     i = 0
@@ -495,7 +495,7 @@ def getparent(node, amountup = 1):
     
 
 
-def getchildren(node, childrenlist, limit, steps):
+def get_children(node, childrenlist, limit, steps):
     """returns all the children of a node within a given limit of steps down"""
     children = childrenlist
     for child in node.children:
@@ -505,10 +505,10 @@ def getchildren(node, childrenlist, limit, steps):
         else:
             if stepnum != limit:
                 stepnum += 1
-                getchildren(child, children, limit, stepnum)  
+                get_children(child, children, limit, stepnum)  
     return (children)
 
-def isleafthere(node, scorelist):
+def is_leaf_there(node, scorelist):
     """checks if path passes suitablity threshold"""
     nodethresh = int(round(len(scorelist) * min_nodes)) #needs to have at least this many nodes consecutively with a score
     
@@ -521,19 +521,19 @@ def isleafthere(node, scorelist):
         limit =  len(scorelist) - nodethresh + 1
         
         if firstabove is None:
-            lastsupport = getparent(node, len(scorelist) - nodethresh)
+            lastsupport = get_parent(node, len(scorelist) - nodethresh)
         elif firstabove[0] == 0:
             #if the leafnode is the last supported, then returns the node name along with 
             #other nodes that shouldn't be considered
             thisnode = node
-            nixlist = getpath(node)
+            nixlist = get_path(node)
             return ({node.name:nixlist[1:]}) 
         else: 
-            lastsupport = getparent(node, firstabove[0])
+            lastsupport = get_parent(node, firstabove[0])
         if lastsupport.parent is None:
               print node.name + " has last support of root node"
         else:
-            chilren = getchildren(lastsupport, [], limit , 0)
+            chilren = get_children(lastsupport, [], limit , 0)
         
             #returns the node of last support and all the children passing a limit/distance threshold of that node
             return ({lastsupport.name:chilren})
@@ -541,25 +541,25 @@ def isleafthere(node, scorelist):
     else:
         return (None)
 
-def getsupportedpath(node, currentscore, scoredict):
+def get_supported_paths(node, currentscore, scoredict):
     """Get supported paths in a scored tree"""
     cs = copy.deepcopy(currentscore)
     cs.append(node.score)
 
     if node.isLeaf():
         node.pathscore = sum(cs)/len(cs)
-        results = isleafthere(node, cs) #runs function that checks if path is suitable
+        results = is_leaf_there(node, cs) #runs function that checks if path is suitable
         
         if results is not None:
             scoredict.update(results) #saves results in dict of results
     else:
         for child in node.children:
-            getsupportedpath(child, cs, scoredict)
+            get_supported_paths(child, cs, scoredict)
       
     return (scoredict)  
 
 
-def getpath(node):
+def get_path(node):
     """returns the path node of a given node"""
     path = [node.name]
     thisnode = node
@@ -570,29 +570,29 @@ def getpath(node):
     return (path)
 
 
-def getnode(node, whichnode, correct = None):
+def get_node(node, whichnode, correct = None):
     """returns the desired node (whichnode just the name) from a tree"""
     cs = correct
     if node.name == whichnode:
         return node
     else:
         for child in node.children:
-            res = getnode(child, whichnode, cs)
+            res = get_node(child, whichnode, cs)
             if res is not None:
                 return res
 
 
-def processres(res, tree):
-    """Process results"""    
+def clean_paths(res, tree):
+    """Get consecutive path results"""    
 
     for key in res.keys():
         if "node" in key:
             if key in sum(res.values(), []):
                 del res[key]
             else:
-                thenode = getnode(tree, key)
+                thenode = get_node(tree, key)
                 
-                nodepath = getpath(thenode)
+                nodepath = get_path(thenode)
                 for i in nodepath[1:]:
                     if i in res.keys():
                         del res[i]
@@ -612,16 +612,16 @@ def processres(res, tree):
     for key in res.keys():
         if "node" in key:
             finaldict[key] = dict()
-            path = getpath(getnode(tree,key))[::-1]
+            path = get_path(get_node(tree,key))[::-1]
             finaldict[key]["path"] = "|".join(path)
             finaldict[key]["strains"] = dict()
             for child in res[key]:
-                thenode = getnode(tree, child)
+                thenode = get_node(tree, child)
                 finaldict[key]["strains"][child] = thenode.pathscore
 
         else:
-            thenode = getnode(tree, key)
-            finaldict[key] = dict(score = thenode.pathscore, path = "|".join(getpath(thenode))[::-1])
+            thenode = get_node(tree, key)
+            finaldict[key] = dict(score = thenode.pathscore, path = "|".join(get_path(thenode))[::-1])
         
     return finaldict
 
@@ -637,13 +637,13 @@ def printout (pathdict, filein, out):
 
 def consecutive_paths(filein, tree, out = None, dot = None, overwrite = False):
     """Christine's consecutive method"""
-    posspaths = getsupportedpath(tree, [] , {})
-    cleanedpaths = processres(posspaths, tree)
+    possible_paths = get_supported_paths(tree, [] , {})
+    cleaned_paths = clean_paths(possible_paths, tree)
     if out:
         if overwrite:
             with open(out, 'w') as f:
                 f.write("Input,Path,Complete,Strains,score\n")
-        printout(cleanedpaths, filein, out)
+        printout(cleaned_paths, filein, out)
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)
@@ -656,6 +656,7 @@ def consecutive_paths(filein, tree, out = None, dot = None, overwrite = False):
 ###
 
 def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
+    """Score sample for strain seeker method"""
     scoreSample(tree, sampleKmers, method, recurse = False)
 
     cp = copy.deepcopy(currentpath)
@@ -680,7 +681,7 @@ def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
                     for child in tree.children:
                         strain_seeker_score(child,sampleKmers,method, thresh, cp, finalpaths)
                 elif oe > 1.2 :
-                    finalpaths["|".join(cp)] = getchildren(tree, [], 2, 0)
+                    finalpaths["|".join(cp)] = get_children(tree, [], 2, 0)
                 else:
                     print "Not in db"
      
@@ -689,10 +690,11 @@ def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
         
         
 def strain_seeker(filein, tree, out=None, dot=None, overwrite=False):
+    """Strain Seeker method implementation"""
     sampleKmers = kmertools.loadKmers(filein)
-    posspaths = strain_seeker_score(tree, sampleKmers, 0.1, [], {})
+    possible_paths = strain_seeker_score(tree, sampleKmers, 0.1, [], {})
     if out:
-        output_strain_seeker(filein, posspaths, out, overwrite=overwrite)
+        output_strain_seeker(filein, possible_paths, out, overwrite=overwrite)
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)
@@ -702,6 +704,7 @@ def strain_seeker(filein, tree, out=None, dot=None, overwrite=False):
     
  
 def output_strain_seeker (filein, pathdict, out, overwrite=False):
+    """Output results of strain seeker method"""
     if overwite:
         w = open(out, 'wb')
         w.write("Path,Complete,Strains\n")

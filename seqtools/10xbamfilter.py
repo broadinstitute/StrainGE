@@ -11,6 +11,7 @@ parser.add_argument("--score", "-s", type=int, default=-10, help="Minimum alignm
 parser.add_argument("--edge", "-e", type=int, default=250, help="Allow unpaired alignments this close to the edge of contigs")
 parser.add_argument("--insert", "-i", type=int, default=-1, help="Minimum insert (fragment) size")
 parser.add_argument("--contig", "-c", type=int, default=-1, help="Only filter based on this contig (index)")
+parser.add_argument("--verbose", "-v", action='store_true', help="Verbose output")
 parser.add_argument('input', help='input BAM file')
 parser.add_argument('output', help='output BAM file')
 args = parser.parse_args()
@@ -30,20 +31,25 @@ with pysam.AlignmentFile(args.input, "rb") as bam:
             score = read.get_tag("AS")
             if score <= args.score:
                 good = False
+                if args.verbose: print barcode, 'score'
             elif read.is_paired:
                 if read.mate_is_unmapped:
                     if read.is_reverse:
                         if read.reference_start > args.edge:
                             good = False
+                            if args.verbose: print barcode, 'unmapped mate'
                     else:
                         reflength = reflengths[read.reference_id]
                         if read.reference_end < reflength - args.edge:
                             good = False
+                            if args.verbose: print barcode, 'unmapped mate'
                 else:
                     if not read.is_proper_pair or abs(read.template_length) < args.insert:
                         good = False
+                        if args.verbose: print barcode, 'improper'
             if good:
                 goodbarcodes.add(barcode)
+                if args.verbose: print barcode, 'good'
             else:
                 poorbarcodes.add(barcode)
 

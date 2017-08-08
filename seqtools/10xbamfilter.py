@@ -33,7 +33,7 @@ def parse_target(target):
     return (contig, range_left, range_right)
 
 targets = map(parse_target, args.target) if args.target else []
-print targets
+
 # pass 1: collect barcodes with good alignments
 with pysam.AlignmentFile(args.input, "rb") as bam:
     reflengths = bam.lengths

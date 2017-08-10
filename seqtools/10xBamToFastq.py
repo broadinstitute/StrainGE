@@ -13,6 +13,8 @@ with open(sys.argv[2], "w") as fastq:
         for read in bam:
             barcode = read.get_tag("BX") if read.has_tag("BX") else ""
             seq = Seq(read.query_sequence)
+            if barcode:
+                barcode = "BX:Z:" + barcode
             record = SeqRecord(Seq(read.query_sequence), id=read.query_name, description=barcode)
             record.letter_annotations['phred_quality'] = read.query_qualities
             if read.is_reverse:

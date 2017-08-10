@@ -20,7 +20,7 @@ min_nodes = 0.7
 min_score = 0.1
 complete = False
 max_gap = None
-calc_random = False
+calc_random = 0
 
 
 class RandomTreeNode:
@@ -448,7 +448,7 @@ def process_tree(filein, tree, out=None, dot=None, overwrite=False):
     """"After sample scored to tree, calculate paths and output results"""
     if calc_random:
         print "Estimating threshold for significant path..."
-        random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap)
+        random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap, calc_random)
         print "For this tree, sum of node scores must be > %.3f for p < 0.01" % random_score
     else:
         random_score = None
@@ -464,7 +464,7 @@ def process_tree(filein, tree, out=None, dot=None, overwrite=False):
         else:
             print path, "incomplete",
     
-        if random:
+        if random_score:
             if pathScores[path][0][1] > random_score:
                 print "significant",
             else:
@@ -739,7 +739,7 @@ parser.add_argument("-n", "--min_nodes", type=float, help="fraction of nodes req
 parser.add_argument("-s", "--min_score", type=float, help="minimum score of a node in a tree to keep (default: 0.1)")
 parser.add_argument("-c", "--complete", action="store_true", help="Keep only complete paths")
 parser.add_argument("-g", "--max_gap", type=int, help="Short circuit path detection if this many nodes are below min_score (default: disabled)")
-parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
+parser.add_argument("-r", "--random", type=int, default=0, help='Calculate paths in n random trees to estimate significance of path scores (default: disabled)')
 args = parser.parse_args()
 
 if args.verbose:

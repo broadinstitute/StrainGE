@@ -24,7 +24,7 @@ def run_kmerseq(fasta, k=23, fraction=0.002):
     except SystemExit:
         raise SystemExit
     except Exception as e:
-        print >>sys.stderr "Exception kmerizing {}: {}".format(fasta, e)
+        print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
 
 
 def run_bowtie2_build(fasta):
@@ -40,14 +40,14 @@ def run_bowtie2_build(fasta):
     except SystemExit:
         raise SystemExit
     except Exception as e:
-        print >>sys.stderr "Exception building bowtie2 index for {}: {}".format(fasta, e)
+        print >>sys.stderr, "Exception building bowtie2 index for {}: {}".format(fasta, e)
 
 
 def run_kmertree(kmerfiles, k=23, fingerprint=False):
     """Generate kmer tree from hdf5 files"""
     try:
         if os.path.isfile("tree.hdf5"):
-            print >>sys.stderr "WARNING! Overwriting previously generated kmer tree"
+            print >>sys.stderr, "WARNING! Overwriting previously generated kmer tree"
         kmertree = ["kmertree", "--dedupe", "-k", str(k), "--output", "tree.hdf5", "--nwk", "tree.nwk"]
         if fingerprint:
             kmertree.append("--fingerprint")
@@ -56,9 +56,9 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False):
             subprocess.check_call(kmertree, stdout=w, stderr=w)
         return True
     except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr "Interrupting..."
+        print >>sys.stderr, "Interrupting..."
     except Exception as e:
-        print >>sys.stderr "Exception building kmertree: {}".format(e,)
+        print >>sys.stderr, "Exception building kmertree: {}".format(e,)
 
 
 ###
@@ -73,7 +73,7 @@ parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of k
 args = parser.parse_args()
 
 if not args:
-    print >>sys.stderr "No reference fasta files specified"
+    print >>sys.stderr, "No reference fasta files specified"
     sys.exit(1)
 
 complete = 0
@@ -81,42 +81,42 @@ kmerfiles = []
 for fasta in args.fasta:
     try:
         if not os.path.isfile(fasta):
-            print >>sys.stderr "Cannot find file: {}".format(fasta)
+            print >>sys.stderr, "Cannot find file: {}".format(fasta)
             continue
         try:
             open(fasta, 'rb').close()
         except IOError:
-            print >>sys.stderr "Cannot open file: {}".format(fasta)
+            print >>sys.stderr, "Cannot open file: {}".format(fasta)
             continue
         except Exception as e:
             raise e
 
-        print >>sys.stderr "Generating kmerized file for {}".format(fasta)
+        print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
         kmerfile = run_kmerseq(fasta, args.database, k=args.k, fraction=args.fraction):
         if not kmerfile:
             continue
         kmerfiles.append(kmerfile)
 
-        print >>sys.stderr "Generating Bowtie2 index for {}".format(fasta)
+        print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
         if run_bowtie2_build(fasta):
             complete += 1
     except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr "Interrupting..."
+        print >>sys.stderr, "Interrupting..."
         sys.exit(1)
     except Exception as e:
-        print >>sys.stderr "Exception processing {}: {}".format(fasta, e)
+        print >>sys.stderr, "Exception processing {}: {}".format(fasta, e)
 
 if complete != len(args.fasta):
-    print >>sys.stderr "ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta))
+    print >>sys.stderr, "ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta))
     sys.exit(1)
 else:
-    print >>sys.stderr "Successfully processed all {:d} references".format(complete)
+    print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
 
 if not kmerfiles:
-    print >>sys.stderr "ERROR! No kmer files to generate kmer tree"`
+    print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"`
     sys.exit(1)
 
 if run_kmertree(kmerfiles, k=k, fingerprint=args.fingerprint):
-    print >>sys.stderr "Successfully built kmertree"
+    print >>sys.stderr, "Successfully built kmertree"
 else:
     sys.exit(1)

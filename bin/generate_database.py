@@ -92,7 +92,7 @@ for fasta in args.fasta:
             raise e
 
         print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
-        kmerfile = run_kmerseq(fasta, args.database, k=args.k, fraction=args.fraction)
+        kmerfile = run_kmerseq(fasta, k=args.k, fraction=args.fraction)
         if not kmerfile:
             continue
         kmerfiles.append(kmerfile)
@@ -113,10 +113,10 @@ else:
     print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
 
 if not kmerfiles:
-    print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"`
+    print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"
     sys.exit(1)
 
-if run_kmertree(kmerfiles, k=k, fingerprint=args.fingerprint):
+if run_kmertree(kmerfiles, k=args.k, fingerprint=args.fingerprint):
     print >>sys.stderr, "Successfully built kmertree"
 else:
     sys.exit(1)

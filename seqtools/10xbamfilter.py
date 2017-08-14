@@ -13,6 +13,7 @@ parser.add_argument("--insert", "-i", type=int, default=-1, help="Minimum insert
 parser.add_argument("--all", "-a", action='store_true', help="Include all matching reads")
 parser.add_argument("--verbose", "-v", action='store_true', help="Verbose output")
 parser.add_argument("--target", "-t", action='append', help="Targets (e.g., contig3:390-4345)")
+parser.add_argument("--exclude", "-x", action='append', help="Targets to exclude(e.g., contig3:390-4345)")
 parser.add_argument('input', help='input BAM file')
 parser.add_argument('output', help='output BAM file')
 args = parser.parse_args()
@@ -32,7 +33,18 @@ def parse_target(target):
         range_left = range_right = -1
     return (contig, range_left, range_right)
 
-targets = map(parse_target, args.target) if args.target else []
+def in_target(targets, refname, start, end):
+    for t in targets:
+        if refname.startswith(t[0]):
+            if t[1] >= 0 and start < t[1]:
+                continue
+            if t[2] >= 0 and end > t[2]:
+                continue
+            return t
+    return None
+
+includes = map(parse_target, args.target) if args.target else []
+excludes = map(parse_target, args.exclude) if args.exclude else []
 
 # pass 1: collect barcodes with good alignments
 with pysam.AlignmentFile(args.input, "rb") as bam:
@@ -41,20 +53,12 @@ with pysam.AlignmentFile(args.input, "rb") as bam:
     for read in bam:
         barcode = read.get_tag("BX") if read.has_tag("BX") else None
         if barcode and not read.is_unmapped:
-            if targets:
-                refname = refnames[read.reference_id]
-                reflen = reflengths[read.reference_id]
-                found = False
-                for t in targets:
-                    if refname.startswith(t[0]):
-                        if t[1] >= 0 and read.reference_start < t[1]:
-                            continue
-                        if t[2] >= 0 and read.reference_end > t[2]:
-                            continue
-                        found = True
-                        break
-                if not found:
-                    continue
+            refname = refnames[read.reference_id]
+            reflen = reflengths[read.reference_id]
+            if includes and not in_target(includes, refname, read.reference_start, read.reference_end):
+                continue
+            if excludes and in_target(excludes, refname, read.reference_start, read.reference_end):
+                continue
             good = True
             score = read.get_tag("AS")
             if score <= args.score:

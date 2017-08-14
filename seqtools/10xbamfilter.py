@@ -13,7 +13,7 @@ parser.add_argument("--insert", "-i", type=int, default=-1, help="Minimum insert
 parser.add_argument("--all", "-a", action='store_true', help="Include all matching reads")
 parser.add_argument("--verbose", "-v", action='store_true', help="Verbose output")
 parser.add_argument("--target", "-t", action='append', help="Targets (e.g., contig3:390-4345)")
-parser.add_argument("--exclude", "-T", action='append', help="Targets to exclude(e.g., contig3:390-4345)")
+parser.add_argument("--exclude", "-x", action='append', help="Targets to exclude(e.g., contig3:390-4345)")
 parser.add_argument('input', help='input BAM file')
 parser.add_argument('output', help='output BAM file')
 args = parser.parse_args()
@@ -58,7 +58,7 @@ with pysam.AlignmentFile(args.input, "rb") as bam:
             if includes and not in_target(includes, refname, read.reference_start, read.reference_end):
                 continue
             if excludes and in_target(excludes, refname, read.reference_start, read.reference_end):
-                continue
+                <continue
             good = True
             score = read.get_tag("AS")
             if score <= args.score:

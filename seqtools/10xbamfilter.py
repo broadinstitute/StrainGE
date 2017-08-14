@@ -58,7 +58,7 @@ with pysam.AlignmentFile(args.input, "rb") as bam:
             if includes and not in_target(includes, refname, read.reference_start, read.reference_end):
                 continue
             if excludes and in_target(excludes, refname, read.reference_start, read.reference_end):
-                <continue
+                continue
             good = True
             score = read.get_tag("AS")
             if score <= args.score:

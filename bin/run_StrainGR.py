@@ -38,7 +38,7 @@ def run_treepath(kmerfiles, tree, min_score=0.1):
         print >>sys.stderr, "Interrupting..."
     except Exception as e:
         print "ERROR! Exception while running treepath: {}".format(e)
-        
+
 
 def parse_treepath():
     """Parse treepath results"""
@@ -224,8 +224,8 @@ if args.no_bowtie2:
 
 bamfiles = run_bowtie2(treepath_results, kmerfiles, args.reference, threads=args.threads)
 if not bamfiles:
-   print >>sys.stderr, "ERROR! Did not complete bowtie2 alignments"
-   sys.exit(1)
+    print >>sys.stderr, "ERROR! Did not complete bowtie2 alignments"
+    sys.exit(1)
 
 if not run_straingr(bamfiles, args.reference):
     sys.exit(1)

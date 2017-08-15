@@ -13,6 +13,7 @@ import argparse
 def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False):
     """Generate kmer hdf5 file from fasta file"""
     try:
+        root = os.path.splitext(fasta)[0]
         out = "{}.hdf5".format(fasta)
         kmerseq = ["kmerseq", "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction), fasta]
         if fasta2:
@@ -101,7 +102,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                     continue
                 index = os.path.join(reference, ref)
                 bowtie2 = ["bowtie2", "--no-unal", "--very-sensitive", "--no-mixed", "--no-discordant", "-p", str(threads), "-x", index]
-                if file2:
+                if pair2:
                     bowtie2.extend(["-1", pair1, "-2", pair2])
                 else:
                     bowtie2.extend(["-U", pair1])
@@ -195,7 +196,7 @@ def main():
             else:
                 file1 = sample
                 file2 = None
-            
+
             kmerfile = run_kmerseq(file1, file2, k=args.k, fraction=args.fraction, filtered=args.filter)
             if not kmerfile:
                 continue

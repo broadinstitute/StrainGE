@@ -35,7 +35,7 @@ def parse_target(target):
 
 def in_target(targets, refname, start, end):
     for t in targets:
-        if refname == t[0] end > t[1] and start < t[2]:
+        if refname == t[0] and end > t[1] and start < t[2]:
                 return t
     return None
 

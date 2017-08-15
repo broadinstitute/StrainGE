@@ -20,12 +20,12 @@ min_nodes = 0.7
 min_score = 0.1
 complete = False
 max_gap = None
-calc_random = False
+calc_random = 0
 
 
 class RandomTreeNode:
     """Class to support randomizing tree node scores"""
-    def __init__(self, tree=None, root = None):
+    def __init__(self, tree=None, root=None):
         self.score = None
         self.name = None
         self.children = []
@@ -43,7 +43,7 @@ class RandomTreeNode:
     def isLeaf(self):
         return not self.children
         
-    def randomize(self, root = None):
+    def randomize(self, root=None):
         if not root:
             root = self
             root.i = 0
@@ -59,7 +59,7 @@ class RandomTreeNode:
 
 class KmerTreeNode:
     """Class to recursively hold tree representation"""
-    def __init__(self, kmers, name = None, children = [], counts = None, parent = None, score = None, common = None, denominator = None):
+    def __init__(self, kmers, name=None, children=[], counts=None, parent=None, score=None, common=None, denominator=None):
         global treeNodeCount
         if name:
             self.name = name
@@ -93,7 +93,7 @@ class KmerTreeNode:
         
         return sizes
     
-    def saveSampleHdf5(self, h5node, compress = True):
+    def saveSampleHdf5(self, h5node, compress=True):
         if compress is True:
             compress = "gzip"
         h5node.attrs["type"] = np.string_("SampleScoreNode")
@@ -188,7 +188,7 @@ class KmerTreeNode:
                 if ( sum (self.score <= randscores) / float(randscores.size) ) >= .05:
                     self.score = 0 # assign no score since p >= .05
     
-    def computeRandomScore(self, kmers, n = 100): #n is number of iterations needs to be properly chosen
+    def computeRandomScore(self, kmers, n=100): #n is number of iterations needs to be properly chosen
         """Randomize kmers and score node"""
         n_kmers = kmerizer.count_common(self.kmers, kmers)
         res = []
@@ -208,7 +208,7 @@ class KmerTreeNode:
         else:
             self.cov = np.nan
 
-def treeFromHdf5(h5node, parent = None):
+def treeFromHdf5(h5node, parent=None):
     """Construct KmerTree from hdf5 file"""
     #assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
     if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleScoreNode"):
@@ -271,7 +271,7 @@ def get_path_scores(tree, scores=None, leaves=False, min_score=0.1, max_gap=None
     return paths
 
 
-def filter_paths(paths, min_nodes=0.7, min_score = 0.1):
+def filter_paths(paths, min_nodes=0.7, min_score=0.1):
     """Filter to remove low supported paths by both node count and score"""
     if min_nodes <= 0 or min_score <= 0:
         return paths
@@ -338,7 +338,11 @@ def get_strains(tree):
     return answer
 
 
+<<<<<<< HEAD
 def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None, sampleKmers =  None, samplecounts = None ):
+=======
+def scorePathsInSample(tree, min_nodes=0.7, min_score=0.1, max_gap=None):
+>>>>>>> 44485a55ecf12d2a9af13c40b7aafb9bb7916448
     """Score kmers of sample to paths in a tree"""
     
     scores = {}
@@ -380,7 +384,7 @@ def scorePathsInSample(tree, min_nodes = 0.7, min_score = 0.1, max_gap=None, sam
     return scores
 
 
-def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=1000):
+def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None):
     """Get 99%ile of the sum of node scores of random paths (p = 0.01)"""
     random_tree = RandomTreeNode(tree, root=None)
     random_scores = []
@@ -389,7 +393,7 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     if verbose:
         temp = verbose # this is just too much info...
         verbose = False
-    for i in xrange(n):
+    for i in xrange(calc_random):
         random_tree.randomize(None)
         rand_scores = scorePathsInSample(random_tree, min_nodes, min_score, max_gap)
         if rand_scores:
@@ -401,7 +405,7 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None, n=10
     return np.percentile(random_scores, 99)
     
 
-def saveText(filein, pathScores, out, random_score = None, only_complete=False, overwrite=False):
+def save_text(filein, pathScores, out, random_score=None, only_complete=False, overwrite=False):
     """Save path scores to text file"""
     if overwrite:
         w = open(out, 'wb')
@@ -435,7 +439,11 @@ def saveText(filein, pathScores, out, random_score = None, only_complete=False, 
         else:
             significance = "NA"
         
+<<<<<<< HEAD
         w.write("%s,%s,%.3f,%s,%s,%s,%s\n" % (filein, path, pathScores[path][0][0], complete, significance, strains, pathScores[path][2]))
+=======
+        w.write("%s,%s,%.3f,%s,%s,%s\n" % (filein, path, pathScores[path][0][0], complete, significance, strains))
+>>>>>>> 44485a55ecf12d2a9af13c40b7aafb9bb7916448
     w.close()
     
 
@@ -478,6 +486,7 @@ def process_tree(filein, tree, sampleKmers, samplecounts ,out=None, dot=None, ov
         random_score = None
     
     print "Scoring paths in tree..."
+<<<<<<< HEAD
     pathScores = scorePathsInSample(tree,  min_nodes, min_score, max_gap, sampleKmers, samplecounts,)
  #   for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
         # if len(pathScores[path][1]) == 1:
@@ -495,8 +504,28 @@ def process_tree(filein, tree, sampleKmers, samplecounts ,out=None, dot=None, ov
     
         # print "%.3f" % pathScores[path][0][0]
 
+=======
+    pathScores = scorePathsInSample(tree, min_nodes, min_score, max_gap)
+    
+    for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
+        if len(pathScores[path][1]) == 1:
+            print path, "complete",
+        elif complete:
+            break # keep only complete
+        else:
+            print path, "incomplete",
+    
+        if random_score:
+            if pathScores[path][0][1] > random_score:
+                print "significant",
+            else:
+                print "p > 0.01",
+    
+        print "%.3f" % pathScores[path][0][0]
+    
+>>>>>>> 44485a55ecf12d2a9af13c40b7aafb9bb7916448
     if out:
-        saveText(filein, pathScores, out, random_score, complete, overwrite=overwrite)
+        save_text(filein, pathScores, out, random_score, complete, overwrite=overwrite)
     
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
@@ -507,7 +536,7 @@ def process_tree(filein, tree, sampleKmers, samplecounts ,out=None, dot=None, ov
 ###
 ### Christine's methods
 ###
-def getparent(node, amountup = 1):
+def get_parent(node, amountup=1):
     """returns the parent node from a given amount of steps"""
     thisnode = node
     i = 0
@@ -517,8 +546,7 @@ def getparent(node, amountup = 1):
     return (thisnode)
     
 
-
-def getchildren(node, childrenlist, limit, steps):
+def get_children(node, childrenlist, limit, steps):
     """returns all the children of a node within a given limit of steps down"""
     children = childrenlist
     for child in node.children:
@@ -528,10 +556,11 @@ def getchildren(node, childrenlist, limit, steps):
         else:
             if stepnum != limit:
                 stepnum += 1
-                getchildren(child, children, limit, stepnum)  
+                get_children(child, children, limit, stepnum)  
     return (children)
 
-def isleafthere(node, scorelist):
+
+def is_leaf_there(node, scorelist):
     """checks if path passes suitablity threshold"""
     nodethresh = int(round(len(scorelist) * min_nodes)) #needs to have at least this many nodes consecutively with a score
     
@@ -544,19 +573,19 @@ def isleafthere(node, scorelist):
         limit =  len(scorelist) - nodethresh + 1
         
         if firstabove is None:
-            lastsupport = getparent(node, len(scorelist) - nodethresh)
+            lastsupport = get_parent(node, len(scorelist) - nodethresh)
         elif firstabove[0] == 0:
             #if the leafnode is the last supported, then returns the node name along with 
             #other nodes that shouldn't be considered
             thisnode = node
-            nixlist = getpath(node)
+            nixlist = get_path(node)
             return ({node.name:nixlist[1:]}) 
         else: 
-            lastsupport = getparent(node, firstabove[0])
+            lastsupport = get_parent(node, firstabove[0])
         if lastsupport.parent is None:
               print node.name + " has last support of root node"
         else:
-            chilren = getchildren(lastsupport, [], limit , 0)
+            chilren = get_children(lastsupport, [], limit , 0)
         
             #returns the node of last support and all the children passing a limit/distance threshold of that node
             return ({lastsupport.name:chilren})
@@ -564,25 +593,26 @@ def isleafthere(node, scorelist):
     else:
         return (None)
 
-def getsupportedpath(node, currentscore, scoredict):
+
+def get_supported_paths(node, currentscore, scoredict):
     """Get supported paths in a scored tree"""
     cs = copy.deepcopy(currentscore)
     cs.append(node.score)
 
     if node.isLeaf():
         node.pathscore = sum(cs)/len(cs)
-        results = isleafthere(node, cs) #runs function that checks if path is suitable
+        results = is_leaf_there(node, cs) #runs function that checks if path is suitable
         
         if results is not None:
             scoredict.update(results) #saves results in dict of results
     else:
         for child in node.children:
-            getsupportedpath(child, cs, scoredict)
+            get_supported_paths(child, cs, scoredict)
       
     return (scoredict)  
 
 
-def getpath(node):
+def get_path(node):
     """returns the path node of a given node"""
     path = [node.name]
     thisnode = node
@@ -593,29 +623,29 @@ def getpath(node):
     return (path)
 
 
-#returns the desired node (whichnode just the name) from a tree
-def getnode(node, whichnode, correct = None):
+def get_node(node, whichnode, correct=None):
+    """returns the desired node (whichnode just the name) from a tree"""
     cs = correct
     if node.name == whichnode:
         return node
     else:
         for child in node.children:
-            res = getnode(child, whichnode, cs)
+            res = get_node(child, whichnode, cs)
             if res is not None:
                 return res
 
 
-def processres(res, tree):
-    """Process results"""    
+def clean_paths(res, tree):
+    """Get consecutive path results"""    
 
     for key in res.keys():
         if "node" in key:
             if key in sum(res.values(), []):
                 del res[key]
             else:
-                thenode = getnode(tree, key)
+                thenode = get_node(tree, key)
                 
-                nodepath = getpath(thenode)
+                nodepath = get_path(thenode)
                 for i in nodepath[1:]:
                     if i in res.keys():
                         del res[i]
@@ -624,21 +654,22 @@ def processres(res, tree):
     for key in res.keys():
         if "node" in key:
             finaldict[key] = dict()
-            path = getpath(getnode(tree,key))[::-1]
+            path = get_path(get_node(tree,key))[::-1]
             finaldict[key]["path"] = "|".join(path)
             finaldict[key]["strains"] = dict()
             for child in res[key]:
-                thenode = getnode(tree, child)
+                thenode = get_node(tree, child)
                 finaldict[key]["strains"][child] = thenode.pathscore
 
         else:
-            thenode = getnode(tree, key)
-            finaldict[key] = dict(score = thenode.pathscore, path = "|".join(getpath(thenode))[::-1])
+            thenode = get_node(tree, key)
+            finaldict[key] = dict(score = thenode.pathscore, path = "|".join(get_path(thenode))[::-1])
         
     return finaldict
 
-def printout (pathdict, filein, out):
-    """Print output for path detection"""
+
+def output_consecutive_paths (pathdict, filein, out):
+    """Print output for consecutive path detection"""
     with open(out, 'a') as f:
         for key, value in pathdict.items():
             if "node" in key:
@@ -647,15 +678,21 @@ def printout (pathdict, filein, out):
             else:
                 f.write('{0},{1},{2},{3}, {4}, {5}\n'.format(filein,value['path'], "yes", key, value['score'])) 
 
-def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
+
+def consecutive_paths(filein, tree, out=None, dot=None, overwrite=False):
     """Christine's consecutive method"""
-    posspaths = getsupportedpath(tree, [] , {})
-    cleanedpaths = processres(posspaths, tree)
+    possible_paths = get_supported_paths(tree, [] , {})
+    cleaned_paths = clean_paths(possible_paths, tree)
     if out:
         if overwrite:
             with open(out, 'w') as f:
+<<<<<<< HEAD
                 f.write("Input,Path,Complete,Strains,score,RelAbundance\n")
         printout(cleanedpaths, filein, out)
+=======
+                f.write("Input,Path,Complete,Strains,score\n")
+        output_consecutive_paths(cleaned_paths, filein, out)
+>>>>>>> 44485a55ecf12d2a9af13c40b7aafb9bb7916448
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)
@@ -666,8 +703,8 @@ def pathdetection(filein, tree, out = None, dot = None, overwrite = False):
 ###
 ### StrainSeeker method
 ###
-
-def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
+def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
+    """Score sample for strain seeker method"""
     scoreSample(tree, sampleKmers, method, recurse = False)
 
     cp = copy.deepcopy(currentpath)
@@ -689,30 +726,29 @@ def newscore(tree, sampleKmers, thresh, currentpath, finalpaths):
                 oe = tree.score / float(childsum - childprod)
                 if 0.8 <= oe <= 1.20 :
                     for child in tree.children:
-                        newscore(child,sampleKmers,method, thresh, cp, finalpaths)
+                        strain_seeker_score(child,sampleKmers,method, thresh, cp, finalpaths)
                 elif oe > 1.2 :
-                    finalpaths["|".join(cp)] = getchildren(tree, [], 2, 0)
+                    finalpaths["|".join(cp)] = get_children(tree, [], 2, 0)
                 else:
                     print "Not in db"
      
     return (finalpaths)
         
         
-        
-def sspm(filein, tree, out=None, dot=None, overwrite=False):
+def strain_seeker(filein, tree, out=None, dot=None, overwrite=False):
+    """Strain Seeker method implementation"""
     sampleKmers = kmertools.loadKmers(filein)
-    posspaths = newscore(tree, sampleKmers, 0.1, [], {})
+    possible_paths = strain_seeker_score(tree, sampleKmers, 0.1, [], {})
     if out:
-        printoutss(filein, posspaths, out, overwrite=overwrite)
+        output_strain_seeker(filein, possible_paths, out, overwrite=overwrite)
     if dot:
         graph = pydot.Dot(graph_type='graph', rankdir='LR')
         graphTree(graph, tree, None)
         graph.write_png(dot)
     
-    
-    
- 
-def printoutss (filein, pathdict, out, overwrite=False):
+
+def output_strain_seeker (filein, pathdict, out, overwrite=False):
+    """Output results of strain seeker method"""
     if overwite:
         w = open(out, 'wb')
         w.write("Path,Complete,Strains\n")
@@ -759,7 +795,7 @@ parser.add_argument("-n", "--min_nodes", type=float, help="fraction of nodes req
 parser.add_argument("-s", "--min_score", type=float, help="minimum score of a node in a tree to keep (default: 0.1)")
 parser.add_argument("-c", "--complete", action="store_true", help="Keep only complete paths")
 parser.add_argument("-g", "--max_gap", type=int, help="Short circuit path detection if this many nodes are below min_score (default: disabled)")
-parser.add_argument("-r", "--random", action='store_true', help='Calculate paths in random trees to estimate significance of path scores')
+parser.add_argument("-r", "--random", type=int, default=0, help='Calculate paths in n random trees to estimate significance of path scores (default: disabled)')
 args = parser.parse_args()
 
 if args.verbose:
@@ -823,9 +859,9 @@ if args.sample:
         if args.detection == 'allpaths':
             process_tree(samplename, tree, sampleKmers, samplecounts, out=out, dot=dot, overwrite=args.each)
         elif args.detection == 'consecutive':
-            pathdetection(samplename, tree, out=out, dot=dot, overwrite=args.each)
+            consecutive_paths(samplename, tree, out=out, dot=dot, overwrite=args.each)
         else:
-            sspm(samplename, tree, out=out, dot=dot, overwrite=args.each)
+            strain_seeker(samplename, tree, out=out, dot=dot, overwrite=args.each)
             
             
 else:
@@ -839,7 +875,7 @@ else:
     if args.detection == 'allpaths':
         process_tree(sample, tree, out=out, dot=dot, overwrite=True)
     elif args.detection == 'consecutive':
-        pathdetection(sample, tree, out=out, dot=dot, overwrite=True)
+        consecutive_paths(sample, tree, out=out, dot=dot, overwrite=True)
     else:
         raise Exception("strainseeker NYI on pre-generated tree")
 

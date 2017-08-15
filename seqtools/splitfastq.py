@@ -8,7 +8,7 @@ from Bio import SeqIO
 import sys
 import kmertools
 
-with gzip.GzipFile(sys.argv[2], "w") as read1, gzip.GzipFile(sys.argv[3], "w") as read2:
+with open(sys.argv[2], "w") as read1, open(sys.argv[3], "w") as read2:
     lastread = None
     for read in kmertools.openSeqFile(sys.argv[1]):
         if lastread:

@@ -81,15 +81,23 @@ def write_bowtie2_commands(results, kmerfiles, reference, threads=1):
         w.write("\n".join(commands))
             
 
-def run_bowtie2(results, kmerfiles, reference, threads=1):
+def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
     """Run Bowtie2 aligner on each sample for each matching reference"""
     total = 0
     aligned = 0
+    bamfiles = {}
     for sample in results:
         file1, file2 = kmerfiles.get(sample)
         for ref in results[sample]:
             try:
                 total += 1
+                bam = "{}_{}.bam".format(sample, ref)
+                if not force and os.path.isfile(bam):
+                    print >>sys.stderr, "Bam file already exists: {}".format(bam)
+                    if ref not in bamfiles:
+                        bamfiles[ref] = []
+                    bamfiles[ref].append(bam)
+                    continue
                 index = os.path.join(reference, ref)
                 bowtie2 = ["bowtie2", "--no-unal", "--very-sensitive", "--no-mixed", "--no-discordant", "-p", str(threads), "-x", index]
                 if file2:
@@ -97,7 +105,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1):
                 else:
                     bowtie2.extend(["-U", file1])
                 with open("{}_{}.bowtie2.log".format(sample, ref), 'wb') as w:
-                    bam = "{}_{}.bam".format(sample, ref)
+                    
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
                     p_sort = subprocess.Popen(["samtools", "sort" "-o", bam], stdin=p_view.stdout, stderr=w)
@@ -106,18 +114,45 @@ def run_bowtie2(results, kmerfiles, reference, threads=1):
                     p_sort.communicate()
                     subprocess.check_call(["samtools", "index", bam, "{}.bai".format(bam)])
                     aligned += 1
+                    if ref not in bamfiles:
+                        bamfiles[ref] = []
+                    bamfiles[ref].append(bam)
             except (KeyboardInterrupt, SystemExit):
                 print >>sys.stderr, "Interrupting..."
                 return
             except Exception as e:
                 print "ERROR! Exception occuring during bowtie2 alignment of {} to {}".format(sample, ref)
     if aligned == total:
-        return True
+        return bamfiles
     else:
         print >>sys.stderr, "Warning! Only aligned {:d} out of {:d}".format(aligned, total)
 
 
-
+def run_straingr(bamfiles, reference):
+    """Run straingr tool on bam files to associated reference"""
+    complete = 0
+    for ref in bamfiles:
+        try:
+            fasta = os.path.join(reference, ref)
+            if not os.path.isfile(fasta):
+                print >>sys.stderr, "ERROR! Cannot find reference fasta file: {}".format(fasta)
+                continue
+            straingr = ["straingr", "fasta"]
+            straingr.extend(bamfiles[ref])
+            with open("{}_straingr.log".format(ref), 'wb') as w:
+                subprocess.check_call(straingr, stdout=w, stderr=w)
+            complete += 1
+        except (KeyboardInterrupt, SystemExit):
+            print >>sys.stderr, "Interrupting..."
+            return
+        except Exception as e:
+            print >>sys.stderr, "ERROR! Exception occurred during running straingr on {}: {}".format(ref, e)
+    
+    if complete == len(bamfiles):
+        print >>sys.stderr, "Success! All alignments successfully parsed"
+        return True
+    else:
+        print >>sys.stderr, "Error! Not all alignments parsed successfully"
 
 
 
@@ -185,10 +220,14 @@ if not treepath_results:
 if args.no_bowtie2:
     write_bowtie2_commands(treepath_results, kmerfiles, args.reference, threads=args.threads)
     print >>sys.stderr, "Wrote bowtie2 alignment commands to bowtie2_commands"
-    sys.exit(0)
-elif not run_bowtie2(treepath_results, kmerfiles, args.reference, threads=args.threads):
+    sys.exit()
+
+bamfiles = run_bowtie2(treepath_results, kmerfiles, args.reference, threads=args.threads)
+if not bamfiles:
    print >>sys.stderr, "ERROR! Did not complete bowtie2 alignments"
    sys.exit(1)
 
+if not run_straingr(bamfiles, args.reference):
+    sys.exit(1)
 
-
+# TODO: downstream analysis!!!

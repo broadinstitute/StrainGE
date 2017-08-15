@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """StrainGR"""
+import sys
 import argparse
 import numpy as np
 
@@ -118,7 +119,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                 
                 # else should not have any cases...
                 else:
-                    print "Uh oh...", str(pileup)
+                    print >>sys.stderr, "Uh oh...", str(pileup)
                 
                 if pileup.count:
                     BQ = np.sqrt(float(pileup.qual_ss)/pileup.count)
@@ -175,20 +176,20 @@ if args.mingap:
 if args.consensus:
     grtools.consensus = args.consensus
 
-print "Loading reference genome"
+print >>sys.stderr, "Loading reference genome"
 # add upper to fix lower case reference genomes
 reference = {scaffold.name: scaffold.seq.upper() for scaffold in kmertools.openSeqFile(args.reference)}
-print len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
+print >>sys.stderr, len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
 for file in args.bam:
     # pileups = grtools.Pileups(reference, file, keep=args.keep)
     pileups  = grtools.Pileups(reference, file)
     if not len(pileups):
-        print "Error: no pileups for %s" % file
+        print >>sys.stderr, "Error: no pileups for %s" % file
         continue
     vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
-    print "Writing to vcf file: %s" % vcf_out
+    print >>sys.stderr, "Writing to vcf file: %s" % vcf_out
     write_vcf(pileups, vcf_out, date=date.today(), reference=args.reference)
     # pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
-    # print "Writing to pickle file: %s" % pkl_out
+    # print >>sys.stderr, "Writing to pickle file: %s" % pkl_out
     # grtools.save_pileups(pileups, pkl_out)

@@ -2,6 +2,7 @@
 """Shared code for genome recovery tools"""
 
 import os
+import sys
 import math
 import pysam
 import gzip
@@ -53,7 +54,7 @@ class Pileup:
 
         self.refbase = scaffold[pos]
         if not pileup_reads:
-            print "No reads for pileup"
+            print >>sys.stderr, "No reads for pileup"
             return
         for read in pileup_reads:
             self.add_read(read)
@@ -131,7 +132,7 @@ class Pileup:
             else:
                 self.add_other(base, qual, mq)
                 if verbose:
-                    print base, qual, mq
+                    print >>sys.stderr, base, qual, mq
 
     def add_other(self, base, bq, mq):
         """
@@ -206,7 +207,7 @@ class Pileup:
                     best_score = score
                     best_count = count
                 elif count == best_count:
-                    if verbose: print "Warning: multiple SNPs have same score and count!"
+                    if verbose: print >>sys.stderr, "Warning: multiple SNPs have same score and count!"
                     return False
         
         return best_snp
@@ -220,21 +221,21 @@ class Pileup:
         """Call another base...just print out stats for now"""
         rf = self.ref_fraction()
         if rf < consensus:
-            if verbose: print 'SNP?', self.pos, self.refbase, self.count, self.bad, rf, self.others
+            if verbose: print >>sys.stderr, 'SNP?', self.pos, self.refbase, self.count, self.bad, rf, self.others
             
             if len(self.others) == 0:
-                if verbose: print "No evidence of SNPs"
+                if verbose: print >>sys.stderr, "No evidence of SNPs"
             else:
                 # get SNP with highest proportion if >1 SNP
                 snp_base = self._get_best_snp()
                 #if base and self.others[base][0] >= (consensus * self.count) and self.others[base][3] >= min_confirm:
                 if snp_base and (float(self.others[snp_base][3]) / self.qual_total) >= consensus and self.others[snp_base][3] >= min_confirm:
                     # 90% of base quality matches SNP
-                    if verbose: print "SNP confirmed %s" % snp_base
+                    if verbose: print >>sys.stderr, "SNP confirmed %s" % snp_base
                     return snp_base
                 else:
                     # no consensus
-                    if verbose: print "No confirmed SNP"
+                    if verbose: print >>sys.stderr, "No confirmed SNP"
         
         return None
     
@@ -257,7 +258,7 @@ class Pileups:
         
         # connect to database & create table
         # if os.path.isfile(bamfile+".db"):
-        #     print "Deleting old database file"
+        #     print >>sys.stderr, "Deleting old database file"
         #     os.remove(bamfile+".db")
         # self.con = sqlite3.connect(bamfile+".db")
         # self.con.execute("CREATE TABLE reads (read TEXT, readpos INTEGER, scaffold TEXT, pos INTEGER, base TEXT)")
@@ -273,7 +274,7 @@ class Pileups:
         self.goodcoverage = 0
         self.highcoverage = 0
 
-        print "Scanning BAM file: %s" % bamfile
+        print >>sys.stderr, "Scanning BAM file: %s" % bamfile
         bam = pysam.AlignmentFile(bamfile, "rb")
     
         for scaffold in bam.references:
@@ -282,7 +283,7 @@ class Pileups:
             except KeyboardInterrupt:
                 raise
             except Exception as e:
-                print "Error in straingr: %s" % e
+                print >>sys.stderr, "Error in straingr: %s" % e
                 continue
     
     def __len__(self):
@@ -305,7 +306,7 @@ class Pileups:
 
         self.pileups[scaffold] = {}
         length = len(refseq)
-        print "Processing", scaffold, length
+        print >>sys.stderr, "Processing", scaffold, length
         covered = 0
         confirmed = 0
         snps = 0
@@ -323,7 +324,7 @@ class Pileups:
 
             if verbose:
                 refbase = refseq[refpos]
-                print "Ref:", column.reference_name, refpos, refbase, column.nsegments
+                print >>sys.stderr, "Ref:", column.reference_name, refpos, refbase, column.nsegments
             goodcoverage += pileup.count
             if pileup.covered():
                 covered += 1
@@ -336,7 +337,7 @@ class Pileups:
                         snps += 1
                 if refpos - last_covered > min_gap:
                     gap = (last_covered + 1, refpos - last_covered)
-                    print "Coverage gap:", gap[0], gap[1]
+                    print >>sys.stderr, "Coverage gap:", gap[0], gap[1]
                     gaps.append(gap)
                 last_covered = refpos
             else:
@@ -345,7 +346,7 @@ class Pileups:
                     # not a real gap, just can't map to this region
                     if refpos - last_covered > min_gap:
                         gap = (last_covered + 1, refpos - last_covered)
-                        print "Coverage gap:", gap[0], gap[1]
+                        print >>sys.stderr, "Coverage gap:", gap[0], gap[1]
                         gaps.append(gap)
                     last_covered = refpos
                 # if keep:
@@ -355,28 +356,28 @@ class Pileups:
             # del pileup.reads
             
             if verbose:
-                print pileup, pileup.confirmed()
+                print >>sys.stderr, pileup, pileup.confirmed()
             self.pileups[scaffold][refpos] = pileup
 
         coverage = float(goodcoverage) / float(length)
         mixed = covered - (confirmed + snps)
 
-        print "good coverage: %.1fx" % (coverage,)
-        print "covered: %d %.1f%%" % (covered, pct(covered, length))
-        print "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
-        print "snps: %d %.3f%%" % (snps, pct(snps, covered))
+        print >>sys.stderr, "good coverage: %.1fx" % (coverage,)
+        print >>sys.stderr, "covered: %d %.1f%%" % (covered, pct(covered, length))
+        print >>sys.stderr, "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
+        print >>sys.stderr, "snps: %d %.3f%%" % (snps, pct(snps, covered))
         if snps > 0:
-            print "snp rate: %.0f" % (float(covered) / float(snps))
-        print "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
+            print >>sys.stderr, "snp rate: %.0f" % (float(covered) / float(snps))
+        print >>sys.stderr, "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
         if mixed > 0:
             mixed_rate = float(covered) / float(mixed)
             if mixed_rate > 0:
                 mixed_quality = math.log10(mixed_rate) * 10.0
             else:
                 mixed_quality = 0
-            print "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
-        print "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
-        print "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
+            print >>sys.stderr, "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
+        print >>sys.stderr, "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
+        print >>sys.stderr, "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
         
         # keep track of total values in the Pileups class variables
         self.length += length
@@ -397,7 +398,7 @@ class Pileups:
             for refpos in self.pileups[scaffold]:
                 highcoverage += self.pileups[scaffold][refpos].high_coverage(threshold)
             
-            print "Abnormally high coverage: %d %.2f%% (expect 0.01%% false positive)" % (highcoverage, pct(highcoverage, length))
+            print >>sys.stderr, "Abnormally high coverage: %d %.2f%% (expect 0.01%% false positive)" % (highcoverage, pct(highcoverage, length))
 
             self.highcoverage += highcoverage
         
@@ -429,7 +430,7 @@ class VCF:
             qual = 0
         filt = temp[6]
         if filt != "PASS" and filt not in self.filters:
-            print "Unknown filter", filt
+            print >>sys.stderr, "Unknown filter", filt
             return
         if filters and filt not in filters:
             return
@@ -438,7 +439,7 @@ class VCF:
         for pair in inf.split(';'):
             key, value = pair.split('=')
             if key not in self.info:
-                print "Unknown info key", key
+                print >>sys.stderr, "Unknown info key", key
                 continue
             
             number = self.info[key]['Number']
@@ -459,7 +460,7 @@ class VCF:
             self.data[chrom] = {}
         
         if pos in self.data[chrom]:
-            print "Warning: position %s, %d found more than once" % (chrom, pos)
+            print >>sys.stderr, "Warning: position %s, %d found more than once" % (chrom, pos)
         else:
             self.positions += 1
         
@@ -521,25 +522,25 @@ def parse_vcf_file(file, filters=None):
                     elif '##INFO' in line:
                         temp = info_line.match(line)
                         if not temp:
-                            print "Invalid info line", line
+                            print >>sys.stderr, "Invalid info line", line
                             continue
                         (id, number, type, description) = temp.groups()
                         vcf.info[id] = {'Number': number, 'Type': type, 'Description': description}
                     elif '##FILTER' in line:
                         temp = filter_line.match(line)
                         if not temp:
-                            print "Invalid filter line", line
+                            print >>sys.stderr, "Invalid filter line", line
                             continue
                         (id, description) = temp.groups()
                         vcf.filters[id] = {'description': description, 'count': 0}
                     else:
                         pass
-                        #print "Unknown line!", line
+                        #print >>sys.stderr, "Unknown line!", line
                 else:
                     # header def line
                     header = line.strip().split("\t")
                     if header[:8] != ['#CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']:
-                        print "Invalid header line!", line
+                        print >>sys.stderr, "Invalid header line!", line
                         return
             else:
                 vcf.add(line, filters=filters)
@@ -567,7 +568,7 @@ def load_pileups(pkl_file):
     with gzip.open(pkl_file, 'rb') as f:
         pileups = cPickle.load(f)
         # if type(pileups) is not Pileups:
-        #     print 'Not a valid pickled pileups file'
+        #     print >>sys.stderr, 'Not a valid pickled pileups file'
         #     return
         return pileups
 

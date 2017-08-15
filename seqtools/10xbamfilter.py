@@ -35,12 +35,8 @@ def parse_target(target):
 
 def in_target(targets, refname, start, end):
     for t in targets:
-        if refname.startswith(t[0]):
-            if t[1] >= 0 and start < t[1]:
-                continue
-            if t[2] >= 0 and end > t[2]:
-                continue
-            return t
+        if refname == t[0] end > t[1] and start < t[2]:
+                return t
     return None
 
 includes = map(parse_target, args.target) if args.target else []

@@ -248,6 +248,9 @@ def main():
 
     complete = 0
     kmerfiles = kmerize_files(args.fasta, k=args.K, fraction=args.fraction, force=args.force, threads=args.threads)
+    if len(kmerfiles) != len(args.fasta):
+        print >>sys.stderr, "ERROR! Only kmerized {:d} out of {:d} files".format(len(kmerfiles), len(args.fasta))
+        sys.exit(1)
 
     if args.cluster > 0:
         keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)

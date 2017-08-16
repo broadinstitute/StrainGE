@@ -73,6 +73,8 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
         sys.exit(1)
+    except Exception as e:
+        print >>sys.stderr, "Exception while kmerizing files:", e
 
 
 

@@ -158,7 +158,9 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         if not force and os.path.isfile(out):
             print >>sys.stderr, "kmersimilarity results already exist"
             return _cluster_kmersim(out)
-        kmersim = ["kmersimilarity", "--similarity", out, "--threads", str(threads)]
+        kmersim = ["kmersimilarity", "--similarity", out]
+        if threads > 1:
+            kmersim.extend(["--threads", str(threads)])
         if fingerprint:
             kmersim.append("--fingerprint")
         kmersim.extend(kmerfiles)

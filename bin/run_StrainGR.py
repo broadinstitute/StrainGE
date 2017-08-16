@@ -70,7 +70,7 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
                     kmerfiles[kmerfile] = (file1, file2)
             p.close()
         else:
-            for sample in args.sample:
+            for sample in sample:
                 try:
                     if ',' in sample:
                         temp = sample.split(",")

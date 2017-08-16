@@ -21,7 +21,7 @@ def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
         with open(fasta, 'rb'):
             pass
         (root, ext) = os.path.splitext(fasta)
-        out = "{}.hdf5".format(root)
+        out = "{}.hdf5".format(fasta)
         if not force and os.path.isfile(out):
             print >>sys.stderr, "{} already exists, not overwriting".format(out)
             return out

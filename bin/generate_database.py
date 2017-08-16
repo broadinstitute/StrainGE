@@ -48,7 +48,7 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
     try:
         kmerfiles = {}
         if threads > 1:
-            p = multiprocessing.Pool(theads)
+            p = multiprocessing.Pool(threads)
             cmds = [(fasta, k, fraction, force) for fasta in fastas]
             print >>sys.stderr, "Generating kmerized files. Please wait..."
             map_async = p.map_async(__kmerseq, cmds)
@@ -250,6 +250,8 @@ def main():
 
     complete = 0
     kmerfiles = kmerize_files(args.fasta, k=args.K, fraction=args.fraction, force=args.force, threads=args.threads)
+    if not kmerfiles:
+        sys.exit(1)
     if len(kmerfiles) != len(args.fasta):
         print >>sys.stderr, "ERROR! Only kmerized {:d} out of {:d} files".format(len(kmerfiles), len(args.fasta))
         sys.exit(1)

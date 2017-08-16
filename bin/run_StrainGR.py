@@ -94,7 +94,7 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
         return kmerfiles
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
-        if threads > 1 and p:
+        if threads > 1 and len(samples) > 1:
             try:
                 p.terminate()
             except:
@@ -102,7 +102,7 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
         sys.exit(1)
     except Exception as e:
         print >>sys.stderr, "Exception while kmerizing files:", e
-        if threads > 1 and p:
+        if threads > 1 and len(samples) > 1:
             try:
                 p.terminate()
             except:

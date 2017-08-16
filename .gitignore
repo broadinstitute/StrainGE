@@ -1,0 +1,8 @@
+kmertools/build/lib.macosx-10.7-x86_64-2.7/kmerizer.so
+.vscode/settings.json
+kmertools/grtools.py
+kmertools/grtools.pyc
+kmertools/kmertools.pyc
+kmertools/build/lib.macosx-10.7-x86_64-2.7/kmertools.py
+kmertools/build/temp.macosx-10.7-x86_64-2.7/kmerizer.o
+seqtools/splitfastq.c

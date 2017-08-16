@@ -178,80 +178,86 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
 ###
 ### Main
 ###
-parser = argparse.ArgumentParser()
-parser.add_argument("fasta", nargs="+", help="reference genome fasta file")
-parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
-parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build tree (faster for many references)",
-                    action="store_true")
-parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
-parser.add_argument("-f", "--force", help="Force overwriting database files",
-                    action="store_true")
-parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
-parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
-args = parser.parse_args()
+def main():
+    """Main"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("fasta", nargs="+", help="reference genome fasta file")
+    parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
+    parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build tree (faster for many references)",
+                        action="store_true")
+    parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
+    parser.add_argument("-f", "--force", help="Force overwriting database files",
+                        action="store_true")
+    parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
+    parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
+    args = parser.parse_args()
 
-if not args:
-    print >>sys.stderr, "No reference fasta files specified"
-    sys.exit(1)
+    if not args:
+        print >>sys.stderr, "No reference fasta files specified"
+        sys.exit(1)
 
-complete = 0
-kmerfiles = {}
-for fasta in args.fasta:
-    try:
-        if not os.path.isfile(fasta):
-            print >>sys.stderr, "Cannot find file: {}".format(fasta)
-            continue
+    complete = 0
+    kmerfiles = {}
+    for fasta in args.fasta:
         try:
-            open(fasta, 'rb').close()
-        except IOError:
-            print >>sys.stderr, "Cannot open file: {}".format(fasta)
-            continue
+            if not os.path.isfile(fasta):
+                print >>sys.stderr, "Cannot find file: {}".format(fasta)
+                continue
+            try:
+                open(fasta, 'rb').close()
+            except IOError:
+                print >>sys.stderr, "Cannot open file: {}".format(fasta)
+                continue
+            except Exception as e:
+                raise e
+
+            print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
+            kmerfile = run_kmerseq(fasta, k=args.k, fraction=args.fraction, force=args.force)
+            if not kmerfile:
+                continue
+            kmerfiles[kmerfile] = fasta
+
+        except (KeyboardInterrupt, SystemExit):
+            print >>sys.stderr, "Interrupting..."
+            sys.exit(1)
         except Exception as e:
-            raise e
+            print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
 
-        print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
-        kmerfile = run_kmerseq(fasta, k=args.k, fraction=args.fraction, force=args.force)
-        if not kmerfile:
-            continue
-        kmerfiles[kmerfile] = fasta
+    if args.cluster > 0:
+        keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
+        if not keep:
+            sys.exit(1)
+        for ref in kmerfiles.keys():
+            if ref not in keep:
+                # remove unselected reference genomes
+                del kmerfiles[ref]
 
-    except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr, "Interrupting..."
+    for ref in kmerfiles:
+        try:
+            fasta = kmerfiles[ref]
+            print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
+            if run_bowtie2_build(fasta, force=args.force):
+                complete += 1
+
+        except (KeyboardInterrupt, SystemExit):
+            print >>sys.stderr, "Interrupting..."
+            sys.exit(1)
+        except Exception as e:
+            print >>sys.stderr, "Exception building bowtie2 index for {}: {}".format(fasta, e)
+
+    if complete != len(kmerfiles):
+        print >>sys.stderr, "ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta))
         sys.exit(1)
-    except Exception as e:
-        print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
+    else:
+        print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
 
-if args.cluster > 0:
-    keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
-    if not keep:
+    if not kmerfiles:
+        print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"
         sys.exit(1)
-    for ref in kmerfiles.keys():
-        if ref not in keep:
-            # remove unselected reference genomes
-            del kmerfiles[ref]
 
-for ref in kmerfiles:
-    try:
-        fasta = kmerfiles[ref]
-        print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
-        if run_bowtie2_build(fasta, force=args.force):
-            complete += 1
-
-    except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr, "Interrupting..."
+    if not run_kmertree(kmerfiles.keys(), k=args.k, fingerprint=args.fingerprint):
         sys.exit(1)
-    except Exception as e:
-        print >>sys.stderr, "Exception building bowtie2 index for {}: {}".format(fasta, e)
 
-if complete != len(kmerfiles):
-    print >>sys.stderr, "ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta))
-    sys.exit(1)
-else:
-    print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
 
-if not kmerfiles:
-    print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"
-    sys.exit(1)
-
-if not run_kmertree(kmerfiles.keys(), k=args.k, fingerprint=args.fingerprint):
-    sys.exit(1)
+if __name__ == "__main__":
+    main()

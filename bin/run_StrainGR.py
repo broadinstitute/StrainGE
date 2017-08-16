@@ -7,15 +7,23 @@ Output: kmer and genome recovery results
 import os
 import sys
 import subprocess
+import multiprocessing
+
 import argparse
 
 
-def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False):
+def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False, force=False):
     """Generate kmer hdf5 file from fasta file"""
     try:
         root = os.path.splitext(fasta)[0]
         out = "{}.hdf5".format(fasta)
-        kmerseq = ["kmerseq", "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction), fasta]
+        if not force and os.path.isfile(out):
+            print >>sys.stderr, "{} already exists, not overwriting".format(out)
+            return out
+        kmerseq = ["kmerseq", "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction)]
+        if filtered:
+            kmerseq.append("-F")
+        kmerseq.append(fasta)
         if fasta2:
             kmerseq.append(fasta2)
         with open("{}.log".format(root), 'wb') as w:
@@ -27,6 +35,76 @@ def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False):
         raise SystemExit
     except Exception as e:
         print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
+
+
+def __kmerseq(cmd):
+    """Wrapper to multithread run_kmerseq"""
+    return (cmd[0], cmd[1], run_kmerseq(*cmd))
+
+
+def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, threads=1):
+    """Kmerize a list of fasta files"""
+    try:
+        kmerfiles = {}
+        if threads > 1:
+            p = multiprocessing.Pool(threads)
+            cmds = []
+            for sample in samples:
+                if ',' in sample:
+                    temp = sample.split(",")
+                    if len(temp) != 2:
+                        print >>sys.stderr, "ERROR! Could not parse files", sample
+                        sys.exit(1)
+                    file1, file2 = temp
+                else:
+                    file1 = sample
+                    file2 = None
+                cmds.append((file1, file2, k, fraction, filtered, force))
+            print >>sys.stderr, "Generating kmerized files. Please wait..."
+            map_async = p.map_async(__kmerseq, cmds)
+            results = map_async.get()
+            for (file1, file2, kmerfile) in results:
+                if kmerfile:
+                    kmerfiles[kmerfile] = (file1, file2)
+            p.close()
+        else:
+            for sample in args.sample:
+                try:
+                    if ',' in sample:
+                        temp = sample.split(",")
+                        if len(temp) != 2:
+                            print >>sys.stderr, "ERROR! Could not parse files", sample
+                            sys.exit(1)
+                        file1, file2 = temp
+                    else:
+                        file1 = sample
+                        file2 = None
+
+                    kmerfile = run_kmerseq(file1, file2, k=k, fraction=fraction, filtered=filtered, force=force)
+                    if not kmerfile:
+                        continue
+                    kmerfiles[kmerfile] = (file1, file2)
+                except (KeyboardInterrupt, SystemExit) as e:
+                    raise e
+                except Exception as e:
+                    print >>sys.stderr, "ERROR! Exception while kmerizing {}".format(sample)
+
+        return kmerfiles
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+        if threads > 1 and p:
+            try:
+                p.terminate()
+            except:
+                pass
+        sys.exit(1)
+    except Exception as e:
+        print >>sys.stderr, "Exception while kmerizing files:", e
+        if threads > 1 and p:
+            try:
+                p.terminate()
+            except:
+                pass
 
 
 def run_treepath(kmerfiles, tree, min_score=0.1):
@@ -176,7 +254,7 @@ def main():
     parser.add_argument("-s", "--min_score", type=float, help="minimum score of a node in a tree to keep (default: 0.1)")
     parser.add_argument("--no-bowtie2", help="Do not run bowtie2 alignments", 
                         action="store_true")
-    parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use for bowtie2 alignment")
+    parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use")
     args = parser.parse_args()
 
     kmertree = os.path.join(args.reference, "tree.hdf5")
@@ -184,29 +262,7 @@ def main():
         print >>sys.stderr, "Cannot find tree.hdf5 file in {}".format(args.reference)
         sys.exit(1)
 
-    kmerfiles = {}
-    for sample in args.sample:
-        try:
-            if ',' in sample:
-                temp = sample.split(",")
-                if len(temp) != 2:
-                    print >>sys.stderr, "ERROR! Could not parse files", sample
-                    sys.exit(1)
-                file1, file2 = temp
-            else:
-                file1 = sample
-                file2 = None
-
-            kmerfile = run_kmerseq(file1, file2, k=args.k, fraction=args.fraction, filtered=args.filter)
-            if not kmerfile:
-                continue
-            kmerfiles[kmerfile] = (file1, file2)
-        except (KeyboardInterrupt, SystemExit):
-            print >>sys.stderr, "Interrupting..."
-            sys.exit(1)
-        except Exception as e:
-            print >>sys.stderr, "ERROR! Exception while kmerizing {}".format(sample)
-
+    kmerfiles = kmerize_files(args.sample, k=args.K, fraction=args.fraction, filtered=args.filter, force=args.force, threads=args.threads)
     if not kmerfiles:
         print >>sys.stderr, "ERROR! No kmerized samples found"
         sys.exit(1)

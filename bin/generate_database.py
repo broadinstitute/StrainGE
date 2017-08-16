@@ -40,6 +40,7 @@ def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
 
 
 def __kmerseq(cmd):
+    """Wrapper to multithread run_kmerseq"""
     return (cmd[0], run_kmerseq(*cmd))
 
 
@@ -54,7 +55,8 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
             map_async = p.map_async(__kmerseq, cmds)
             results = map_async.get()
             for (fasta, kmerfile) in results:
-                kmerfiles[kmerfile] = fasta
+                if kmerfile:
+                    kmerfiles[kmerfile] = fasta
             p.close()
         else:
             for fasta in args.fasta:
@@ -143,10 +145,16 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
                 seen[g2] = i
                 i += 1
     
-    for cluster in clusters:
-        keep.difference_update(clusters[cluster])
-        keep.add(min(clusters[cluster], key = __get_scaffold_count))
-    
+    with open("clusters.txt", 'wb') as w:
+        w.write("\n".join([" ".join(clusters[cluster]) for cluster in clusters]))
+
+    with open("excluded.log", 'wb') as w:
+        for cluster in clusters:
+            keep.difference_update(clusters[cluster])
+            sort = sorted(clusters[cluster], key = __get_scaffold_count)
+            keep.add(sort[0])
+            w.write("\n".join(sort[1:])+"\n")
+        
     print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))
     return ["{}.hdf5".format(name) for name in keep]
     
@@ -180,7 +188,6 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         sys.exit(1)
     except Exception as e:
         print >>sys.stderr, "Exception running kmersimilarity: ", e
-    
 
 
 def _bowtie2_index_exists(name):

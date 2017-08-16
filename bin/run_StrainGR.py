@@ -255,7 +255,13 @@ def main():
     parser.add_argument("--no-bowtie2", help="Do not run bowtie2 alignments", 
                         action="store_true")
     parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use")
+    parser.add_argument("--force", help="Force overwriting previously generated files",
+                        action="store_true")
     args = parser.parse_args()
+
+    if not args.reference:
+        print >>sys.stderr, "No reference specified, assuming current working directory"
+        args.reference = os.path.curdir
 
     kmertree = os.path.join(args.reference, "tree.hdf5")
     if not kmertree:

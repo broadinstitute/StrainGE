@@ -87,9 +87,6 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
                 pass
 
 
-
-
-
 def __get_scaffold_count(fasta):
     """Get the number of scaffolds in a fasta file"""
     if not fasta:
@@ -117,7 +114,7 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
                 continue
             keep.update(temp[:2])
             if float(temp[2]) < cutoff:
-                break # file is sorted...
+                continue
             g1, g2 = temp[:2]
             keep.remove(g1)
             keep.remove(g2)
@@ -301,7 +298,7 @@ def main():
         print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"
         sys.exit(1)
 
-    if not run_kmertree(kmerfiles.keys(), k=args.k, fingerprint=args.fingerprint):
+    if not run_kmertree(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
         sys.exit(1)
 
 

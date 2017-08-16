@@ -218,7 +218,7 @@ def main():
                 raise e
 
             print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
-            kmerfile = run_kmerseq(fasta, k=args.k, fraction=args.fraction, force=args.force)
+            kmerfile = run_kmerseq(fasta, k=args.K, fraction=args.fraction, force=args.force)
             if not kmerfile:
                 continue
             kmerfiles[kmerfile] = fasta

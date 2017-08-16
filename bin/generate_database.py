@@ -7,6 +7,7 @@ Output: kmer hdf5 files, Bowtie2 index files, and a deduped kmer tree
 import os
 import sys
 import subprocess
+import multiprocessing
 import argparse
 
 from Bio import SeqIO
@@ -14,9 +15,11 @@ from Bio import SeqIO
 
 def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
     """Generate kmer hdf5 file from fasta file"""
-    if not fasta:
+    if not (fasta and os.path.isfile(fasta)):
         return
     try:
+        with open(fasta, 'rb'):
+            pass
         (root, ext) = os.path.splitext(fasta)
         out = "{}.hdf5".format(root)
         if not force and os.path.isfile(out):
@@ -30,8 +33,49 @@ def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
         raise KeyboardInterrupt
     except SystemExit:
         raise SystemExit
+    except IOError:
+        print >>sys.stderr, "Cannot open file to kmerize {}".format(fasta)
     except Exception as e:
-        print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
+        print >>sys.stderr, "Exception kmerizing {}:".format(fasta), e
+
+
+def __kmerseq(cmd):
+    return (cmd[0], run_kmerseq(*cmd))
+
+
+def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
+    """Kmerize a list of fasta files"""
+    try:
+        kmerfiles = {}
+        if threads > 1:
+            p = multiprocessing.Pool(theads)
+            cmds = [(fasta, k, fraction, force) for fasta in fastas]
+            print >>sys.stderr, "Generating kmerized files. Please wait..."
+            map_async = p.map_async(__kmerseq, cmds)
+            results = map_async.get()
+            for (fasta, kmerfile) in results:
+                kmerfiles[kmerfile] = fasta
+
+        else:
+            for fasta in args.fasta:
+                try:
+                    print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
+                    kmerfile = run_kmerseq(fasta, k=args.K, fraction=args.fraction, force=args.force)
+                    if not kmerfile:
+                        continue
+                    kmerfiles[kmerfile] = fasta
+                except (KeyboardInterrupt, SystemExit) as e:
+                    raise e
+                except Exception as e:
+                    print >>sys.stderr, "Exception kmerizing {}:".format(fasta), e
+
+        return kmerfiles
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+        sys.exit(1)
+
+
+
 
 
 def __get_scaffold_count(fasta):
@@ -105,7 +149,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
     if not kmerfiles:
         return
     if cutoff <= 0:
-        return True
+        return kmerfiles
     try:
         root = os.path.split(kmerfiles[0])[0]
         out = os.path.join(root, "kmersim.txt")
@@ -124,7 +168,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         print >>sys.stderr, "Interrupting..."
         sys.exit(1)
     except Exception as e:
-        print >>sys.stderr, "Exception running kmersimilarity: {}".format(e)
+        print >>sys.stderr, "Exception running kmersimilarity: ", e
     
 
 
@@ -156,7 +200,7 @@ def run_bowtie2_build(fasta, force=False):
     except SystemExit:
         raise SystemExit
     except Exception as e:
-        print >>sys.stderr, "Exception building bowtie2 index for {}: {}".format(fasta, e)
+        print >>sys.stderr, "Exception building bowtie2 index for {}:".format(fasta), e
 
 
 def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
@@ -178,7 +222,7 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
     except Exception as e:
-        print >>sys.stderr, "Exception building kmertree: {}".format(e,)
+        print >>sys.stderr, "Exception building kmertree:", e
 
 
 ###
@@ -203,31 +247,7 @@ def main():
         sys.exit(1)
 
     complete = 0
-    kmerfiles = {}
-    for fasta in args.fasta:
-        try:
-            if not os.path.isfile(fasta):
-                print >>sys.stderr, "Cannot find file: {}".format(fasta)
-                continue
-            try:
-                open(fasta, 'rb').close()
-            except IOError:
-                print >>sys.stderr, "Cannot open file: {}".format(fasta)
-                continue
-            except Exception as e:
-                raise e
-
-            print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
-            kmerfile = run_kmerseq(fasta, k=args.K, fraction=args.fraction, force=args.force)
-            if not kmerfile:
-                continue
-            kmerfiles[kmerfile] = fasta
-
-        except (KeyboardInterrupt, SystemExit):
-            print >>sys.stderr, "Interrupting..."
-            sys.exit(1)
-        except Exception as e:
-            print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
+    kmerfiles = kmerize_files(args.fasta)
 
     if args.cluster > 0:
         keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)

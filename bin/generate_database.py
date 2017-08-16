@@ -66,20 +66,26 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
             keep.remove(g1)
             keep.remove(g2)
             if g1 in seen and g2 not in seen:
-                clusters[seen[g1]].add(g2)
-                seen[g2] = seen[g1]
+                c1 = seen[g1]
+                clusters[c1].add(g2)
+                seen[g2] = c1
             elif g2 in seen and g1 not in seen:
-                clusters[seen[g2]].add(g1)
-                seen[g1] = seen[g2]
+                c2 = seen[g2]
+                clusters[c2].add(g1)
+                seen[g1] = c2
             elif g1 in seen and g2 in seen:
-                if seen[g1] < seen[g2]:
-                    clusters[seen[g1]].update(clusters[seen[g2]])
-                    del clusters[seen[g2]]
-                    seen[g2] = seen[g1]
-                elif seen[g2] < seen[g1]:
-                    clusters[seen[g2]].update(clusters[seen[g1]])
-                    del clusters[seen[g1]]
-                    seen[g1] = seen[g2]
+                c1 = seen[g1]
+                c2 = seen[g2]
+                if c1 < c2:
+                    clusters[c1].update(clusters[c2])
+                    for g in clusters[c2]:
+                        seen[g] = c1
+                    del clusters[c2]
+                elif c2 < c1:
+                    clusters[c2].update(clusters[c1])
+                    for g in clusters[c1]:
+                        seen[g] = c2
+                    del clusters[c1]
             else:
                 clusters[i] = set([g1, g2])
                 seen[g1] = i

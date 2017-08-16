@@ -239,7 +239,7 @@ def main():
     parser.add_argument("-f", "--force", help="Force overwriting database files",
                         action="store_true")
     parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
-    parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
+    parser.add_argument("-t", "--threads", type=int, help="Number of threads to use (default: 1)", default=1)
     args = parser.parse_args()
 
     if not args:
@@ -247,7 +247,7 @@ def main():
         sys.exit(1)
 
     complete = 0
-    kmerfiles = kmerize_files(args.fasta)
+    kmerfiles = kmerize_files(args.fasta, k=args.K, fraction=args.fraction, force=args.force, threads=args.threads)
 
     if args.cluster > 0:
         keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)

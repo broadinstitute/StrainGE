@@ -259,7 +259,7 @@ def main():
         sys.exit(1)
 
     if args.cluster > 0:
-        keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
+        keep = run_kmersim(kmerfiles.keys(), fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
         if not keep:
             sys.exit(1)
         for ref in kmerfiles.keys():

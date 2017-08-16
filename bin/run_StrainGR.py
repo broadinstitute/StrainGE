@@ -46,7 +46,9 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
     """Kmerize a list of fasta files"""
     try:
         kmerfiles = {}
-        if threads > 1:
+        if threads > 1 and len(samples) > 1:
+            if len(samples) < threads:
+                threads = len(samples)
             p = multiprocessing.Pool(threads)
             cmds = []
             for sample in samples:
@@ -110,14 +112,14 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
 def run_treepath(kmerfiles, tree, min_score=0.1):
     """Run treepath on a sample kmer file"""
     try:
-        treepath = ["treepath", "-o", "treepath.csv", "-s", "{:f}".format(min_score), tree]
+        treepath = ["treepath", "-o", "treepath.csv", "-s", str(min_score), tree]
         treepath.extend(kmerfiles)
         subprocess.check_call(treepath)
         return True
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
     except Exception as e:
-        print "ERROR! Exception while running treepath: {}".format(e)
+        print "ERROR! Exception while running treepath:", e
 
 
 def parse_treepath():
@@ -185,7 +187,6 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                 else:
                     bowtie2.extend(["-U", pair1])
                 with open("{}_{}.bowtie2.log".format(sample, ref), 'wb') as w:
-                    
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
                     p_sort = subprocess.Popen(["samtools", "sort" "-o", bam], stdin=p_view.stdout, stderr=w)

@@ -9,9 +9,13 @@ import sys
 import subprocess
 import argparse
 
+from Bio import SeqIO
+
 
 def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
     """Generate kmer hdf5 file from fasta file"""
+    if not fasta:
+        return
     try:
         (root, ext) = os.path.splitext(fasta)
         out = "{}.hdf5".format(root)
@@ -30,17 +34,108 @@ def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
         print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
 
 
+def __get_scaffold_count(fasta):
+    """Get the number of scaffolds in a fasta file"""
+    if not fasta:
+        print >>sys.stderr, "Cannot find fasta file {}".format(fasta)
+        raise IOError
+    n = 0
+    with open(fasta, 'rU') as f:
+        for seq in SeqIO.parse(f, "fasta"):
+            n += 1
+    
+    return n
+
+
+def _cluster_kmersim(kmersim, cutoff=0.95):
+    """Cluster genomes based on kmer similarity"""
+    clusters = {}
+    seen = {}
+    keep = set()
+    with open(kmersim, 'rb') as f:
+        print >>sys.stderr, "Clustering kmer similarity results"
+        i = 0
+        for line in f:
+            temp = line.strip().split("\t")
+            if len(temp) != 3:
+                continue
+            keep.update(temp[:2])
+            if float(temp[2]) < cutoff:
+                continue
+            g1, g2 = temp[:2]
+            keep.remove(g1)
+            keep.remove(g2)
+            if g1 in seen and g2 not in seen:
+                clusters[seen[g1]].add(g2)
+                seen[g2] = seen[g1]
+            elif g2 in seen and g1 not in seen:
+                clusters[seen[g2]].add(g1)
+                seen[g1] = seen[g2]
+            elif g1 in seen and g2 in seen:
+                if seen[g1] < seen[g2]:
+                    clusters[seen[g1]].update(clusters[seen[g2]])
+                    del clusters[seen[g2]]
+                    seen[g2] = seen[g1]
+                elif seen[g2] < seen[g1]:
+                    clusters[seen[g2]].update(clusters[seen[g1]])
+                    del clusters[seen[g1]]
+                    seen[g1] = seen[g2]
+            else:
+                clusters[i] = set([g1, g2])
+                seen[g1] = i
+                seen[g2] = i
+                i += 1
+    
+    for cluster in clusters:
+        keep.add(min(clusters[cluster], key = lambda x: __get_scaffold_count(os.path.splitext(x)[0])))
+    
+    print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))
+    return ["{}.hdf5".format(name) for name in keep]
+    
+
+
+def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=False):
+    """Run kmer similarity tool on reference hdf5 files"""
+    if not kmerfiles:
+        return
+    if cutoff <= 0:
+        return True
+    try:
+        root = os.path.split(kmerfiles[0])[0]
+        out = os.path.join(root, "kmersim.txt")
+        if not force and os.path.isfile(out):
+            print >>sys.stderr, "kmersimilarity results already exist"
+            return _cluster_kmersim(out)
+        kmersim = ["kmersimilarity", "--similarity", out, "--threads", str(threads)]
+        if fingerprint:
+            kmersim.append("--fingerprint")
+        kmersim.extend(kmerfiles)
+        with open(os.path.join(root, "kmersim.log"), 'wb') as w:
+            subprocess.check_call(kmersim, stdout=w, stderr=w)
+        return _cluster_kmersim(out)
+    
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+        sys.exit(1)
+    except Exception as e:
+        print >>sys.stderr, "Exception running kmersimilarity: {}".format(e)
+    
+
 
 def _bowtie2_index_exists(name):
     """Returns true if bowtie2 index exists"""
+    if not name:
+        return
     for ext in [".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2"]:
         if not os.path.isfile("{}{}".format(name, ext)):
-            return False
+            return
     return True
 
 
 def run_bowtie2_build(fasta, force=False):
     """Run bowtie2-build on fasta file"""
+    if not fasta:
+        return
     try:
         bowtie2_build = ["bowtie2-build", fasta, fasta]
         if not force and _bowtie2_index_exists(fasta):
@@ -60,6 +155,8 @@ def run_bowtie2_build(fasta, force=False):
 
 def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
     """Generate kmer tree from hdf5 files"""
+    if not kmerfiles:
+        return
     try:
         if not force and os.path.isfile("tree.hdf5"):
             print >>sys.stderr, "Warning! Found previously generated kmer tree. Not overwriting"
@@ -89,6 +186,8 @@ parser.add_argument("--fingerprint", help="use minhash fingerprint instead of fu
 parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
 parser.add_argument("-f", "--force", help="Force overwriting database files",
                     action="store_true")
+parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
+parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
 args = parser.parse_args()
 
 if not args:
@@ -96,7 +195,7 @@ if not args:
     sys.exit(1)
 
 complete = 0
-kmerfiles = []
+kmerfiles = {}
 for fasta in args.fasta:
     try:
         if not os.path.isfile(fasta):
@@ -114,18 +213,37 @@ for fasta in args.fasta:
         kmerfile = run_kmerseq(fasta, k=args.k, fraction=args.fraction, force=args.force)
         if not kmerfile:
             continue
-        kmerfiles.append(kmerfile)
+        kmerfiles[kmerfile] = fasta
 
-        print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
-        if run_bowtie2_build(fasta, force=args.force):
-            complete += 1
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
         sys.exit(1)
     except Exception as e:
-        print >>sys.stderr, "Exception processing {}: {}".format(fasta, e)
+        print >>sys.stderr, "Exception kmerizing {}: {}".format(fasta, e)
 
-if complete != len(args.fasta):
+if args.cluster > 0:
+    keep = run_kmersim(kmerfiles, fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
+    if not keep:
+        sys.exit(1)
+    for ref in kmerfiles.keys():
+        if ref not in keep:
+            # remove unselected reference genomes
+            del kmerfiles[ref]
+
+for ref in kmerfiles:
+    try:
+        fasta = kmerfiles[ref]
+        print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
+        if run_bowtie2_build(fasta, force=args.force):
+            complete += 1
+
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+        sys.exit(1)
+    except Exception as e:
+        print >>sys.stderr, "Exception building bowtie2 index for {}: {}".format(fasta, e)
+
+if complete != len(kmerfiles):
     print >>sys.stderr, "ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta))
     sys.exit(1)
 else:
@@ -135,5 +253,5 @@ if not kmerfiles:
     print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"
     sys.exit(1)
 
-if not run_kmertree(kmerfiles, k=args.k, fingerprint=args.fingerprint):
+if not run_kmertree(kmerfiles.keys(), k=args.k, fingerprint=args.fingerprint):
     sys.exit(1)

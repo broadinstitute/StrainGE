@@ -109,7 +109,7 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
     seen = {}
     keep = set()
     with open(kmersim, 'rb') as f:
-        print >>sys.stderr, "Clustering kmer similarity results"
+        print >>sys.stderr, "Clustering kmer similarity results..."
         i = 0
         for line in f:
             temp = line.strip().split("\t")
@@ -149,7 +149,7 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
                 i += 1
     
     for cluster in clusters:
-        keep.add(min(clusters[cluster], key = lambda x: __get_scaffold_count(os.path.splitext(x)[0])))
+        keep.add(min(clusters[cluster], key = __get_scaffold_count))
     
     print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))
     return ["{}.hdf5".format(name) for name in keep]
@@ -175,6 +175,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
             kmersim.append("--fingerprint")
         kmersim.extend(kmerfiles)
         with open(os.path.join(root, "kmersim.log"), 'wb') as w:
+            print >>sys.stderr, "Running kmer similarity..."
             subprocess.check_call(kmersim, stdout=w, stderr=w)
         return _cluster_kmersim(out)
     

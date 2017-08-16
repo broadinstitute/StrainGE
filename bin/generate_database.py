@@ -55,7 +55,7 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
             results = map_async.get()
             for (fasta, kmerfile) in results:
                 kmerfiles[kmerfile] = fasta
-
+            p.close()
         else:
             for fasta in args.fasta:
                 try:
@@ -72,9 +72,19 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
         return kmerfiles
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
+        if threads > 1 and p:
+            try:
+                p.terminate()
+            except:
+                pass
         sys.exit(1)
     except Exception as e:
         print >>sys.stderr, "Exception while kmerizing files:", e
+        if threads > 1 and p:
+            try:
+                p.terminate()
+            except:
+                pass
 
 
 
@@ -107,7 +117,7 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
                 continue
             keep.update(temp[:2])
             if float(temp[2]) < cutoff:
-                continue
+                break # file is sorted...
             g1, g2 = temp[:2]
             keep.remove(g1)
             keep.remove(g2)

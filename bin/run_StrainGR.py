@@ -252,7 +252,7 @@ def main():
     parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set (faster for many references)",
                         action="store_true")
     parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
-    parser.add_argument("-s", "--min_score", type=float, help="minimum score of a node in a tree to keep (default: 0.1)")
+    parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
     parser.add_argument("--no-bowtie2", help="Do not run bowtie2 alignments", 
                         action="store_true")
     parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use")

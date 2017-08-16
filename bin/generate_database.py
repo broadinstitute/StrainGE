@@ -116,8 +116,6 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
             if float(temp[2]) < cutoff:
                 continue
             g1, g2 = temp[:2]
-            keep.remove(g1)
-            keep.remove(g2)
             if g1 in seen and g2 not in seen:
                 c1 = seen[g1]
                 clusters[c1].add(g2)
@@ -146,6 +144,7 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
                 i += 1
     
     for cluster in clusters:
+        keep.difference_update(clusters[cluster])
         keep.add(min(clusters[cluster], key = __get_scaffold_count))
     
     print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))

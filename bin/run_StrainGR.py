@@ -196,12 +196,10 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                 
                 with open("{}_{}.bowtie2.log".format(name, ref), 'wb', 0) as w:
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
-                    #p_bowtie2.communicate()
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
-                    #p_view.communicate()
-                    p_sort = subprocess.Popen(["samtools", "sort", "-o", bam], stdin=p_view.stdout, stderr=w)
-                    p_sort.communicate()
-                    subprocess.check_call(["samtools", "index", bam, "{}.bai".format(bam)])
+                    p_sort = subprocess.Popen(["samtools", "sort", "-o", bam], stdin=p_view.stdout, stdout=w, stderr=w)
+                    p_sort.wait()
+                    subprocess.check_call(["samtools", "index", bam, "{}.bai".format(bam)], stdout=w, stderr=w)
                     aligned += 1
                     if ref not in bamfiles:
                         bamfiles[ref] = []

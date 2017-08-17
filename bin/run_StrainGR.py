@@ -182,6 +182,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                     if ref not in bamfiles:
                         bamfiles[ref] = []
                     bamfiles[ref].append(bam)
+                    aligned += 1
                     continue
                 index = os.path.join(reference, ref)
                 bowtie2 = ["bowtie2", "--no-unal", "--very-sensitive", "--no-mixed", "--no-discordant", "-p", str(threads), "-x", index]
@@ -192,7 +193,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                     print >>sys.stderr, "Aligning {} to {}. Please wait...".format(pair1, ref)
                     bowtie2.extend(["-U", pair1])
                 
-                with open("{}_{}.bowtie2.log".format(sample, ref), 'wb') as w:
+                with open("{}_{}.bowtie2.log".format(sample, ref), 'wb', 0) as w:
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
                     #p_bowtie2.communicate()
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
@@ -224,7 +225,7 @@ def run_straingr(bamfiles, reference):
             if not os.path.isfile(fasta):
                 print >>sys.stderr, "ERROR! Cannot find reference fasta file: {}".format(fasta)
                 continue
-            straingr = ["straingr", "fasta"]
+            straingr = ["straingr", fasta]
             straingr.extend(bamfiles[ref])
             with open("{}_straingr.log".format(ref), 'wb') as w:
                 subprocess.check_call(straingr, stdout=w, stderr=w)

@@ -82,6 +82,7 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
                         file1 = sample
                         file2 = None
 
+                    print >>sys.stderr, "Kmerizing {}...".format(sample)
                     kmerfile = run_kmerseq(file1, file2, k=k, fraction=fraction, filtered=filtered, force=force)
                     if not kmerfile:
                         continue
@@ -114,6 +115,7 @@ def run_treepath(kmerfiles, tree, min_score=0.1):
     try:
         treepath = ["treepath", "-o", "treepath.csv", "-s", str(min_score), tree]
         treepath.extend(kmerfiles)
+        print >>sys.stderr, "Running path detection. Please wait..."
         subprocess.check_call(treepath)
         return True
     except (KeyboardInterrupt, SystemExit):
@@ -186,6 +188,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                     bowtie2.extend(["-1", pair1, "-2", pair2])
                 else:
                     bowtie2.extend(["-U", pair1])
+                print >>sys.stderr, "Aligning {} to {}. Please wait...".format(sample, ref)
                 with open("{}_{}.bowtie2.log".format(sample, ref), 'wb') as w:
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)

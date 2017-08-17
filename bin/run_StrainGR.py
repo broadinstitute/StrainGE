@@ -176,7 +176,8 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
         for ref in results[sample]:
             try:
                 total += 1
-                bam = "{}_{}.bam".format(sample, ref)
+                name = os.path.splitext(sample)[0]
+                bam = "{}_{}.bam".format(name, ref)
                 if not force and os.path.isfile(bam):
                     print >>sys.stderr, "BAM file already exists: {}".format(bam)
                     if ref not in bamfiles:
@@ -193,7 +194,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                     print >>sys.stderr, "Aligning {} to {}. Please wait...".format(pair1, ref)
                     bowtie2.extend(["-U", pair1])
                 
-                with open("{}_{}.bowtie2.log".format(sample, ref), 'wb', 0) as w:
+                with open("{}_{}.bowtie2.log".format(name, ref), 'wb', 0) as w:
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
                     #p_bowtie2.communicate()
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
@@ -209,7 +210,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                 print >>sys.stderr, "Interrupting..."
                 return
             except Exception as e:
-                print "ERROR! Exception occuring during bowtie2 alignment of {} to {}:".format(sample, ref), e
+                print "ERROR! Exception occuring during bowtie2 alignment of {} to {}:".format(name, ref), e
     if aligned == total:
         return bamfiles
     else:

@@ -266,12 +266,16 @@ def main():
     parser.add_argument("-f", "--force", help="Force overwriting database files",
                         action="store_true")
     parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
+    parser.add_argument("--max-contigs", name="max_contigs", type=int, help="Filter out genomes with more than this many contigs (default: disabled)")
     parser.add_argument("-t", "--threads", type=int, help="Number of threads to use (default: 1)", default=1)
     args = parser.parse_args()
 
     if not args:
         print >>sys.stderr, "No reference fasta files specified"
         sys.exit(1)
+
+    if args.max_contigs:
+        args.fasta = [fasta for fasta in args.fasta if __get_scaffold_count(fasta) <= args.max_contigs]
 
     complete = 0
     kmerfiles = kmerize_files(args.fasta, k=args.K, fraction=args.fraction, force=args.force, threads=args.threads)

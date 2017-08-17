@@ -242,6 +242,7 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
             kmertree.append("--fingerprint")
         kmertree.extend(kmerfiles)
         with open(os.path.join(root, "kmertree.log"), 'wb') as w:
+            print >>sys.stderr, "Generating kmer tree. Please wait..."
             subprocess.check_call(kmertree, stdout=w, stderr=w)
         print >>sys.stderr, "Successfully built kmertree!"
         return True

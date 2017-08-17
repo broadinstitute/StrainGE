@@ -194,10 +194,10 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                 
                 with open("{}_{}.bowtie2.log".format(sample, ref), 'wb') as w:
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
-                    p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
-                    p_sort = subprocess.Popen(["samtools", "sort", "-o", bam], stdin=p_view.stdout, stderr=w)
                     p_bowtie2.communicate()
+                    p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
                     p_view.communicate()
+                    p_sort = subprocess.Popen(["samtools", "sort", "-o", bam], stdin=p_view.stdout, stderr=w)
                     p_sort.communicate()
                     subprocess.check_call(["samtools", "index", bam, "{}.bai".format(bam)])
                     aligned += 1

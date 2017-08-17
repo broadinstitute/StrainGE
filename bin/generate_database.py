@@ -111,6 +111,7 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
     clusters = {}
     seen = {}
     keep = set()
+    root = os.path.split(kmersim)[0]
     with open(kmersim, 'rb') as f:
         print >>sys.stderr, "Clustering kmer similarity results..."
         i = 0
@@ -118,10 +119,11 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
             temp = line.strip().split("\t")
             if len(temp) != 3:
                 continue
-            keep.update(temp[:2])
+            g1 = os.path.join(root, temp[0])
+            g2 = os.path.join(root, temp[1])
+            keep.update([g1, g2])
             if float(temp[2]) < cutoff:
                 continue
-            g1, g2 = temp[:2]
             if g1 in seen and g2 not in seen:
                 c1 = seen[g1]
                 clusters[c1].add(g2)
@@ -149,10 +151,10 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
                 seen[g2] = i
                 i += 1
     
-    with open("clusters.txt", 'wb') as w:
+    with open(os.path.join(root, "clusters.txt"), 'wb') as w:
         w.write("\n".join([" ".join(clusters[cluster]) for cluster in clusters]))
 
-    with open("excluded.log", 'wb') as w:
+    with open(os.path.join(root, "excluded.log"), 'wb') as w:
         for cluster in clusters:
             keep.difference_update(clusters[cluster])
             sort = sorted(clusters[cluster], key = __get_scaffold_count)

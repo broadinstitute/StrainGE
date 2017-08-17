@@ -232,7 +232,7 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
     if not kmerfiles:
         return
     try:
-        root = os.path.split(kmerfiles.keys()[0])[0]
+        root = os.path.split(kmerfiles[0])[0]
         treefile = os.path.join(root, "tree.hdf5")
         if not force and os.path.isfile(treefile):
             print >>sys.stderr, "Warning! Found previously generated kmer tree. Not overwriting"

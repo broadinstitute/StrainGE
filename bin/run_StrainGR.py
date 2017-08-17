@@ -116,7 +116,8 @@ def run_treepath(kmerfiles, tree, min_score=0.1):
         treepath = ["treepath", "-o", "treepath.csv", "-s", str(min_score), tree]
         treepath.extend(kmerfiles)
         print >>sys.stderr, "Running path detection. Please wait..."
-        subprocess.check_call(treepath)
+        with open("treepath.log", 'wb') as w:
+            subprocess.check_call(treepath, stdout=w, stderr=w)
         return True
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
@@ -185,14 +186,16 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                 index = os.path.join(reference, ref)
                 bowtie2 = ["bowtie2", "--no-unal", "--very-sensitive", "--no-mixed", "--no-discordant", "-p", str(threads), "-x", index]
                 if pair2:
+                    print >>sys.stderr, "Aligning {},{} to {}. Please wait...".format(pair1, pair2, ref)
                     bowtie2.extend(["-1", pair1, "-2", pair2])
                 else:
+                    print >>sys.stderr, "Aligning {} to {}. Please wait...".format(pair1, ref)
                     bowtie2.extend(["-U", pair1])
-                print >>sys.stderr, "Aligning {} to {}. Please wait...".format(sample, ref)
+                
                 with open("{}_{}.bowtie2.log".format(sample, ref), 'wb') as w:
                     p_bowtie2 = subprocess.Popen(bowtie2, stdout=subprocess.PIPE, stderr=w)
                     p_view = subprocess.Popen(["samtools", "view", "-b"], stdin=p_bowtie2.stdout, stdout=subprocess.PIPE, stderr=w)
-                    p_sort = subprocess.Popen(["samtools", "sort" "-o", bam], stdin=p_view.stdout, stderr=w)
+                    p_sort = subprocess.Popen(["samtools", "sort", "-o", bam], stdin=p_view.stdout, stderr=w)
                     p_bowtie2.communicate()
                     p_view.communicate()
                     p_sort.communicate()

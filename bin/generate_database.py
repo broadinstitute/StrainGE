@@ -10,7 +10,7 @@ import subprocess
 import multiprocessing
 import argparse
 
-from Bio import SeqIO
+# from Bio import SeqIO
 
 
 def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
@@ -29,10 +29,8 @@ def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
         with open("{}.log".format(root), 'wb') as w:
             subprocess.check_call(kmerseq, stdout=w, stderr=w)
         return out
-    except KeyboardInterrupt:
-        raise KeyboardInterrupt
-    except SystemExit:
-        raise SystemExit
+    except (KeyboardInterrupt, SystemExit) as e:
+        raise e
     except IOError:
         print >>sys.stderr, "Cannot open file to kmerize {}".format(fasta)
     except Exception as e:
@@ -41,7 +39,11 @@ def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
 
 def __kmerseq(cmd):
     """Wrapper to multithread run_kmerseq"""
-    return (cmd[0], run_kmerseq(*cmd))
+    try:
+        return (cmd[0], run_kmerseq(*cmd))
+    except Exception as e:
+        raise e
+
 
 
 def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
@@ -59,10 +61,10 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
                     kmerfiles[kmerfile] = fasta
             p.close()
         else:
-            for fasta in args.fasta:
+            for fasta in fastas:
                 try:
                     print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
-                    kmerfile = run_kmerseq(fasta, k=args.K, fraction=args.fraction, force=args.force)
+                    kmerfile = run_kmerseq(fasta, k=k, fraction=fraction, force=force)
                     if not kmerfile:
                         continue
                     kmerfiles[kmerfile] = fasta
@@ -96,8 +98,10 @@ def __get_scaffold_count(fasta):
         raise IOError
     n = 0
     with open(fasta, 'rU') as f:
-        for seq in SeqIO.parse(f, "fasta"):
-            n += 1
+        # for seq in SeqIO.parse(f, "fasta"):
+        for line in f:
+            if line[0] == ">":
+                n += 1
     
     return n
 

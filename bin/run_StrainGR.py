@@ -178,7 +178,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
                 total += 1
                 bam = "{}_{}.bam".format(sample, ref)
                 if not force and os.path.isfile(bam):
-                    print >>sys.stderr, "Bam file already exists: {}".format(bam)
+                    print >>sys.stderr, "BAM file already exists: {}".format(bam)
                     if ref not in bamfiles:
                         bamfiles[ref] = []
                     bamfiles[ref].append(bam)
@@ -228,6 +228,7 @@ def run_straingr(bamfiles, reference):
             straingr = ["straingr", fasta]
             straingr.extend(bamfiles[ref])
             with open("{}_straingr.log".format(ref), 'wb') as w:
+                print >>sys.stderr, "Running genome recovery on reference {}. Please wait...".format(ref)
                 subprocess.check_call(straingr, stdout=w, stderr=w)
             complete += 1
         except (KeyboardInterrupt, SystemExit):

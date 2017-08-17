@@ -232,16 +232,18 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
     if not kmerfiles:
         return
     try:
-        if not force and os.path.isfile("tree.hdf5"):
+        root = os.path.split(kmerfiles.keys()[0])[0]
+        treefile = os.path.join(root, "tree.hdf5")
+        if not force and os.path.isfile(treefile):
             print >>sys.stderr, "Warning! Found previously generated kmer tree. Not overwriting"
             return True
-        kmertree = ["kmertree", "--dedupe", "-k", str(k), "--output", "tree.hdf5", "--nwk", "tree.nwk"]
+        kmertree = ["kmertree", "--dedupe", "-k", str(k), "--output", treefile, "--nwk", os.path.join(root, "tree.nwk")]
         if fingerprint:
             kmertree.append("--fingerprint")
         kmertree.extend(kmerfiles)
-        with open("kmertree.log", 'wb') as w:
+        with open(os.path.join(root, "kmertree.log"), 'wb') as w:
             subprocess.check_call(kmertree, stdout=w, stderr=w)
-        print >>sys.stderr, "Successfully built kmertree"
+        print >>sys.stderr, "Successfully built kmertree!"
         return True
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
@@ -287,6 +289,9 @@ def main():
                 # remove unselected reference genomes
                 del kmerfiles[ref]
 
+    if not run_kmertree(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
+        sys.exit(1)
+
     for ref in kmerfiles:
         try:
             fasta = kmerfiles[ref]
@@ -306,12 +311,7 @@ def main():
     else:
         print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
 
-    if not kmerfiles:
-        print >>sys.stderr, "ERROR! No kmer files to generate kmer tree"
-        sys.exit(1)
-
-    if not run_kmertree(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
-        sys.exit(1)
+    
 
 
 if __name__ == "__main__":

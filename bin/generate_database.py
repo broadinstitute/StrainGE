@@ -269,7 +269,7 @@ def main():
     parser.add_argument("-f", "--force", help="Force overwriting database files",
                         action="store_true")
     parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
-    parser.add_argument("--max-contigs", destination="max_contigs", type=int, help="Filter out genomes with more than this many contigs (default: disabled)")
+    parser.add_argument("max_contigs", "--max-contigs", type=int, help="Filter out genomes with more than this many contigs (default: disabled)")
     parser.add_argument("-t", "--threads", type=int, help="Number of threads to use (default: 1)", default=1)
     args = parser.parse_args()
 

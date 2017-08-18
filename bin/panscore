@@ -7,6 +7,66 @@ import kmertools
 import kmerizer
 import time
 
+
+def scoreStrains(strains, commonKmers, sampleCounts, panCounts, exclude=None):
+    results = []
+    bestScore = 0
+    bestKset = None
+    for s in strains:
+        t0 = time.time()
+        name = kmertools.nameFromPath(s)
+        kset = kmertools.kmerSetFromFile(s)
+
+        if args.fingerprint:
+            strainKmers = kset.fingerprint
+            strainCounts = np.ones_like(kset.fingerprint, dtype=np.int64)
+        else:
+            strainKmers = kset.kmers
+            strainCounts = kset.counts
+
+        if exclude is not None:
+            keepers = np.setdiff1d(strainKmers, exclude, assume_unique=True)
+            if float(keepers.size) / float(strainKmers.size) < 0.05:
+                continue
+            strainCounts = kmerizer.intersect_counts(strainKmers, strainCounts, keepers)
+            strainKmers = keepers
+
+        # Weights of each kmer in strain
+        strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
+        #strainWeights = strainWeights * strainWeights
+        assert strainWeights.size == strainKmers.size, "Strain has kmers not in pan genome"
+        # Total weight of strain
+        strainWeight = (strainWeights * strainCounts).sum()
+
+        kmers = kmerizer.intersect(commonKmers, strainKmers)
+        counts = kmerizer.intersect_counts(commonKmers, sampleCounts, strainKmers)
+        weights = 1.0 / kmerizer.intersect_counts(commonKmers, panCounts, strainKmers)
+        #weights = weights * weights
+        assert kmers.size == counts.size == weights.size, "length mismatch"
+
+        covered = float(kmers.size) / float(strainKmers.size)
+        # kmer coverage: mean coverage of every strain kmer that is in the sample
+        kcoverage = float(counts.sum()) / float(kmers.size)
+        # genome coverage: mean coverage of every strain kmer
+        gcoverage = float(counts.sum()) / float(strainCounts.sum())
+        # weighted coverage: sample coverage weighted by inverse kmer occurance in pan genome
+        countweights = (counts * weights)
+        wcoverage = countweights.sum() / strainWeight
+        score = wcoverage * covered
+
+        result = (name, covered, kcoverage, gcoverage, wcoverage, score)
+        results.append(result)
+        if score > bestScore:
+            bestScore = score
+            bestKmers = strainKmers
+
+    # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
+    results.sort(lambda a, b: cmp(b[5], a[5]))
+    for r in results[:5]:
+        print "%s covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % r
+        #print >>output, "%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f" % (r[0], r[1], r[2], r[3], r[4], r[5])
+    return (bestScore, bestKmers)
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
                     action="store_true")
@@ -25,60 +85,27 @@ print "Loading sample", args.sample
 sample = kmertools.kmerSetFromFile(args.sample)
 
 print "Create sample intersection with pan genome"
-common_kmers = kmerizer.intersect(sample.kmers, pan.kmers)
-print common_kmers.size, "pan kmers in sample"
-sample_counts = kmerizer.intersect_counts(sample.kmers, sample.counts, common_kmers)
-pan_counts = kmerizer.intersect_counts(pan.kmers, pan.counts, common_kmers)
-assert common_kmers.size == sample_counts.size == pan_counts.size, "Intersection kmers & counts differ in size"
+commonKmers = kmerizer.intersect(sample.kmers, pan.kmers)
+print commonKmers.size, "pan kmers in sample"
+sampleCounts = kmerizer.intersect_counts(sample.kmers, sample.counts, commonKmers)
+panCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, commonKmers)
+assert commonKmers.size == sampleCounts.size == panCounts.size, "Intersection kmers & counts differ in size"
 
-print "Scoring strains"
-results = []
+print "Finding primary strain"
+(score, primary) = scoreStrains(args.strains, commonKmers, sampleCounts, panCounts)
 
-for s in args.strains:
-    t0 = time.time()
-    name = kmertools.nameFromPath(s)
-    kset = kmertools.kmerSetFromFile(s)
+# Remove primary kmers
+newKmers = np.setdiff1d(commonKmers, primary, assume_unique=True)
+sampleCounts = kmerizer.intersect_counts(commonKmers, sampleCounts, newKmers)
+panCounts = kmerizer.intersect_counts(commonKmers, panCounts, newKmers)
+commonKmers = newKmers
 
-    if args.fingerprint:
-        strainKmers = kset.fingerprint
-        strainCounts = np.ones_like(kset.fingerprint, dtype=np.int64)
-    else:
-        strainKmers = kset.kmers
-        strainCounts = kset.counts
+print "Finding secondary strain"
+(score, secondary) = scoreStrains(args.strains, commonKmers, sampleCounts, panCounts, exclude=primary)
 
-    # Weights of each kmer in strain
-    strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
-    strainWeights = strainWeights * strainWeights
-    assert strainWeights.size == strainKmers.size, "Strain has kmers not in pan genome"
-    # Total weight of strain
-    strainWeight = (strainWeights * strainCounts).sum()
+# if args.output:
+#     output = open(args.output, 'w')
+# else:
+#     output = sys.stdout
 
-    kmers = kmerizer.intersect(common_kmers, strainKmers)
-    counts = kmerizer.intersect_counts(common_kmers, sample_counts, strainKmers)
-    weights = 1.0 / kmerizer.intersect_counts(common_kmers, pan_counts, strainKmers)
-    weights = weights * weights
-    assert kmers.size == counts.size == weights.size, "length mismatch"
-
-    covered = float(kmers.size) / float(strainKmers.size)
-    # kmer coverage: mean coverage of every strain kmer that is in the sample
-    kcoverage = float(counts.sum()) / float(kmers.size)
-    # genome coverage: mean coverage of every strain kmer
-    gcoverage = float(counts.sum()) / float(strainCounts.sum())
-    # weighted coverage: sample coverage weighted by inverse kmer occurance in pan genome
-    wcoverage = (counts * weights).sum() / strainWeight
-    score = wcoverage * covered
-
-    result = (name, covered, kcoverage, gcoverage, wcoverage, score)
-    results.append(result)
-    print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
-
-results.sort(lambda a, b: cmp(b[5], a[5]))
-
-if args.output:
-    output = open(args.output, 'w')
-else:
-    output = sys.stdout
-
-for r in results:
-    print >>output, "%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f" % (r[0], r[1], r[2], r[3], r[4], r[5])
 

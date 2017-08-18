@@ -10,18 +10,20 @@ import subprocess
 import multiprocessing
 import argparse
 
-# from Bio import SeqIO
 
-
-def run_kmerseq(fasta, k=23, fraction=0.002, force=False):
+def run_kmerseq(fasta, database=None, k=23, fraction=0.002, force=False):
     """Generate kmer hdf5 file from fasta file"""
     if not (fasta and os.path.isfile(fasta)):
         return
     try:
         with open(fasta, 'rb'):
             pass
-        (root, ext) = os.path.splitext(fasta)
-        out = "{}.hdf5".format(fasta)
+        if database:
+            root = os.path.join(database, os.path.splitext(os.path.basename(fasta)))
+            out = os.path.join(database, "{}.hdf5".format(os.path.basename(fasta)))
+        else:
+            (root, ext) = os.path.splitext(fasta)
+            out = "{}.hdf5".format(fasta)
         if not force and os.path.isfile(out):
             print >>sys.stderr, "{} already exists, not overwriting".format(out)
             return out
@@ -46,13 +48,13 @@ def __kmerseq(cmd):
 
 
 
-def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
+def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, threads=1):
     """Kmerize a list of fasta files"""
     try:
         kmerfiles = {}
         if threads > 1:
             p = multiprocessing.Pool(threads)
-            cmds = [(fasta, k, fraction, force) for fasta in fastas]
+            cmds = [(fasta, database, k, fraction, force) for fasta in fastas]
             print >>sys.stderr, "Generating kmerized files. Please wait..."
             map_async = p.map_async(__kmerseq, cmds)
             results = map_async.get()
@@ -64,7 +66,7 @@ def kmerize_files(fastas, k=23, fraction=0.002, force=False, threads=1):
             for fasta in fastas:
                 try:
                     print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
-                    kmerfile = run_kmerseq(fasta, k=k, fraction=fraction, force=force)
+                    kmerfile = run_kmerseq(fasta, database=database, k=k, fraction=fraction, force=force)
                     if not kmerfile:
                         continue
                     kmerfiles[kmerfile] = fasta
@@ -98,7 +100,6 @@ def __get_scaffold_count(fasta):
         raise IOError
     n = 0
     with open(fasta, 'rU') as f:
-        # for seq in SeqIO.parse(f, "fasta"):
         for line in f:
             if line[0] == ">":
                 n += 1
@@ -163,7 +164,6 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
         
     print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))
     return ["{}.hdf5".format(name) for name in keep]
-    
 
 
 def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=False):
@@ -206,12 +206,15 @@ def _bowtie2_index_exists(name):
     return True
 
 
-def run_bowtie2_build(fasta, force=False):
+def run_bowtie2_build(fasta, database=None, force=False):
     """Run bowtie2-build on fasta file"""
     if not fasta:
         return
     try:
-        bowtie2_build = ["bowtie2-build", fasta, fasta]
+        if database:
+            bowtie2_build = ["bowtie2-build", fasta, os.path.join(database, os.path.basename(fasta))]
+        else:
+            bowtie2_build = ["bowtie2-build", fasta, fasta]
         if not force and _bowtie2_index_exists(fasta):
             print >>sys.stderr, "Bowtie2 index exists already for {}".format(fasta)
             return True
@@ -219,10 +222,8 @@ def run_bowtie2_build(fasta, force=False):
         with open("{}.log".format(root), 'ab') as a:
             subprocess.check_call(bowtie2_build, stdout=a, stderr=a)
         return True
-    except KeyboardInterrupt:
-        raise KeyboardInterrupt
-    except SystemExit:
-        raise SystemExit
+    except (KeyboardInterrupt, SystemExit) as e:
+        raise e
     except Exception as e:
         print >>sys.stderr, "Exception building bowtie2 index for {}:".format(fasta), e
 
@@ -248,6 +249,7 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
         return True
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."
+        return
     except Exception as e:
         print >>sys.stderr, "Exception building kmertree:", e
 
@@ -259,7 +261,8 @@ def main():
     """Main"""
     parser = argparse.ArgumentParser()
     parser.add_argument("fasta", nargs="+", help="reference genome fasta file")
-    parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
+    parser.add_argument("-d", "--database", help="Specify where to save database to (default: in place)")
+    parser.add_argument("-k", "--K", help="Kmer size [1-32] (default 23)", type=int, default=23)
     parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build tree (faster for many references)",
                         action="store_true")
     parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
@@ -274,11 +277,42 @@ def main():
         print >>sys.stderr, "No reference fasta files specified"
         sys.exit(1)
 
+    if args.K > 32:
+        print >>sys.stderr, "Cannot use kmer size above 32. Setting to 32..."
+        args.K = 32
+    elif args.K < 1:
+        print >>sys.stderr, "Invalid kmer size of {}. Setting to default of 23...".format(args.K)
+        args.K = 23
+    
+    # record kmer size
+    if args.database:
+        root = args.database
+    else:
+        root = os.path.split(args.fasta[0])[0]
+    kmersize_file = os.path.join(root, "kmersize")
+    if os.path.isfile(kmersize_file):
+        with open(kmersize_file, 'rb') as f:
+            try:
+                kmersize = int(f.readline())
+                if kmersize != args.K:
+                    print >>sys.stderr, "Overwriting previously generated files with different kmer size of {}".format(kmersize)
+                    args.force = True
+            except (KeyboardInterrupt, SystemExit):
+                print >>sys.stderr, "Interrupting..."
+                sys.exit(1)
+            except Exception as e:
+                print >>sys.stderr, "Exception determining previous kmer size:", e
+                print >>sys.stderr, "Will overwrite all previously generated files..."
+                args.force = True
+
+    with open(kmersize_file, 'wb') as w:
+        w.write("{}\n".format(args.K))
+
     if args.max_contigs:
         args.fasta = [fasta for fasta in args.fasta if __get_scaffold_count(fasta) <= args.max_contigs]
 
     complete = 0
-    kmerfiles = kmerize_files(args.fasta, k=args.K, fraction=args.fraction, force=args.force, threads=args.threads)
+    kmerfiles = kmerize_files(args.fasta, database=args.database, k=args.K, fraction=args.fraction, force=args.force, threads=args.threads)
     if not kmerfiles:
         sys.exit(1)
     if len(kmerfiles) != len(args.fasta):
@@ -301,7 +335,7 @@ def main():
         try:
             fasta = kmerfiles[ref]
             print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
-            if run_bowtie2_build(fasta, force=args.force):
+            if run_bowtie2_build(fasta, database=args.database, force=args.force):
                 complete += 1
 
         except (KeyboardInterrupt, SystemExit):
@@ -315,8 +349,6 @@ def main():
         sys.exit(1)
     else:
         print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
-
-    
 
 
 if __name__ == "__main__":

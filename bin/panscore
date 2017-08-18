@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+import sys
+import argparse
+import csv
+import numpy as np
+import kmertools
+import kmerizer
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
+                    action="store_true")
+parser.add_argument("-s", "--sample", help="Compare similarity of this vs the other strains instead of all vs all")
+parser.add_argument("-p", "--pan", help="hdf5 file containing pan genome kmer set")
+parser.add_argument("-K", help="Kmer size")
+parser.add_argument("-o", "--output", help="output text file")
+parser.add_argument('strains', nargs='+',
+                    help='kmerized strain hdf5 or npz files')
+args = parser.parse_args()
+
+print "Loading pan genome"
+pan = kmertools.kmerSetFromFile(args.pan)
+
+print "Loading sample", args.sample
+sample = kmertools.kmerSetFromFile(args.sample)
+
+print "Create sample intersection with pan genome"
+common_kmers = kmerizer.intersect(sample.kmers, pan.kmers)
+print common_kmers.size, "pan kmers in sample"
+sample_counts = kmerizer.intersect_counts(sample.kmers, sample.counts, common_kmers)
+pan_counts = kmerizer.intersect_counts(pan.kmers, pan.counts, common_kmers)
+assert common_kmers.size == sample_counts.size == pan_counts.size, "Intersection kmers & counts differ in size"
+
+print "Scoring strains"
+results = []
+
+for s in args.strains:
+    t0 = time.time()
+    name = kmertools.nameFromPath(s)
+    kset = kmertools.kmerSetFromFile(s)
+
+    if args.fingerprint:
+        strainKmers = kset.fingerprint
+        strainCounts = np.ones_like(kset.fingerprint, dtype=np.int64)
+    else:
+        strainKmers = kset.kmers
+        strainCounts = kset.counts
+
+    # Weights of each kmer in strain
+    strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
+    strainWeights = strainWeights * strainWeights
+    assert strainWeights.size == strainKmers.size, "Strain has kmers not in pan genome"
+    # Total weight of strain
+    strainWeight = (strainWeights * strainCounts).sum()
+
+    kmers = kmerizer.intersect(common_kmers, strainKmers)
+    counts = kmerizer.intersect_counts(common_kmers, sample_counts, strainKmers)
+    weights = 1.0 / kmerizer.intersect_counts(common_kmers, pan_counts, strainKmers)
+    weights = weights * weights
+    assert kmers.size == counts.size == weights.size, "length mismatch"
+
+    covered = float(kmers.size) / float(strainKmers.size)
+    # kmer coverage: mean coverage of every strain kmer that is in the sample
+    kcoverage = float(counts.sum()) / float(kmers.size)
+    # genome coverage: mean coverage of every strain kmer
+    gcoverage = float(counts.sum()) / float(strainCounts.sum())
+    # weighted coverage: sample coverage weighted by inverse kmer occurance in pan genome
+    wcoverage = (counts * weights).sum() / strainWeight
+    score = wcoverage * covered
+
+    result = (name, covered, kcoverage, gcoverage, wcoverage, score)
+    results.append(result)
+    print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
+
+results.sort(lambda a, b: cmp(b[5], a[5]))
+
+if args.output:
+    output = open(args.output, 'w')
+else:
+    output = sys.stdout
+
+for r in results:
+    print >>output, "%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f" % (r[0], r[1], r[2], r[3], r[4], r[5])
+

@@ -16,7 +16,10 @@ def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False, force=
     """Generate kmer hdf5 file from fasta file"""
     try:
         root = os.path.splitext(fasta)[0]
-        out = "{}.hdf5".format(fasta)
+        out = "{}.k{:d}.f{:g}".format(fasta, k, fraction)
+        if filtered:
+            out += ".filtered"
+        out += ".hdf5"
         if not force and os.path.isfile(out):
             print >>sys.stderr, "{} already exists, not overwriting".format(out)
             return out
@@ -110,13 +113,13 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
                 pass
 
 
-def run_treepath(kmerfiles, tree, min_score=0.1):
+def run_treepath(kmerfiles, tree, min_score=0.1, k=23):
     """Run treepath on a sample kmer file"""
     try:
-        treepath = ["treepath", "-o", "treepath.csv", "-s", str(min_score), tree]
+        treepath = ["treepath", "-o", "treepath.k{}.csv".format(k), "-s", str(min_score), tree]
         treepath.extend(kmerfiles)
         print >>sys.stderr, "Running path detection. Please wait..."
-        with open("treepath.log", 'wb') as w:
+        with open("treepath.k{}.log".format(k), 'wb') as w:
             subprocess.check_call(treepath, stdout=w, stderr=w)
         return True
     except (KeyboardInterrupt, SystemExit):
@@ -125,14 +128,15 @@ def run_treepath(kmerfiles, tree, min_score=0.1):
         print "ERROR! Exception while running treepath:", e
 
 
-def parse_treepath():
+def parse_treepath(k=23):
     """Parse treepath results"""
     results = {}
-    if not os.path.isfile("treepath.csv"):
+    treepath_file = "treepath.k{}.csv".format(k)
+    if not os.path.isfile(treepath_file):
         print >>sys.stderr, "No treepath results found"
         return
 
-    with open("treepath.csv", 'rb') as f:
+    with open(treepath_file, 'rb') as f:
         f.readline() # skip header
         for line in f:
             temp = line.strip().split(",")
@@ -151,13 +155,14 @@ def write_bowtie2_commands(results, kmerfiles, reference, threads=1):
     for sample in results:
         file1, file2 = kmerfiles.get(sample)
         for ref in results[sample]:
+            name = ".k".join(sampe.split(".k")[:-1])
+            bam = "{}_{}.bam".format(name, ref)
             index = os.path.join(reference, ref)
             bowtie2 = "bowtie2 --no-unal --very-sensitive --no-mixed --no-discordant -X 700 -p {:d} -x {}".format(threads, index)
             if file2:
                 bowtie2 += "-1 {} -2 {}".format(file1, file2)
             else:
                 bowtie2 += "-U {}".format(file1)
-            bam = "{}_{}.bam".format(sample, ref)
             bowtie2 += " | samtools view -b /dev/stdin | samtools sort -o {};".format(bam)
             bowtie2 += " samtools index {} {}.bai".format(bam, bam)
             commands.append(bowtie2)
@@ -176,7 +181,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
         for ref in results[sample]:
             try:
                 total += 1
-                name = os.path.splitext(sample)[0]
+                name = ".k".join(sampe.split(".k")[:-1])
                 bam = "{}_{}.bam".format(name, ref)
                 if not force and os.path.isfile(bam):
                     print >>sys.stderr, "BAM file already exists: {}".format(bam)
@@ -253,7 +258,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("sample", nargs="+", help="sample sequence file(s). If paired end reads, keep pairs together with ','")
     parser.add_argument("-r", "--reference", help="directory containing reference files")
-    parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
+    # parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
     parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors at high coverage)",
                         action="store_true")
     parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set (faster for many references)",
@@ -276,15 +281,29 @@ def main():
         print >>sys.stderr, "Cannot find tree.hdf5 file in {}".format(args.reference)
         sys.exit(1)
 
-    kmerfiles = kmerize_files(args.sample, k=args.K, fraction=args.fraction, filtered=args.filter, force=args.force, threads=args.threads)
+    kmersize_file = os.path.join(args.reference, "kmersize")
+    if not os.path.isfile(kmersize_file):
+        print >>sys.stderr, "Cannot determine kmer size of database"
+        print >>sys.stderr, "Guessing default value of 23"
+        k = 23
+    else:
+        try:
+            with open(kmersize_file, 'rb') as f:
+                k = int(f.readline())
+        except Exception as e:
+            print >>sys.stderr, "Exception determining kmersize:", e
+            print >>sys.stderr, "Guessing default value of 23"
+            k = 23
+
+    kmerfiles = kmerize_files(args.sample, k=k, fraction=args.fraction, filtered=args.filter, force=args.force, threads=args.threads)
     if not kmerfiles:
         print >>sys.stderr, "ERROR! No kmerized samples found"
         sys.exit(1)
 
-    if not run_treepath(kmerfiles.keys(), kmertree, min_score=args.min_score):
+    if not run_treepath(kmerfiles.keys(), kmertree, min_score=args.min_score, k=k):
         sys.exit(1)
 
-    treepath_results = parse_treepath()
+    treepath_results = parse_treepath(k)
     if not treepath_results:
         print >>sys.stderr, "ERROR! No treepath results"
         sys.exit(1)

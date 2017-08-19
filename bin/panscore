@@ -72,6 +72,7 @@ parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead
                     action="store_true")
 parser.add_argument("-s", "--sample", help="Compare similarity of this vs the other strains instead of all vs all")
 parser.add_argument("-p", "--pan", help="hdf5 file containing pan genome kmer set")
+parser.add_argument("--secondary", action='store_true', help="Look for secondary strain")
 parser.add_argument("-K", help="Kmer size")
 parser.add_argument("-o", "--output", help="output text file")
 parser.add_argument('strains', nargs='+',
@@ -94,14 +95,15 @@ assert commonKmers.size == sampleCounts.size == panCounts.size, "Intersection km
 print "Finding primary strain"
 (score, primary) = scoreStrains(args.strains, commonKmers, sampleCounts, panCounts)
 
-# Remove primary kmers
-newKmers = np.setdiff1d(commonKmers, primary, assume_unique=True)
-sampleCounts = kmerizer.intersect_counts(commonKmers, sampleCounts, newKmers)
-panCounts = kmerizer.intersect_counts(commonKmers, panCounts, newKmers)
-commonKmers = newKmers
+if args.secondary:
+    # Remove primary kmers
+    newKmers = np.setdiff1d(commonKmers, primary, assume_unique=True)
+    sampleCounts = kmerizer.intersect_counts(commonKmers, sampleCounts, newKmers)
+    panCounts = kmerizer.intersect_counts(commonKmers, panCounts, newKmers)
+    commonKmers = newKmers
 
-print "Finding secondary strain"
-(score, secondary) = scoreStrains(args.strains, commonKmers, sampleCounts, panCounts, exclude=primary)
+    print "Finding secondary strain"
+    (score, secondary) = scoreStrains(args.strains, commonKmers, sampleCounts, panCounts, exclude=primary)
 
 # if args.output:
 #     output = open(args.output, 'w')

@@ -53,16 +53,18 @@ def scoreStrain(name, kset, commonKmers, sampleCounts, panCounts, exclude=None):
 
     kmers = kmerizer.intersect(commonKmers, strainKmers)
     samplec = kmerizer.intersect_counts(commonKmers, sampleCounts, strainKmers)
+    sampleCount = samplec.sum()
     strainc = kmerizer.intersect_counts(strainKmers, strainCounts, commonKmers)
-    if strainc.sum() == 0:
+    strainCount = strainc.sum()
+    if strainCount == 0:
         return None
     assert kmers.size == samplec.size, "length mismatch"
 
     covered = float(kmers.size) / float(strainKmers.size)
     # kmer coverage: mean coverage of every strain kmer that is in the sample
-    kcoverage = float(samplec.sum()) / float(strainc.sum())
+    kcoverage = float(sampleCount) / float(strainCount)
     # genome coverage: mean coverage of every strain kmer
-    gcoverage = covmult * float(samplec.sum()) / float(strainCounts.sum())
+    gcoverage = covmult * float(sampleCount) / float(strainCounts.sum())
 
     t2 = time.time()
 
@@ -86,7 +88,7 @@ def scoreStrain(name, kset, commonKmers, sampleCounts, panCounts, exclude=None):
     wcoverage = covmult * countweights.sum() / strainWeight
 
     specificity = wcoverage / gcoverage if gcoverage > wcoverage else gcoverage / wcoverage
-    score = wcoverage * evenness
+    score = sampleCount * evenness * specificity
 
     t3 = time.time()
     #print 'Times:', t1-t0, t2-t1, t3-t2
@@ -137,7 +139,7 @@ with h5py.File(args.pan, 'r') as h5:
         # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         for r in results[:args.top]:
-            print "%s covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f even: %.3f score: %.3f" % r
+            print "%s covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f even: %.3f score: %.0f" % r
             # print >>output, "%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f" % (r[0], r[1], r[2], r[3], r[4], r[5])
         sys.stdout.flush()
         if exclude is None:

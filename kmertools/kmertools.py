@@ -349,6 +349,15 @@ class KmerSet:
             func = np.savez
         func(fileName, **kwargs)
 
+    def save_hdf5(self, h5, compress = None):
+        h5.attrs["type"] = np.string_("KmerSet")
+        h5.attrs["k"] = self.k;
+        if self.fingerprint is not None:
+            h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
+        if self.kmers is not None:
+            h5.create_dataset("kmers", data=self.kmers, compression=compress)
+        if self.counts is not None:
+            h5.create_dataset("counts", data=self.counts, compression=compress)
 
     def save(self, fileName, compress = None, npz = False):
         """Save in HDF5 file format"""
@@ -360,14 +369,7 @@ class KmerSet:
         if not fileName.endswith(".hdf5"):
             fileName += ".hdf5"
         with h5py.File(fileName, 'w') as h5:
-            h5.attrs["type"] = np.string_("KmerSet")
-            h5.attrs["k"] = self.k;
-            if self.fingerprint is not None:
-                h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
-            if self.kmers is not None:
-                h5.create_dataset("kmers", data=self.kmers, compression=compress)
-            if self.counts is not None:
-                h5.create_dataset("counts", data=self.counts, compression=compress)
+            self.save_hdf5(h5, compress)
 
     def load_npz(self, fileName):
         npData = np.load(fileName)
@@ -379,20 +381,22 @@ class KmerSet:
         if 'fingerprint' in npData.files:
             self.fingerprint = npData['fingerprint']
 
+    def load_hdf5(self, h5):
+        assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
+        self.k = KmerSet(h5.attrs['k'])
+        if "fingerprint" in h5:
+            self.fingerprint = np.array(h5["fingerprint"])
+        if "kmers" in h5:
+            self.kmers = np.array(h5["kmers"])
+        if "counts" in h5:
+            self.counts = np.array(h5["counts"])
+
     def load(self, fileName):
         if fileName.endswith(".npz"):
             self.load_npz(fileName)
             return
         with h5py.File(fileName, 'r') as h5:
-            assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
-            self.k = KmerSet(h5.attrs['k'])
-            if "fingerprint" in h5:
-                self.fingerprint = np.array(h5["fingerprint"])
-            if "kmers" in h5:
-                self.kmers = np.array(h5["kmers"])
-            if "counts" in h5:
-                self.counts = np.array(h5["counts"])
-
+            self.load_hdf5(h5)
 
 
 

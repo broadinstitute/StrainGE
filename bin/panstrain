@@ -14,7 +14,7 @@ parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead
                     action="store_true")
 parser.add_argument("-s", "--sample", help="Compare similarity of this vs the other strains instead of all vs all")
 parser.add_argument("-p", "--pan", help="hdf5 file containing pan genome kmer set")
-parser.add_argument("--secondary", action='store_true', help="Look for secondary strain")
+parser.add_argument("-v", "--verbose", action='store_true', help="More output")
 parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size")
 parser.add_argument("-o", "--output", help="output text file")
 parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for")
@@ -76,6 +76,7 @@ def scoreStrain(name, kset, commonKmers, sampleCounts, panCounts, exclude=None):
 
     # Weights of each kmer in strain
     strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
+    sampleWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, commonKmers)
     # strainWeights = strainWeights * strainWeights
     assert strainWeights.size == strainKmers.size, "Strain has kmers not in pan genome"
     # Total weight of strain
@@ -84,16 +85,17 @@ def scoreStrain(name, kset, commonKmers, sampleCounts, panCounts, exclude=None):
     assert kmers.size == weights.size, "kmers/weights mismatch"
 
     # weighted coverage: sample coverage weighted by inverse kmer occurance in pan genome
-    countweights = (samplec * weights)
-    wcoverage = covmult * countweights.sum() / strainWeight
+    countweight = (samplec * weights).sum()
+    wcoverage = covmult * countweight / strainWeight
+    wsample = countweight / (1.0 / panCounts).sum()
 
     specificity = wcoverage / gcoverage if gcoverage > wcoverage else gcoverage / wcoverage
-    score = sampleCount * evenness * specificity
+    score = wsample * evenness * specificity
 
     t3 = time.time()
     #print 'Times:', t1-t0, t2-t1, t3-t2
 
-    result = (name, covered, kcoverage, gcoverage, wcoverage, evenness, score)
+    result = (name, covered, kcoverage, gcoverage, wcoverage, wsample, evenness, score)
     return result, strainKmers
 
 
@@ -131,16 +133,17 @@ with h5py.File(args.pan, 'r') as h5:
             result = scoreStrain(name, kset, commonKmers, sampleCounts, panCounts, exclude=exclude)
             if result:
                 metrics, kmers = result
-                score = metrics[-1]
                 results.append(metrics)
+                if args.verbose:
+                    print "%s covered %.3f, kcov %.2f, gcov %.2f, wcov %.2f, wsam %.3f, even %.3f, score %.3f" % metrics
+                score = metrics[-1]
                 if score > bestScore:
                     bestScore = score
                     bestKmers = kmers
         # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         for r in results[:args.top]:
-            print "%s covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f even: %.3f score: %.0f" % r
-            # print >>output, "%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f" % (r[0], r[1], r[2], r[3], r[4], r[5])
+            print "%s covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f wsam: %.3f even: %.3f score: %.3f" % r
         sys.stdout.flush()
         if exclude is None:
             exclude = bestKmers

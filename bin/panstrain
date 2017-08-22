@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
                     action="store_true")
 parser.add_argument("-v", "--verbose", action='store_true', help="More output")
+parser.add_argument("-n", "--nocache", action='store_true', help="Don't cache strain kmer sets between iterations")
 parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size")
 parser.add_argument("-o", "--output", help="output text file")
 parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for")
@@ -46,6 +47,7 @@ with h5py.File(args.pan, 'r') as h5:
 
     # release sample from memory
     sample = None
+    strainKmerSets = {}
 
     for i in range(args.iterations):
         print "Finding strain", i + 1
@@ -59,42 +61,46 @@ with h5py.File(args.pan, 'r') as h5:
             if not isinstance(h5[name], h5py.Group):
                 continue
 
-            strain = kmertools.KmerSet()
-            strain.load_hdf5(h5[name])
+            if name in strainKmerSets:
+                strain = strainKmerSets[name]
+            else:
+                strain = kmertools.KmerSet()
+                strain.load_hdf5(h5[name])
 
             t0 = time.time()
 
-            if args.fingerprint:
-                strainKmers = strain.fingerprint
-                strainCounts = np.ones_like(strain.fingerprint, dtype=np.int64)
-            else:
-                strainKmers = strain.kmers
-                strainCounts = strain.counts
+            if args.fingerprint and exclude is None:
+                strain.kmers = strain.fingerprint
+                strain.counts = np.ones_like(strain.fingerprint, dtype=np.int64)
 
             if exclude is not None:
-                keepers = np.setdiff1d(strainKmers, exclude, assume_unique=True)
-                if float(keepers.size) / float(strainKmers.size) < 0.05:
+                keepers = np.setdiff1d(strain.kmers, exclude, assume_unique=True)
+                if float(keepers.size) / float(strain.kmers.size) < 0.05:
                     break
-                strainCounts = kmerizer.intersect_counts(strainKmers, strainCounts, keepers)
-                strainKmers = keepers
+                strain.counts = kmerizer.intersect_counts(strain.kmers, strain.counts, keepers)
+                strain.kmers = keepers
+
+            if not args.nocache:
+                strainKmerSets[name] = strain
+
 
             t1 = time.time()
 
-            strainSampleKmers = kmerizer.intersect(panSampleKmers, strainKmers)
+            strainSampleKmers = kmerizer.intersect(panSampleKmers, strain.kmers)
             if strainSampleKmers.size == 0:
                 continue
-            strainSampleCounts = kmerizer.intersect_counts(panSampleKmers, panSampleCounts, strainKmers)
+            strainSampleCounts = kmerizer.intersect_counts(panSampleKmers, panSampleCounts, strain.kmers)
             strainSampleCount = strainSampleCounts.sum()
-            sampleStrainCounts = kmerizer.intersect_counts(strainKmers, strainCounts, panSampleKmers)
+            sampleStrainCounts = kmerizer.intersect_counts(strain.kmers, strain.counts, panSampleKmers)
             sampleStrainCount = sampleStrainCounts.sum()
             assert strainSampleKmers.size == strainSampleCounts.size == sampleStrainCounts.size, "length mismatch"
 
             # Fraction of strain kmers in sample
-            covered = float(strainSampleKmers.size) / float(strainKmers.size)
+            covered = float(strainSampleKmers.size) / float(strain.kmers.size)
             # kmer coverage: mean coverage of every strain kmer that is in the sample
             kcoverage = float(strainSampleCount) / float(strainSampleKmers.size)
             # genome coverage: mean coverage of every strain kmer
-            gcoverage = covmult * float(strainSampleCount) / float(strainCounts.sum())
+            gcoverage = covmult * float(strainSampleCount) / float(strain.counts.sum())
 
             # converse of covered: what fraction of pangenome sample kmers are in this strain?
             accounted = float(strainSampleKmers.size) / float(panSampleKmers.size)
@@ -107,13 +113,13 @@ with h5py.File(args.pan, 'r') as h5:
             evenness = covered / estCovered
 
             # # Weights of each kmer in strain
-            # strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
+            # strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strain.kmers)
             # sampleWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, panSampleKmers)
             # # strainWeights = strainWeights * strainWeights
-            # assert strainWeights.size == strainKmers.size, "Strain has kmers not in pan genome"
+            # assert strainWeights.size == strain.kmers.size, "Strain has kmers not in pan genome"
             # # Total weight of strain
-            # strainWeight = (strainWeights * strainCounts).sum()
-            # weights = 1.0 / kmerizer.intersect_counts(panSampleKmers, samplePanCounts, strainKmers)
+            # strainWeight = (strainWeights * strain.counts).sum()
+            # weights = 1.0 / kmerizer.intersect_counts(panSampleKmers, samplePanCounts, strain.kmers)
             # assert strainSampleKmers.size == weights.size, "kmers/weights mismatch"
             #
             # # weighted coverage: sample coverage weighted by inverse kmer occurance in pan genome

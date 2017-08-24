@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
                     action="store_true")
 parser.add_argument("-v", "--verbose", action='store_true', help="More output")
-parser.add_argument("-n", "--nocache", action='store_true', help="Don't cache strain kmer sets between iterations")
+parser.add_argument("-c", "--cache", action='store_true', help="Cache strain kmer sets between iterations (uses more memory)")
 parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size")
 parser.add_argument("-o", "--output", help="output text file")
 parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for")
@@ -73,6 +73,7 @@ with h5py.File(args.pan, 'r') as h5:
                 strain.kmers = strain.fingerprint
                 strain.counts = np.ones_like(strain.fingerprint, dtype=np.int64)
 
+
             if exclude is not None:
                 keepers = np.setdiff1d(strain.kmers, exclude, assume_unique=True)
                 if float(keepers.size) / float(strain.kmers.size) < 0.05:
@@ -80,7 +81,7 @@ with h5py.File(args.pan, 'r') as h5:
                 strain.counts = kmerizer.intersect_counts(strain.kmers, strain.counts, keepers)
                 strain.kmers = keepers
 
-            if not args.nocache:
+            if args.cache:
                 strainKmerSets[name] = strain
 
 
@@ -112,41 +113,37 @@ with h5py.File(args.pan, 'r') as h5:
             # measure of evenness of coverage
             evenness = covered / estCovered
 
-            # # Weights of each kmer in strain
-            # strainWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, strain.kmers)
-            # sampleWeights = 1.0 / kmerizer.intersect_counts(pan.kmers, pan.counts, panSampleKmers)
-            # # strainWeights = strainWeights * strainWeights
-            # assert strainWeights.size == strain.kmers.size, "Strain has kmers not in pan genome"
-            # # Total weight of strain
-            # strainWeight = (strainWeights * strain.counts).sum()
-            # weights = 1.0 / kmerizer.intersect_counts(panSampleKmers, samplePanCounts, strain.kmers)
-            # assert strainSampleKmers.size == weights.size, "kmers/weights mismatch"
-            #
-            # # weighted coverage: sample coverage weighted by inverse kmer occurance in pan genome
-            # countweight = (strainSampleCounts * weights).sum()
-            # wcoverage = covmult * countweight / strainWeight
+            # Weights of each kmer in strain (inverse of occurance in pangenome)
+            strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strain.kmers)
+            strainWeights = 1.0 / strainPanCounts
+            strainTotalWeight = (strainWeights * strain.counts).sum()
+
+            strainSampleWeights = 1.0 / kmerizer.intersect_counts(strain.kmers, strainPanCounts, strainSampleKmers)
+            countweight = (strainSampleCounts * strainSampleWeights).sum()
+            wcoverage = covmult * countweight / strainTotalWeight
             # wsample = countweight / (1.0 / samplePanCounts).sum()
             #
-            # specificity = wcoverage / gcoverage if gcoverage > wcoverage else gcoverage / wcoverage
+            specificity = wcoverage / gcoverage
 
             score = covered * accounted * evenness
+            score2 = covered * accounted * min(specificity, 1/specificity)
 
             t3 = time.time()
             # print 'Times:', t1-t0, t2-t1, t3-t2
 
-            result = (name, covered, kcoverage, gcoverage, accounted, evenness, score)
+            result = (name, covered, kcoverage, gcoverage, specificity, accounted, evenness, score, score2)
             results.append(result)
 
             if score > bestScore:
                 bestScore = score
                 bestKmers = strainSampleKmers
             if args.verbose:
-                print "%32s cov %.3f kcov %.2f gcov %.2f acct %.3f even %.3f score %.3f" % result
+                print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % result
 
         # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         for r in results[:args.top]:
-            print "%32s cov %.3f kcov %.2f gcov %.2f acct %.3f even %.3f score %.3f" % r
+            print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % r
         sys.stdout.flush()
         if exclude is None:
             exclude = bestKmers

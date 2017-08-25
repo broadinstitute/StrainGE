@@ -33,10 +33,9 @@ exclude = None
 
 if args.output:
     output = open(args.output, 'w')
+    print >>output, "i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2"
 else:
     output = sys.stdout
-
-print >>output, "i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2"
 
 with h5py.File(args.pan, 'r') as h5:
     print >>sys.stderr, "Loading pan genome"
@@ -147,13 +146,15 @@ with h5py.File(args.pan, 'r') as h5:
                 bestScore = score
                 bestKmers = strainSampleKmers
             if args.verbose:
-                print >>sys.stderr, "%d %32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % result
+                print >>sys.stderr, "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % result[1:]
 
         # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         for r in results[:args.top]:
-            # print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % r
-            print >>output, "%d\t%32s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f" % r
+            if args.output:
+                print >>output, "%d\t%32s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f" % r
+            else:
+                print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % r[1:]
 
         output.flush()
         if exclude is None:
@@ -166,3 +167,5 @@ with h5py.File(args.pan, 'r') as h5:
         panSampleKmers = newKmers
         print >>sys.stderr, panSampleKmers.size, "pan kmers in sample after excluding prior strain"
 
+if args.output:
+    output.close()

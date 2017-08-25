@@ -14,11 +14,12 @@ parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead
                     action="store_true")
 parser.add_argument("-v", "--verbose", action='store_true', help="More output")
 parser.add_argument("-c", "--cache", action='store_true', help="Cache strain kmer sets between iterations (uses more memory)")
-parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size")
-parser.add_argument("-o", "--output", help="output text file")
-parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for")
+parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size (default: %d)" % (kmertools.DEFAULT_K))
+parser.add_argument("-o", "--output", help="output text file (default: standard out)")
+parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for (default: 2)")
+parser.add_argument("-m", "--min", type=int, default=0, help="Minimum number of kmers left to prematurely end iterations (default: disabled)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
-parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates)")
+parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()
@@ -33,7 +34,7 @@ exclude = None
 
 if args.output:
     output = open(args.output, 'w')
-    print >>output, "i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2"
+    output.write("i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2")
 else:
     output = sys.stdout
 
@@ -154,11 +155,15 @@ with h5py.File(args.pan, 'r') as h5:
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         for r in results[:args.top]:
             if args.output:
-                print >>output, "%d\t%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f" % r
+                output.write("%d\t%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f" % r)
             else:
                 print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % r[1:]
 
-        output.flush()
+        if args.output:
+            output.flush()
+        else:
+            sys.stdout.flush()
+
         if exclude is None:
             exclude = bestKmers
         else:
@@ -168,6 +173,8 @@ with h5py.File(args.pan, 'r') as h5:
         samplePanCounts = kmerizer.intersect_counts(panSampleKmers, samplePanCounts, newKmers)
         panSampleKmers = newKmers
         print >>sys.stderr, panSampleKmers.size, "pan kmers in sample after excluding prior strain"
+        if panSampleKmers.size < args.min:
+            break
 
 if args.output:
     output.close()

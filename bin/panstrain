@@ -34,7 +34,7 @@ exclude = None
 
 if args.output:
     output = open(args.output, 'w')
-    output.write("i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2")
+    output.write("i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2\n")
 else:
     output = sys.stdout
 
@@ -155,7 +155,7 @@ with h5py.File(args.pan, 'r') as h5:
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         for r in results[:args.top]:
             if args.output:
-                output.write("%d\t%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f" % r)
+                output.write("%d\t%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f\n" % r)
             else:
                 print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % r[1:]
 

@@ -107,24 +107,26 @@ def __get_scaffold_count(fasta):
     return n
 
 
-def _cluster_kmersim(kmersim, cutoff=0.95):
+def _cluster_kmersim(kmersim, kmerfiles, cutoff=0.95):
     """Cluster genomes based on kmer similarity"""
     clusters = {}
     seen = {}
-    keep = set()
+    keep = set([os.path.splitext(file)[0] for file in kmerfiles])
     root = os.path.split(kmersim)[0]
     with open(kmersim, 'rb') as f:
         print >>sys.stderr, "Clustering kmer similarity results..."
         i = 0
-        for line in f:
+        for _i, line in enumerate(f):
+            # if _i % 100000 == 0:
+                # print >>sys.stderr, _i, len(clusters), len(seen)
             temp = line.strip().split("\t")
             if len(temp) != 3:
                 continue
             g1 = os.path.join(root, temp[0])
             g2 = os.path.join(root, temp[1])
-            keep.update([g1, g2])
+            # keep.update([g1, g2])
             if float(temp[2]) < cutoff:
-                continue
+                break
             if g1 in seen and g2 not in seen:
                 c1 = seen[g1]
                 clusters[c1].add(g2)
@@ -136,21 +138,24 @@ def _cluster_kmersim(kmersim, cutoff=0.95):
             elif g1 in seen and g2 in seen:
                 c1 = seen[g1]
                 c2 = seen[g2]
-                if c1 < c2:
-                    clusters[c1].update(clusters[c2])
-                    for g in clusters[c2]:
-                        seen[g] = c1
-                    del clusters[c2]
-                elif c2 < c1:
-                    clusters[c2].update(clusters[c1])
-                    for g in clusters[c1]:
-                        seen[g] = c2
-                    del clusters[c1]
+                if c1 != c2:
+                    # print >>sys.stderr, "Merge", c1, len(clusters[c1]), c2, len(clusters[c2])
+                    if len(clusters[c1]) >= len(clusters[c2]):
+                        clusters[c1].update(clusters[c2])
+                        for g in clusters[c2]:
+                            seen[g] = c1
+                        del clusters[c2]
+                    else:
+                        clusters[c2].update(clusters[c1])
+                        for g in clusters[c1]:
+                            seen[g] = c2
+                        del clusters[c1]
             else:
                 clusters[i] = set([g1, g2])
                 seen[g1] = i
                 seen[g2] = i
                 i += 1
+            
     
     with open(os.path.join(root, "clusters.txt"), 'wb') as w:
         w.write("\n".join([" ".join(clusters[cluster]) for cluster in clusters]))
@@ -177,7 +182,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         out = os.path.join(root, "kmersim.txt")
         if not force and os.path.isfile(out):
             print >>sys.stderr, "kmersimilarity results already exist"
-            return _cluster_kmersim(out)
+            return _cluster_kmersim(out, kmerfiles)
         kmersim = ["kmersimilarity", "--similarity", out]
         if threads > 1:
             kmersim.extend(["--threads", str(threads)])
@@ -187,7 +192,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         with open(os.path.join(root, "kmersim.log"), 'wb') as w:
             print >>sys.stderr, "Running kmer similarity..."
             subprocess.check_call(kmersim, stdout=w, stderr=w)
-        return _cluster_kmersim(out)
+        return _cluster_kmersim(out, kmerfiles)
     
     except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, "Interrupting..."

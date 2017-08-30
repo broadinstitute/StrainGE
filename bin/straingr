@@ -151,6 +151,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
 ##################################
 
 parser = argparse.ArgumentParser()
+parser.add_argument("-o", "--output", action="store_true", help="write stats to tab-delimited file")
 parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("-q", "--minqual", type=int, help='minimum base Quality score to consider')
 parser.add_argument("-m", "--minmq", type=int, help='minimum read Mapping quality score to consider')
@@ -181,9 +182,12 @@ print >>sys.stderr, "Loading reference genome"
 reference = {scaffold.name: scaffold.seq.upper() for scaffold in kmertools.openSeqFile(args.reference)}
 print >>sys.stderr, len(reference), 'scaffolds,', sum([len(x) for x in reference.values()]), 'bases'
 
+fileout = None
 for file in args.bam:
     # pileups = grtools.Pileups(reference, file, keep=args.keep)
-    pileups  = grtools.Pileups(reference, file)
+    if args.output:
+        fileout = '.'.join(file.split('.')[:-1])+'.stats.txt'
+    pileups  = grtools.Pileups(reference, file, fileout=fileout)
     if not len(pileups):
         print >>sys.stderr, "Error: no pileups for %s" % file
         continue

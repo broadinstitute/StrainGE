@@ -20,6 +20,8 @@ verbose = False
 
 bases = set(list("ACGT"))
 
+tab_line = "{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}x\t{covered:d}\t{confirmed:d}\t{snps:d}\t{snprate}\t{mixed:d}\t{mixedrate}\tQ{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
+
 class Pileup:
     """
     Class to process pileup information; that is,
@@ -27,7 +29,7 @@ class Pileup:
     to a given reference coordinate.
     """
 
-    def __init__(self, chrom, scaffold, pos, pileup_reads = None):
+    def __init__(self, chrom, scaffold, pos, pileup_reads = None, fileout=None):
         """
         :param scaffold: reference sequence
         :param pos: coordinate in reference (0-based)
@@ -49,6 +51,7 @@ class Pileup:
         self.ref_mq = 0
         self.ref_mq_ss = 0
         self.hc = False
+        self.fileout = fileout
         # reads with other than reference base; list of tuples (base, qual, mq)
         self.others = {}
 
@@ -254,7 +257,7 @@ class Pileup:
 
 class Pileups:
     """Class of Pileups and reads for straingr"""
-    def __init__(self, reference, bamfile, keep = False):
+    def __init__(self, reference, bamfile, keep=False, fileout=None):
         
         # connect to database & create table
         # if os.path.isfile(bamfile+".db"):
@@ -262,7 +265,7 @@ class Pileups:
         #     os.remove(bamfile+".db")
         # self.con = sqlite3.connect(bamfile+".db")
         # self.con.execute("CREATE TABLE reads (read TEXT, readpos INTEGER, scaffold TEXT, pos INTEGER, base TEXT)")
-
+        self.bamfile = bamfile
         self.pileups = {}
         #self.reads = {}
         self.nPileups = 0
@@ -273,6 +276,11 @@ class Pileups:
         self.unmapped = 0
         self.goodcoverage = 0
         self.highcoverage = 0
+        if fileout:
+            self.fileout = open(fileout, 'wb')
+            self.fileout.write("bam\tchrom\tlength\tgoodcov\tcovered\tconfirmed\tsnps\tsnprate\tmixed\tmixedrate\tmixedquality\tgaps\tgaptotal\tunmapped\thighcov\thighthresh\n")
+        else:
+            self.fileout = None
 
         print >>sys.stderr, "Scanning BAM file: %s" % bamfile
         bam = pysam.AlignmentFile(bamfile, "rb")
@@ -285,6 +293,9 @@ class Pileups:
             except Exception as e:
                 print >>sys.stderr, "Error in straingr: %s" % e
                 continue
+        
+        if self.fileout:
+            self.fileout.close()
     
     def __len__(self):
         return self.nPileups
@@ -367,7 +378,10 @@ class Pileups:
         print >>sys.stderr, "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
         print >>sys.stderr, "snps: %d %.3f%%" % (snps, pct(snps, covered))
         if snps > 0:
-            print >>sys.stderr, "snp rate: %.0f" % (float(covered) / float(snps))
+            snp_rate = "%.0f" % (float(covered) / float(snps))
+            print >>sys.stderr, "snp rate:", snp_rate
+        else:
+            snp_rate = ""
         print >>sys.stderr, "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
         if mixed > 0:
             mixed_rate = float(covered) / float(mixed)
@@ -375,10 +389,15 @@ class Pileups:
                 mixed_quality = math.log10(mixed_rate) * 10.0
             else:
                 mixed_quality = 0
-            print >>sys.stderr, "mixed rate: %.0f Q%.0f" % (mixed_rate, mixed_quality)
-        print >>sys.stderr, "gaps:", len(gaps), "totaling", sum([g[1] for g in gaps])
+            mixed_rate = "%.0f" % (mixed_rate)
+            print >>sys.stderr, "mixed rate: %s Q%.0f" % (mixed_rate, mixed_quality)
+        else:
+            mixed_rate = ""
+            mixed_quality = 0
+        gap_total = sum([g[1] for g in gaps])
+        print >>sys.stderr, "gaps:", len(gaps), "totaling", gap_total
         print >>sys.stderr, "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
-        
+
         # keep track of total values in the Pileups class variables
         self.length += length
         self.confirmed += confirmed
@@ -401,6 +420,28 @@ class Pileups:
             print >>sys.stderr, "Abnormally high coverage: %d %.2f%% (expect 0.01%% false positive)" % (highcoverage, pct(highcoverage, length))
 
             self.highcoverage += highcoverage
+        else:
+            highcoverage = 0
+            threshold = 0
+        
+         # "{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}x\t{covered:d}\t{confirmed:d}\t{snps:d}\t{snprate}\t{mixed:d}\t{mixedrate}\tQ{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
+        if self.fileout:
+            self.fileout.write(tab_line.format(bam=self.bamfile,
+                                               chrom=scaffold,
+                                               length=length,
+                                               goodcov=coverage,
+                                               covered=covered,
+                                               confirmed=confirmed,
+                                               snps=snps,
+                                               snprate=snp_rate,
+                                               mixed=mixed,
+                                               mixedrate=mixed_rate,
+                                               mixedquality=mixed_quality,
+                                               gaps=len(gaps),
+                                               gaptotal=gap_total,
+                                               unmapped=unmapped,
+                                               highcov=highcoverage,
+                                               highthresh=threshold))
         
         
 class VCF:

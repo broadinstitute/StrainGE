@@ -20,7 +20,7 @@ verbose = False
 
 bases = set(list("ACGT"))
 
-tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}x\t{covered:d}\t{confirmed:d}\t{snps:d}\t{snprate}\t{mixed:d}\t{mixedrate}\tQ{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
+tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
 class Pileup:
     """
@@ -279,7 +279,7 @@ class Pileups:
         self.highcoverage = 0
         if fileout:
             self.fileout = open(fileout, 'wb')
-            self.fileout.write("reference\tbam\tchrom\tlength\tgoodcov\tcovered\tconfirmed\tsnps\tsnprate\tmixed\tmixedrate\tmixedquality\tgaps\tgaptotal\tunmapped\thighcov\thighthresh\n")
+            self.fileout.write("reference\tbam\tchrom\tlength\tgoodcov\tcovered\tpcovered\tconfirmed\tpconfirmed\tsnps\tpsnps\tsnprate\tmixed\tpmixed\tmixedrate\tmixedquality\tgaps\tgaptotal\tunmapped\thighcov\thighthresh\n")
         else:
             self.fileout = None
 
@@ -433,10 +433,14 @@ class Pileups:
                                                length=length,
                                                goodcov=coverage,
                                                covered=covered,
+                                               pcovered=pct(covered, length),
                                                confirmed=confirmed,
+                                               pconfirmed=pct(confirmed, covered),
                                                snps=snps,
+                                               psnps=pct(snps, covered)
                                                snprate=snp_rate,
                                                mixed=mixed,
+                                               pmixed=pct(mixed, covered),
                                                mixedrate=mixed_rate,
                                                mixedquality=mixed_quality,
                                                gaps=len(gaps),

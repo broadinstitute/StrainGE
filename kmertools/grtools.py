@@ -437,7 +437,7 @@ class Pileups:
                                                confirmed=confirmed,
                                                pconfirmed=pct(confirmed, covered),
                                                snps=snps,
-                                               psnps=pct(snps, covered)
+                                               psnps=pct(snps, covered),
                                                snprate=snp_rate,
                                                mixed=mixed,
                                                pmixed=pct(mixed, covered),

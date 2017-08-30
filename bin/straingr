@@ -187,7 +187,7 @@ for file in args.bam:
     # pileups = grtools.Pileups(reference, file, keep=args.keep)
     if args.output:
         fileout = '.'.join(file.split('.')[:-1])+'.stats.txt'
-    pileups  = grtools.Pileups(reference, file, fileout=fileout)
+    pileups  = grtools.Pileups(reference, file, refname=args.reference, fileout=fileout)
     if not len(pileups):
         print >>sys.stderr, "Error: no pileups for %s" % file
         continue

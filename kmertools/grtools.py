@@ -20,7 +20,7 @@ verbose = False
 
 bases = set(list("ACGT"))
 
-tab_line = "{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}x\t{covered:d}\t{confirmed:d}\t{snps:d}\t{snprate}\t{mixed:d}\t{mixedrate}\tQ{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
+tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}x\t{covered:d}\t{confirmed:d}\t{snps:d}\t{snprate}\t{mixed:d}\t{mixedrate}\tQ{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
 class Pileup:
     """
@@ -257,7 +257,7 @@ class Pileup:
 
 class Pileups:
     """Class of Pileups and reads for straingr"""
-    def __init__(self, reference, bamfile, keep=False, fileout=None):
+    def __init__(self, reference, bamfile, keep=False, refname="", fileout=None):
         
         # connect to database & create table
         # if os.path.isfile(bamfile+".db"):
@@ -265,6 +265,7 @@ class Pileups:
         #     os.remove(bamfile+".db")
         # self.con = sqlite3.connect(bamfile+".db")
         # self.con.execute("CREATE TABLE reads (read TEXT, readpos INTEGER, scaffold TEXT, pos INTEGER, base TEXT)")
+        self.refname = refname
         self.bamfile = bamfile
         self.pileups = {}
         #self.reads = {}
@@ -278,7 +279,7 @@ class Pileups:
         self.highcoverage = 0
         if fileout:
             self.fileout = open(fileout, 'wb')
-            self.fileout.write("bam\tchrom\tlength\tgoodcov\tcovered\tconfirmed\tsnps\tsnprate\tmixed\tmixedrate\tmixedquality\tgaps\tgaptotal\tunmapped\thighcov\thighthresh\n")
+            self.fileout.write("reference\tbam\tchrom\tlength\tgoodcov\tcovered\tconfirmed\tsnps\tsnprate\tmixed\tmixedrate\tmixedquality\tgaps\tgaptotal\tunmapped\thighcov\thighthresh\n")
         else:
             self.fileout = None
 
@@ -426,7 +427,8 @@ class Pileups:
         
          # "{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}x\t{covered:d}\t{confirmed:d}\t{snps:d}\t{snprate}\t{mixed:d}\t{mixedrate}\tQ{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
         if self.fileout:
-            self.fileout.write(tab_line.format(bam=self.bamfile,
+            self.fileout.write(tab_line.format(ref=self.refname,
+                                               bam=self.bamfile,
                                                chrom=scaffold,
                                                length=length,
                                                goodcov=coverage,

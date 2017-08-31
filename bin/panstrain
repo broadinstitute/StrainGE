@@ -19,10 +19,12 @@ parser.add_argument("-o", "--output", help="output text file (default: standard 
 parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for (default: 2)")
 parser.add_argument("-m", "--min", type=int, default=0, help="Minimum number of kmers left to prematurely end iterations (default: disabled)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
+parser.add_argument("-s", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
 parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()
+
 
 # coverage normalization factor
 covmult = float(args.readlength) / float(args.readlength - args.K + 1)
@@ -34,7 +36,6 @@ exclude = None
 
 if args.output:
     output = open(args.output, 'w')
-    output.write("i\tcov\tkcov\tgcov\tacct\teven\tscore\tscore2\n")
 else:
     output = sys.stdout
 
@@ -86,7 +87,7 @@ with h5py.File(args.pan, 'r') as h5:
             if exclude is not None:
                 keepers = np.setdiff1d(strain.kmers, exclude, assume_unique=True)
                 if float(keepers.size) / float(strain.kmers.size) < 0.05:
-                    break
+                    continue
                 strain.counts = kmerizer.intersect_counts(strain.kmers, strain.counts, keepers)
                 strain.kmers = keepers
 
@@ -122,25 +123,31 @@ with h5py.File(args.pan, 'r') as h5:
             # measure of evenness of coverage
             evenness = covered / estCovered
 
-            # Weights of each kmer in strain (inverse of occurrence in pangenome)
-            strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strain.kmers)
-            strainWeights = 1.0 / strainPanCounts
-            strainTotalWeight = (strainWeights * strain.counts).sum()
+            if args.scoring == "weighted":
+                # Weights of each kmer in strain (inverse of occurrence in pangenome)
+                strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strain.kmers)
+                strainWeights = 1.0 / strainPanCounts
+                strainTotalWeight = (strainWeights * strain.counts).sum()
 
-            strainSampleWeights = 1.0 / kmerizer.intersect_counts(strain.kmers, strainPanCounts, strainSampleKmers)
-            countweight = (strainSampleCounts * strainSampleWeights).sum()
-            wcoverage = covmult * countweight / strainTotalWeight
-            # wsample = countweight / (1.0 / samplePanCounts).sum()
-            #
-            specificity = wcoverage / gcoverage
-
-            score = covered * accounted * evenness
-            score2 = covered * accounted * min(specificity, 1/specificity)
+                strainSampleWeights = 1.0 / kmerizer.intersect_counts(strain.kmers, strainPanCounts, strainSampleKmers)
+                countweight = (strainSampleCounts * strainSampleWeights).sum()
+                wcoverage = covmult * countweight / strainTotalWeight
+                # wsample = countweight / (1.0 / samplePanCounts).sum()
+                #
+                specificity = wcoverage / gcoverage
+                score = covered * accounted * min(specificity, 1/specificity)
+                result = (i, name, covered, kcoverage, gcoverage, accounted, evenness, specificity, score)
+                resultNames = ("i", "name", "cov", "kcov", "gcov", "acct", "even", "spec", "score")
+                resultFormats = ("%d", "%s", "%.3f", "%.2f", "%.2f", "%.3f", "%.3f", "%.2f", "%.3f")
+            else:
+                score = covered * accounted * evenness
+                result = (i, name, covered, kcoverage, gcoverage, accounted, evenness, score)
+                resultNames = ("i", "name", "cov", "kcov", "gcov", "acct", "even", "score")
+                resultFormats = ("%d", "%s", "%.3f", "%.2f", "%.2f", "%.3f", "%.3f", "%.3f")
 
             # t3 = time.time()
             # print 'Times:', t1-t0, t2-t1, t3-t2
 
-            result = (i, name, covered, kcoverage, gcoverage, specificity, accounted, evenness, score, score2)
             results.append(result)
 
             # If this is the winner, keep the kmers around
@@ -149,15 +156,15 @@ with h5py.File(args.pan, 'r') as h5:
                 bestKmers = strainSampleKmers
 
             if args.verbose:
-                print >>sys.stderr, "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % result[1:]
+                print >>sys.stderr, " ".join([r[0] + "=" + (r[1] % r[2]) for r in zip(resultNames, resultFormats, result)])
+                #print >>sys.stderr, " ".join([str(r) for r in zip(resultNames, resultFormats, result)])
 
         # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
+        if i == 0:
+            print >>output, "\t".join(resultNames)
         for r in results[:args.top]:
-            if args.output:
-                output.write("%d\t%s\t%.3f\t%.2f\t%.2f\t%.2f\t%.3f\t%.3f\t%.3f\t%.3f\n" % r)
-            else:
-                print "%32s cov %.3f kcov %.2f gcov %.2f spec %.2f acct %.3f even %.3f score %.3f score2 %.3f" % r[1:]
+            print >>output, "\t".join(resultFormats) % r
 
         if args.output:
             output.flush()

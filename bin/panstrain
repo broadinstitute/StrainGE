@@ -16,10 +16,11 @@ parser.add_argument("-v", "--verbose", action='store_true', help="More output")
 parser.add_argument("-c", "--cache", action='store_true', help="Cache strain kmer sets between iterations (uses more memory)")
 parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size (default: %d)" % (kmertools.DEFAULT_K))
 parser.add_argument("-o", "--output", help="output text file (default: standard out)")
-parser.add_argument("-i", "--iterations", type=int, default=2, help="how many strains to look for (default: 2)")
-parser.add_argument("-m", "--min", type=int, default=0, help="Minimum number of kmers left to prematurely end iterations (default: disabled)")
+parser.add_argument("-i", "--iterations", type=int, default=5, help="max strains to look for (default: 5)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
-parser.add_argument("-s", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
+parser.add_argument("-s", "--score", type=float, default=0.005, help="minimum score")
+parser.add_argument("-e", "--evenness", type=float, default=0.5, help="minimum evenness")
+parser.add_argument("-S", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
 parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
@@ -145,8 +146,9 @@ with h5py.File(args.pan, 'r') as h5:
                 resultNames = ("i", "name", "cov", "kcov", "gcov", "acct", "even", "score")
                 resultFormats = ("%d", "%s", "%.3f", "%.2f", "%.2f", "%.3f", "%.3f", "%.3f")
 
-            # t3 = time.time()
-            # print 'Times:', t1-t0, t2-t1, t3-t2
+            # scoring thresholds
+            if score < args.score or evenness < args.evenness:
+                continue
 
             results.append(result)
 
@@ -159,6 +161,8 @@ with h5py.File(args.pan, 'r') as h5:
                 print >>sys.stderr, " ".join([r[0] + "=" + (r[1] % r[2]) for r in zip(resultNames, resultFormats, result)])
                 #print >>sys.stderr, " ".join([str(r) for r in zip(resultNames, resultFormats, result)])
 
+        if bestScore == 0:
+            break
         # print name, "covered: %.3f kcov: %.2f gcov: %.2f wcov: %.2f score: %.3f" % (covered, kcoverage, gcoverage, wcoverage, score)
         results.sort(lambda a, b: cmp(b[-1], a[-1]))
         if i == 0:
@@ -180,8 +184,8 @@ with h5py.File(args.pan, 'r') as h5:
         samplePanCounts = kmerizer.intersect_counts(panSampleKmers, samplePanCounts, newKmers)
         panSampleKmers = newKmers
         print >>sys.stderr, panSampleKmers.size, "pan kmers in sample after excluding prior strain"
-        if panSampleKmers.size < args.min:
-            break
+
+print >>sys.stderr, 'Done!'
 
 if args.output:
     output.close()

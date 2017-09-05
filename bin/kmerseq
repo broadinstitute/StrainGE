@@ -22,6 +22,8 @@ parser.add_argument("--npz", help="Store output in npz format (default hdf5)", a
 parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
                     action="store_true")
 parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
+parser.add_argument("-e", "--entropy", action="store_true", help="Calculate Shannon entropy (in bases)")
+parser.add_argument("-l", "--limit", help="Only process about this many kmers (can have suffix of M or G)")
 parser.add_argument("-p", "--prune", help="Prune singletons after accumulating this many (can have suffix of M or G)")
 parser.add_argument("--histogram", help="Histogram output file (count of kmers by frequency)")
 parser.add_argument("--kmerset", help="Input is kmerset in hdf5 or npz format", action="store_true")
@@ -48,7 +50,10 @@ else:
     kset = kmertools.KmerSet(args.K)
     for arg in args.sequences:
         print 'Kmerizing', arg
-        kset.kmerizeFile(arg, prune=parseMegaGiga(args.prune))
+        kset.kmerizeFile(arg, limit=parseMegaGiga(args.limit), prune=parseMegaGiga(args.prune))
+
+if args.entropy:
+    print "Entropy:", round(kset.entropy(), 2)
 
 if args.histogram:
     kset.writeHistogram(args.histogram)

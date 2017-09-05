@@ -196,7 +196,7 @@ class KmerSet:
         return self.k == other.k and np.array_equal(self.fingerprint, other.fingerprint) \
                and np.array_equal(self.kmers, other.kmers) and np.array_equal(self.counts, other.counts)
 
-    def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True, prune=0):
+    def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True, limit=0, prune=0):
         seqFile = openSeqFile(fileName)
         batch = np.empty(batchSize, dtype=np.uint64)
 
@@ -212,6 +212,8 @@ class KmerSet:
             nBases += seqLength
             if nKmers + seqLength > batchSize:
                 self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
+                if limit and self.nKmers > limit:
+                    break
                 if prune and self.singletons > prune:
                     self.pruneSingletons(verbose)
                     pruned = True
@@ -219,6 +221,8 @@ class KmerSet:
                 nBases = 0
                 nKmers = 0
             nKmers += kmerizer.kmerize_into_array(self.k, str(seq.seq), batch, nKmers)
+            if limit and self.nKmers + nKmers >= limit:
+                break
         seqFile.close()
         self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
         if pruned:
@@ -338,6 +342,14 @@ class KmerSet:
         with open(fileName, 'w') as hist:
             for i in xrange(spectrum[0].size):
                 print >> hist, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
+
+    def entropy(self):
+        """Calculate Shannon entropy in bases"""
+        if self.counts is None:
+            return 0.0
+        total = float(self.counts.sum())
+        probs = self.counts / total
+        return -(probs * np.log2(probs)).sum() / 2.0
 
     def save_npz(self, fileName, compress = False):
         kwargs = {'kmers': self.kmers, 'counts': self.counts}

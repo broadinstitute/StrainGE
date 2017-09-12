@@ -86,7 +86,9 @@ with h5py.File(args.pan, 'r') as h5:
 
 
             if exclude is not None:
-                keepers = np.setdiff1d(strain.kmers, exclude, assume_unique=True)
+                #keepers = np.setdiff1d(strain.kmers, exclude, assume_unique=True)
+                keepers = kmerizer.diff(strain.kmers, exclude)
+                #assert np.array_equal(keepers, keepnew), "kmerizer.diff bug"
                 if float(keepers.size) / float(strain.kmers.size) < 0.05:
                     continue
                 strain.counts = kmerizer.intersect_counts(strain.kmers, strain.counts, keepers)
@@ -179,7 +181,9 @@ with h5py.File(args.pan, 'r') as h5:
             exclude = bestKmers
         else:
             exclude = np.unique(np.concatenate((exclude, bestKmers)))
-        newKmers = np.setdiff1d(panSampleKmers, exclude, assume_unique=True)
+        #newKmers = np.setdiff1d(panSampleKmers, exclude, assume_unique=True)
+        newKmers = kmerizer.diff(panSampleKmers, exclude)
+        #assert np.array_equal(newKmers, xxx), "kmerizer.diff bug"
         panSampleCounts = kmerizer.intersect_counts(panSampleKmers, panSampleCounts, newKmers)
         samplePanCounts = kmerizer.intersect_counts(panSampleKmers, samplePanCounts, newKmers)
         panSampleKmers = newKmers

@@ -23,7 +23,7 @@ parser.add_argument("-s", "--score", type=float, default=0.005, help="minimum sc
 parser.add_argument("-e", "--evenness", type=float, default=0.5, help="minimum evenness")
 parser.add_argument("-S", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
 parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
-parser.add_argument("--threads", type=int, default=1, help="Parallel threads (implies --cache)")
+parser.add_argument("-p", "--threads", type=int, default=1, help="Parallel threads (implies --cache)")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()

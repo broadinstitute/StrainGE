@@ -20,7 +20,7 @@ def run_kmerseq(fasta, database=None, k=23, fraction=0.002, force=False):
         with open(fasta, 'rb'):
             pass
         if database:
-            root = os.path.join(database, os.path.splitext(os.path.basename(fasta)))
+            root = os.path.join(database, os.path.splitext(os.path.basename(fasta))[0])
             out = os.path.join(database, "{}.hdf5".format(os.path.basename(fasta)))
         else:
             (root, ext) = os.path.splitext(fasta)

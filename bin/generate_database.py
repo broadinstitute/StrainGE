@@ -323,6 +323,8 @@ def main():
     
     # record kmer size
     if args.database:
+        if not os.path.isdir(args.database):
+            os.mkdir(args.database)
         root = args.database
     else:
         root = os.path.split(args.fasta[0])[0]

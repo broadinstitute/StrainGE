@@ -10,6 +10,7 @@ import subprocess
 import multiprocessing
 import argparse
 
+bin_folder = ""
 
 def run_kmerseq(fasta, database=None, k=23, fraction=0.002, force=False):
     """Generate kmer hdf5 file from fasta file"""
@@ -27,7 +28,7 @@ def run_kmerseq(fasta, database=None, k=23, fraction=0.002, force=False):
         if not force and os.path.isfile(out):
             print >>sys.stderr, "{} already exists, not overwriting".format(out)
             return out
-        kmerseq = ["kmerseq", "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction), fasta]
+        kmerseq = [os.path.join(bin_folder, "kmerseq"), "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction), fasta]
         with open("{}.log".format(root), 'wb') as w:
             subprocess.check_call(kmerseq, stdout=w, stderr=w)
         return out
@@ -183,7 +184,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         if not force and os.path.isfile(out):
             print >>sys.stderr, "kmersimilarity results already exist"
             return _cluster_kmersim(out, kmerfiles)
-        kmersim = ["kmersimilarity", "--similarity", out]
+        kmersim = [os.path.join(bin_folder, "kmersimilarity"), "--similarity", out]
         if threads > 1:
             kmersim.extend(["--threads", str(threads)])
         if fingerprint:
@@ -243,7 +244,7 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
         if not force and os.path.isfile(treefile):
             print >>sys.stderr, "Warning! Found previously generated kmer tree. Not overwriting"
             return True
-        kmertree = ["kmertree", "--dedupe", "-k", str(k), "--output", treefile, "--nwk", os.path.join(root, "tree.nwk")]
+        kmertree = [os.path.join(bin_folder, "kmertree"), "--dedupe", "-k", str(k), "--output", treefile, "--nwk", os.path.join(root, "tree.nwk")]
         if fingerprint:
             kmertree.append("--fingerprint")
         kmertree.extend(kmerfiles)
@@ -257,6 +258,33 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
         return
     except Exception as e:
         print >>sys.stderr, "Exception building kmertree:", e
+
+
+def run_pankmer(kmerfiles, k=23, fingerprint=False, force=False):
+    """Run pankmer to generate pan genome kmers"""
+    if not kmerfiles:
+        return
+    try:
+        root = os.path.split(kmerfiles[0])[0]
+        panfile = os.path.join(root, "pankmer.hdf5")
+        if not force and os.path.isfile(panfile):
+            print >>sys.stderr, "Warning! Found previously generated pan genome kmer file. Not overwriting"
+            return True
+        pankmer = [os.path.join(bin_folder, "pankmer"), "--K", str(k), "--output", panfile]
+        if fingerprint:
+            pankmer.append("--fingerprint")
+        pankmer.extend(kmerfiles)
+        with open(os.path.join(root, "pankmer.log"), 'wb') as w:
+            print >>sys.stderr, "Generating pan genome kmer file. Please wait..."
+            subprocess.check_call(pankmer, stdout=w, stderr=w)
+        print >>sys.stderr, "Successfully built pan genome kmer file!"
+        return True
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+        return
+    except Exception as e:
+        print >>sys.stderr, "Exception building pan genome kmer file:", e
+
 
 
 ###
@@ -275,12 +303,16 @@ def main():
                         action="store_true")
     parser.add_argument("--cluster", type=float, default=0.95, help="Cluster references at this fraction. Set to 0 to disable (default 0.95)")
     parser.add_argument("--max-contigs", type=int, help="Filter out genomes with more than this many contigs (default: disabled)")
+    parser.add_argument("--no-tree", action="store_true", help="Do not generate kmer tree (generate pan genome only)")
     parser.add_argument("-t", "--threads", type=int, help="Number of threads to use (default: 1)", default=1)
     args = parser.parse_args()
 
     if not args:
         print >>sys.stderr, "No reference fasta files specified"
         sys.exit(1)
+
+    global bin_folder
+    bin_folder = os.path.dirname(os.path.realpath(__file__))
 
     if args.K > 32:
         print >>sys.stderr, "Cannot use kmer size above 32. Setting to 32..."
@@ -333,7 +365,11 @@ def main():
                 # remove unselected reference genomes
                 del kmerfiles[ref]
 
-    if not run_kmertree(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
+    if not args.no_tree:
+        if not run_kmertree(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
+            sys.exit(1)
+    
+    if not run_pankmer(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
         sys.exit(1)
 
     for ref in kmerfiles:

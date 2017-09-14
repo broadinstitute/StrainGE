@@ -11,6 +11,7 @@ import multiprocessing
 
 import argparse
 
+bin_folder = ""
 
 def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False, force=False):
     """Generate kmer hdf5 file from fasta file"""
@@ -23,7 +24,7 @@ def run_kmerseq(fasta, fasta2=None, k=23, fraction=0.002, filtered=False, force=
         if not force and os.path.isfile(out):
             print >>sys.stderr, "{} already exists, not overwriting".format(out)
             return out
-        kmerseq = ["kmerseq", "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction)]
+        kmerseq = [os.path.join(bin_folder, "kmerseq"), "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction)]
         if filtered:
             kmerseq.append("-F")
         kmerseq.append(fasta)
@@ -116,7 +117,7 @@ def kmerize_files(samples, k=23, fraction=0.002, filtered=False, force=False, th
 def run_treepath(kmerfiles, tree, min_score=0.1, k=23):
     """Run treepath on a sample kmer file"""
     try:
-        treepath = ["treepath", "-o", "treepath.k{}.csv".format(k), "-s", str(min_score), tree]
+        treepath = [os.path.join(bin_folder, "treepath"), "-o", "treepath.k{}.csv".format(k), "-s", str(min_score), tree]
         treepath.extend(kmerfiles)
         print >>sys.stderr, "Running path detection. Please wait..."
         with open("treepath.k{}.log".format(k), 'wb') as w:
@@ -149,13 +150,53 @@ def parse_treepath(k=23):
     return results
 
 
+def run_panstrain(kmerfiles, pankmer, score=0.005, evenness=0.5, k=23, fingerprint=False, cache=True):
+    """Run panstrain on samples"""
+    try:
+        panstrain = [os.path.join(bin_folder, "panstrain"), "-K", str(k), "-o", "panstrain.k{}.tsv".format(k), "-s", str(score), "-e", str(evenness), pankmer]
+        if fingerprint:
+            panstrain.append("-f")
+        if cache:
+            panstrain.append("-c")
+        panstrain.extend(kmerfiles)
+        print >>sys.stderr, "Running panstrain strain detection. Please wait..."
+        with open("panstrain.k{}.log".format(k), 'wb') as w:
+            subprocess.check_call(panstrain, stdout=w, stderr=w)
+        return True
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+    except Exception as e:
+        print "ERROR! Exception while running panstrain: ", e
+
+
+def parse_panstrain(k=23):
+    """Parse panstrain results"""
+    results = {}
+    panstrain_file = "panstrain.k{}.tsv".format(k)
+    if not os.path.isfile(panstrain_file):
+        print >>sys.stderr, "No panstrain results found"
+        return
+
+    with open(panstrain_file, 'rb') as f:
+        f.readline()
+        for line in f:
+            temp = line.strip().split("\t")
+            sample = temp[0]
+            if sample not in results:
+                results[sample] = []
+            results[sample].append(temp[2])
+    
+    return results
+            
+
+
 def write_bowtie2_commands(results, kmerfiles, reference, threads=1):
-    """Run Bowtie2 aligning samples to references based on treepath"""
+    """Run Bowtie2 aligning samples to references based on kmer results"""
     commands = []
     for sample in results:
         file1, file2 = kmerfiles.get(sample)
         for ref in results[sample]:
-            name = ".k".join(sampe.split(".k")[:-1])
+            name = ".k".join(sample.split(".k")[:-1])
             bam = "{}_{}.bam".format(name, ref)
             index = os.path.join(reference, ref)
             bowtie2 = "bowtie2 --no-unal --very-sensitive --no-mixed --no-discordant -X 700 -p {:d} -x {}".format(threads, index)
@@ -181,7 +222,7 @@ def run_bowtie2(results, kmerfiles, reference, threads=1, force=False):
         for ref in results[sample]:
             try:
                 total += 1
-                name = ".k".join(sampe.split(".k")[:-1])
+                name = ".k".join(sample.split(".k")[:-1])
                 bam = "{}_{}.bam".format(name, ref)
                 if not force and os.path.isfile(bam):
                     print >>sys.stderr, "BAM file already exists: {}".format(bam)
@@ -229,7 +270,7 @@ def run_straingr(bamfiles, reference):
             if not os.path.isfile(fasta):
                 print >>sys.stderr, "ERROR! Cannot find reference fasta file: {}".format(fasta)
                 continue
-            straingr = ["straingr", fasta]
+            straingr = [os.path.join(bin_folder, "straingr"), fasta]
             straingr.extend(bamfiles[ref])
             with open("{}_straingr.log".format(ref), 'wb') as w:
                 print >>sys.stderr, "Running genome recovery on reference {}. Please wait...".format(ref)
@@ -264,6 +305,8 @@ def main():
     parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set (faster for many references)",
                         action="store_true")
     parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
+    parser.add_argument("--panstrain", action="store_true", help="Use panstrain (instead of treepath) to estimate strains")
+    parser.add_argument("--no-cache", action="store_true", help="Do not cache pan genome kmer files (saves RAM)")
     parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
     parser.add_argument("--no-bowtie2", help="Do not run bowtie2 alignments", 
                         action="store_true")
@@ -276,10 +319,16 @@ def main():
         print >>sys.stderr, "No reference specified, assuming current working directory"
         args.reference = os.path.curdir
 
-    kmertree = os.path.join(args.reference, "tree.hdf5")
-    if not kmertree:
-        print >>sys.stderr, "Cannot find tree.hdf5 file in {}".format(args.reference)
-        sys.exit(1)
+    if args.panstrain:
+        pankmer = os.path.join(args.reference, "pankmer.hdf5")
+        if not os.path.isfile(pankmer):
+            print >>sys.stderr, "Cannot find pan genome kmer file in {}".format(args.reference)
+            sys.exit(1)
+    else:
+        kmertree = os.path.join(args.reference, "tree.hdf5")
+        if not os.path.isfile(kmertree):
+            print >>sys.stderr, "Cannot find tree.hdf5 file in {}".format(args.reference)
+            sys.exit(1)
 
     kmersize_file = os.path.join(args.reference, "kmersize")
     if not os.path.isfile(kmersize_file):
@@ -295,25 +344,38 @@ def main():
             print >>sys.stderr, "Guessing default value of 23"
             k = 23
 
+    global bin_folder
+    bin_folder = os.path.dirname(os.path.realpath(__file__))
+
     kmerfiles = kmerize_files(args.sample, k=k, fraction=args.fraction, filtered=args.filter, force=args.force, threads=args.threads)
     if not kmerfiles:
         print >>sys.stderr, "ERROR! No kmerized samples found"
         sys.exit(1)
 
-    if not run_treepath(kmerfiles.keys(), kmertree, min_score=args.min_score, k=k):
-        sys.exit(1)
 
-    treepath_results = parse_treepath(k)
-    if not treepath_results:
-        print >>sys.stderr, "ERROR! No treepath results"
-        sys.exit(1)
+    if args.panstrain:
+        cache = not args.no_cache
+        if not run_panstrain(kmerfiles.keys(), pankmer, k=k, fingerprint=args.fingerprint, cache=cache):
+            sys.exit(1)
+        results = parse_panstrain(k)
+        if not results:
+            print >>sys.stderr, "ERROR! No panstrain results"
+            sys.exit(1)
+    else:
+        if not run_treepath(kmerfiles.keys(), kmertree, min_score=args.min_score, k=k):
+            sys.exit(1)
+
+        results = parse_treepath(k)
+        if not results:
+            print >>sys.stderr, "ERROR! No treepath results"
+            sys.exit(1)
 
     if args.no_bowtie2:
-        write_bowtie2_commands(treepath_results, kmerfiles, args.reference, threads=args.threads)
+        write_bowtie2_commands(results, kmerfiles, args.reference, threads=args.threads)
         print >>sys.stderr, "Wrote bowtie2 alignment commands to bowtie2_commands"
         sys.exit()
 
-    bamfiles = run_bowtie2(treepath_results, kmerfiles, args.reference, threads=args.threads)
+    bamfiles = run_bowtie2(results, kmerfiles, args.reference, threads=args.threads)
     if not bamfiles:
         print >>sys.stderr, "ERROR! Did not complete bowtie2 alignments"
         sys.exit(1)

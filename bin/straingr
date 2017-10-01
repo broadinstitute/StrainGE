@@ -189,17 +189,17 @@ class Pileup:
                 self.confirmed = True
             else:
                 self.snp = winner
-                print 'SNP', Pileup.BASES[refindex], Pileup.BASES[winner]
+                if args.verbose: print 'SNP', Pileup.BASES[refindex], Pileup.BASES[winner]
         else:
             second = qualorder[-2]
             if quals[second] >= minconfirm:
                 self.multi = True
-                print 'Multi', Pileup.BASES[refindex], Pileup.BASES[winner], Pileup.BASES[second]
+                if args.verbose: print 'Multi', Pileup.BASES[refindex], Pileup.BASES[winner], Pileup.BASES[second]
             else:
                 self.ambiguous = True
-                print 'Amb'
+                if args.verbose: print 'Amb'
 
-        if not self.confirmed:
+        if args.verbose and not self.confirmed:
             print self.refindex, self.alleles[0], self.alleles[1], qualfraction, qualorder
 
 

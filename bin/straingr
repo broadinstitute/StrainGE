@@ -25,12 +25,14 @@ parser.add_argument("--minmq", "-m", type=int, default=5,
 parser.add_argument("--minconfirm", "-p", type=int, default=50,
                     help='minimum Pileup quality sum to confirm reference or SNP')
 parser.add_argument("--mingap", "-g", type=int, default=2000,
-                    help='minimum contiguous uncovered (Gap) region to flag')
+                    help="minimum contiguous uncovered (Gap) region to flag")
+parser.add_argument("--consensus", "-c", type=float, default=0.9,
+                    help="minimum fraction of evidence to make confident call")
 parser.add_argument("--log", "-l",
                     help="log file")
-parser.add_argument('reference',
+parser.add_argument("reference",
                     help="reference FASTA file")
-parser.add_argument('bam', nargs='+',
+parser.add_argument("bam", nargs='+',
                     help="bam file of reads aligned to reference (sorted & indexed)")
 args = parser.parse_args()
 
@@ -72,6 +74,11 @@ class Pileup:
         self.refindex = Pileup.BASES.find(refbase)
         self.bad = 0
         self.poormq = 0
+        self.called = False
+        self.multi = False
+        self.ambiguous = False
+        self.confirmed = False
+        self.snp = None
 
     def add_reads(self, pileup_reads):
         """Add a bunch of pysam.PileupRead objects to this pileup"""
@@ -164,6 +171,38 @@ class Pileup:
         return rq >= args.minconfirm and \
                (rq == self.qual_total() or self.ref_fraction() > args.consensus)
 
+    def callBase(self):
+        minconfirm = args.minconfirm
+        consensus = args.consensus
+        refindex = self.refindex
+
+        quals = self.alleles[1]
+        qualsum = float(self.qual_total())
+        qualorder = np.argsort(quals)
+        qualfraction = quals / qualsum
+
+
+        winner = qualorder[-1]
+        if quals[winner] >= minconfirm and qualfraction[winner] >= consensus:
+            self.called = True
+            if refindex == winner:
+                self.confirmed = True
+            else:
+                self.snp = winner
+                print 'SNP', Pileup.BASES[refindex], Pileup.BASES[winner]
+        else:
+            second = qualorder[-2]
+            if quals[second] >= minconfirm:
+                self.multi = True
+                print 'Multi', Pileup.BASES[refindex], Pileup.BASES[winner], Pileup.BASES[second]
+            else:
+                self.ambiguous = True
+                print 'Amb'
+
+        if not self.confirmed:
+            print self.refindex, self.alleles[0], self.alleles[1], qualfraction, qualorder
+
+
     def _get_best_snp(self):
         """Returns the SNP with the highest sum of RMS base quality and mapping quality, if two are qual, return higher count. All else equal, alphabetical."""
         best_snp = None
@@ -246,11 +285,13 @@ class Scaffold:
         self.goodcoverage = 0
         self.highcoverage = 0
         self.gaps = []
-        #self.pileups = np.full((self.length,), None, dtype=np.dtype(object))
         self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
-
         # Will hold coverage array after pileups are generated
-        self.coverage = None
+        self.coverage = np.empty(self.length, dtype=np.int32)
+        self.covered = np.empty(self.length, dtype=np.bool)
+        self.highCoverage = np.empty(self.length, dtype=np.bool)
+        self.confirmed = np.empty(self.length, dtype=np.bool)
+        self.snps = np.empty(self.length, dtype=np.bool)
 
 
     def makePileups(self, bam):
@@ -260,12 +301,30 @@ class Scaffold:
         for column in bam.pileup(self.name):
             refpos = column.reference_pos
             self.pileups[refpos].add_reads(column.pileups)
-            #pileup = Pileup(self.sequence[refpos])
-            #pileup.add_reads(column.pileups)
-            #self.pileups[refpos] = pileup
-        self.coverage = np.array([p.depth() for p in self.pileups], dtype=np.int32)
-        print >>logfile, "raw coverage %.2f" % (self.coverage.sum() / float(self.length))
+
+        for i in xrange(self.length):
+            p = self.pileups[i]
+            self.coverage[i] = p.depth()
+            self.covered[i] = p.covered()
+
+        print >>logfile, "raw coverage %.2f" % (self.coverage.sum() / float(self.length)),
+        print >>logfile, "covered %.2f%%" % pct(self.covered.sum(), self.length)
         logfile.flush()
+
+    def callBases(self, highCutoff):
+        print >>logfile, "Calling", self.name, "length", self.length,
+        logfile.flush()
+        self.highCoverage = self.coverage > highCutoff
+        print >>logfile, "high", self.highCoverage.sum()
+        for i in xrange(self.length):
+            if self.covered[i] and not self.highCoverage[i]:
+                p = self.pileups[i]
+                p.callBase()
+
+
+        logfile.flush()
+
+
 
 
     def process(self, bam):
@@ -372,6 +431,10 @@ class Reference:
         niceCoverage = float(nice.sum()) / float(nice.size)
         print >>logfile, "nice", nice.size, round(niceCoverage, 2)
 
+        for s in self.scaffolds:
+            s.callBases(highCutoff)
+
+
     def poissonCutoff(self, mean, cutoff = 0.9999999):
         """Calculate the Poisson CDF and find where it reaches the cutoff"""
         i = 0
@@ -385,11 +448,15 @@ class Reference:
         return i - 1
 
 
-def pct(numerator, denominator):
+def pct(numerator, denominator, precision=None):
     """Makes into a percent"""
     if numerator > 0 and denominator > 0:
-        return (100.0 * numerator) / denominator
-    return 0.0
+        value = (100.0 * numerator) / denominator
+    else:
+        value = 0.0
+    if precision is not None:
+        value = round(value, precision)
+    return value
 
 
 vcf_header = \

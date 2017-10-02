@@ -103,12 +103,12 @@ class Scaffold:
         self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
         # Will hold coverage array after pileups are generated
         self.coverage = np.zeros(self.length, dtype=np.int32)
-        self.covered = np.fill(self.length, False, dtype=np.bool)
-        self.highCoverage = np.fill(self.length, False, dtype=np.bool)
-        self.confirmed = np.fill(self.length, False, dtype=np.bool)
-        self.ambiguous = np.fill(self.length, False, dtype=np.bool)
-        self.snps = np.fill(self.length, -1, dtype=np.int8)
-        self.multi = np.fill(self.length, -1, dtype=np.int8)
+        self.covered = np.full(self.length, False, dtype=np.bool)
+        self.highCoverage = np.full(self.length, False, dtype=np.bool)
+        self.confirmed = np.full(self.length, False, dtype=np.bool)
+        self.ambiguous = np.full(self.length, False, dtype=np.bool)
+        self.snps = np.full(self.length, -1, dtype=np.int8)
+        self.multi = np.full(self.length, -1, dtype=np.int8)
 
     def makePileups(self, bam):
         print >>logfile, "Processing", self.name, "length", self.length,
@@ -239,6 +239,7 @@ class Pileup:
     I = 4
     D = 5
     ALLELES = len(BASES)
+    ALLELE_MASK = 1 << np.arange(ALLELES, dtype=np.int32)
 
     def __init__(self, refbase):
         """
@@ -353,6 +354,7 @@ class Pileup:
     def callBase(self):
         minconfirm = args.minconfirm
         consensus = args.consensus
+        minfrac = 1 - args.consensus
         refindex = self.refindex
 
         quals = self.alleles[1]

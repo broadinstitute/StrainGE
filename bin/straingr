@@ -22,12 +22,12 @@ parser.add_argument("--minqual", "-q", type=int, default=5,
                     help='minimum base Quality score to consider')
 parser.add_argument("--minmq", "-m", type=int, default=5,
                     help='minimum read Mapping quality score to consider')
-parser.add_argument("--minconfirm", "-p", type=int, default=50,
-                    help='minimum Pileup quality sum to confirm reference or SNP')
+parser.add_argument("--minconfirm", "-c", type=int, default=50,
+                    help="minimum Pileup quality sum to confirm reference or SNP (with minfrac)")
 parser.add_argument("--mingap", "-g", type=int, default=2000,
                     help="minimum contiguous uncovered (Gap) region to flag")
-parser.add_argument("--consensus", "-c", type=float, default=0.9,
-                    help="minimum fraction of evidence to make confident call")
+parser.add_argument("--minfrac", "-f", type=float, default=0.1,
+                    help="minimum fraction of evidence to confirm presence (with minconfirm)")
 parser.add_argument("--log", "-l",
                     help="log file")
 parser.add_argument("reference",
@@ -72,7 +72,7 @@ class Reference:
         print >>logfile, "nice", nice.size, round(niceCoverage, 2)
 
         for s in self.scaffolds:
-            s.callBases(highCutoff)
+            s.callAlleles(highCutoff)
 
 
     def poissonCutoff(self, mean, cutoff = 0.9999999):
@@ -127,7 +127,7 @@ class Scaffold:
         print >>logfile, "covered %.2f%%" % pct(self.covered.sum(), self.length)
         logfile.flush()
 
-    def callBases(self, highCutoff):
+    def callAlleles(self, highCutoff):
         print >>logfile, "Calling", self.name, "length", self.length,
         logfile.flush()
         self.highCoverage = self.coverage > highCutoff
@@ -135,9 +135,7 @@ class Scaffold:
         for i in xrange(self.length):
             if self.covered[i] and not self.highCoverage[i]:
                 p = self.pileups[i]
-                p.callBase()
-                self.confirmed[i] = p.confirmed
-                self.snps[i] = p.snp
+                p.callAlleles()
 
 
         logfile.flush()
@@ -239,7 +237,8 @@ class Pileup:
     I = 4
     D = 5
     ALLELES = len(BASES)
-    ALLELE_MASK = 1 << np.arange(ALLELES, dtype=np.int32)
+    ALLELE_MASKS = 1 << np.arange(ALLELES, dtype=np.int32)
+
 
     def __init__(self, refbase):
         """
@@ -251,14 +250,11 @@ class Pileup:
         # first dimension is count, qualsum
         self.alleles = np.zeros((2, Pileup.ALLELES), dtype=np.int32)
         # index into allele array for reference base
-        self.refindex = Pileup.BASES.find(refbase)
+        self.refmask = (1 << Pileup.BASES.find(refbase)) if refbase != "N" else -1
         self.bad = 0
         self.poormq = 0
-        self.called = False
-        self.multi = False
-        self.ambiguous = False
-        self.confirmed = False
-        self.snp = None
+        self.confirmed = 0
+        self.evidence = 0
 
     def add_reads(self, pileup_reads):
         """Add a bunch of pysam.PileupRead objects to this pileup"""
@@ -351,19 +347,23 @@ class Pileup:
         return rq >= args.minconfirm and \
                (rq == self.qual_total() or self.ref_fraction() > args.consensus)
 
-    def callBase(self):
+    def callAlleles(self):
         minconfirm = args.minconfirm
-        consensus = args.consensus
-        minfrac = 1 - args.consensus
-        refindex = self.refindex
+        minfrac = args.minfrac
 
         quals = self.alleles[1]
         qualsum = float(self.qual_total())
-        qualorder = np.argsort(quals)
         qualfraction = quals / qualsum
 
-        if quals[refindex] >= minconfirm:
-            self.confirmed = True
+        evidence = quals > 0
+        self.evidence = (evidence * Pileup.ALLELE_MASKS).sum()
+
+        confirmed = np.logical_and(quals > minconfirm, qualfraction > minfrac)
+        self.confirmed = (confirmed * Pileup.ALLELE_MASKS).sum()
+
+        if args.verbose and self.confirmed and self.refmask != self.confirmed:
+            print self.refmask, self.alleles[0], self.alleles[1], qualfraction, self.evidence, self.confirmed
+        return
 
         winner = qualorder[-1]
         if quals[winner] >= minconfirm and qualfraction[winner] >= consensus:
@@ -381,7 +381,7 @@ class Pileup:
                 if args.verbose: print 'Amb'
 
         if args.verbose and not self.confirmed:
-            print self.refindex, self.alleles[0], self.alleles[1], qualfraction, qualorder
+            print self.refindex, self.alleles[0], self.alleles[1], qualfraction, qualorder, evidence, conf
 
     def __str__(self):
         return "<Pileup n=%d b=%s bad=%d rq=%d>" % (self.depth(), str(self.alleles), self.bad,

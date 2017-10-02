@@ -60,16 +60,16 @@ class Reference:
         coverage = np.concatenate([s.coverage for s in self.scaffolds])
         meanCoverage = coverage.sum() / float(self.length)
         highCutoff = self.poissonCutoff(meanCoverage)
-        print >>logfile, "Total coverage", self.length, round(meanCoverage, 2), highCutoff,
+        print >>logfile, "Total coverage:", self.length, round(meanCoverage, 2), highCutoff,
 
         nonzero = coverage[coverage > 0]
         nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
         highCutoff = self.poissonCutoff(nonzeroCoverage)
-        print >>logfile, "nonzero", nonzero.size, round(nonzeroCoverage, 2), highCutoff,
+        print >>logfile, "nonzero:", nonzero.size, round(nonzeroCoverage, 2), highCutoff,
 
         nice = nonzero[nonzero < highCutoff]
         niceCoverage = float(nice.sum()) / float(nice.size)
-        print >>logfile, "nice", nice.size, round(niceCoverage, 2)
+        print >>logfile, "nice:", nice.size, round(niceCoverage, 2)
 
         for s in self.scaffolds:
             s.callAlleles(highCutoff)
@@ -101,14 +101,16 @@ class Scaffold:
         self.highcoverage = 0
         self.gaps = []
         self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
-        # Will hold coverage array after pileups are generated
-        self.coverage = np.zeros(self.length, dtype=np.int32)
-        self.covered = np.full(self.length, False, dtype=np.bool)
+
+        self.coverage = np.zeros(self.length, dtype=np.uint32)
+        self.refmask = np.zeros(self.length, dtype=np.uint8)
+        #
         self.highCoverage = np.full(self.length, False, dtype=np.bool)
-        self.confirmed = np.full(self.length, False, dtype=np.bool)
-        self.ambiguous = np.full(self.length, False, dtype=np.bool)
-        self.snps = np.full(self.length, -1, dtype=np.int8)
-        self.multi = np.full(self.length, -1, dtype=np.int8)
+        self.strong = np.zeros(self.length, dtype=np.uint8)
+        self.weak = np.zeros(self.length, dtype=np.uint8)
+        self.snps = np.zeros(self.length, dtype=np.int8)
+        self.multi = np.zeros(self.length, dtype=np.bool)
+        self.confirmed = np.zeros(self.length, dtype=np.bool)
 
     def makePileups(self, bam):
         print >>logfile, "Processing", self.name, "length", self.length,
@@ -121,23 +123,40 @@ class Scaffold:
         for i in xrange(self.length):
             p = self.pileups[i]
             self.coverage[i] = p.depth()
-            self.covered[i] = p.covered()
+            self.refmask[i] = p.refmask
 
-        print >>logfile, "raw coverage %.2f" % (self.coverage.sum() / float(self.length)),
-        print >>logfile, "covered %.2f%%" % pct(self.covered.sum(), self.length)
+        print >>logfile, "raw coverage: %.2f" % (float(self.coverage.sum()) / float(self.length))
         logfile.flush()
 
     def callAlleles(self, highCutoff):
         print >>logfile, "Calling", self.name, "length", self.length,
         logfile.flush()
+
         self.highCoverage = self.coverage > highCutoff
-        print >>logfile, "high", self.highCoverage.sum()
+        print >>logfile, "high:", self.highCoverage.sum(),
+        logfile.flush()
+
         for i in xrange(self.length):
-            if self.covered[i] and not self.highCoverage[i]:
+            if self.coverage[i] and not self.highCoverage[i]:
                 p = self.pileups[i]
                 p.callAlleles()
+                self.strong[i] = p.strong
+                self.weak[i] = p.weak
 
+        self.covered = self.strong > 0
+        self.confirmed = (self.strong & self.refmask) > 0
+        self.snps = (self.strong & ~self.refmask) > 0
+        self.multi = (self.strong & (self.strong - 1)) > 0
 
+        ncovered = self.covered.sum()
+        nconfirmed = self.confirmed.sum()
+        nsnps = self.snps.sum()
+        nmulti = self.multi.sum()
+
+        print >>logfile, "covered:", ncovered, pct(ncovered, self.length, 2), \
+            "confirmed:", nconfirmed, pct(nconfirmed, ncovered, 2), \
+            "snps:", nsnps, pct(nsnps, ncovered, 2), \
+            "multi:", nmulti, pct(nmulti, ncovered, 2)
         logfile.flush()
 
 
@@ -162,7 +181,7 @@ class Scaffold:
             goodcoverage += pileup.depth()
             if pileup.covered():
                 covered += 1
-                if pileup.confirmed():
+                if pileup.strong():
                     confirmed += 1
                 else:
                     # keep read info for covered, non-ref alleles
@@ -190,7 +209,7 @@ class Scaffold:
             # del pileup.reads
 
             if args.verbose:
-                print >> logfile, pileup, pileup.confirmed()
+                print >> logfile, pileup, pileup.strong()
 
         coverage = float(goodcoverage) / float(length)
         mixed = covered - (confirmed + snps)
@@ -252,9 +271,9 @@ class Pileup:
         # index into allele array for reference base
         self.refmask = (1 << Pileup.BASES.find(refbase)) if refbase != "N" else -1
         self.bad = 0
-        self.poormq = 0
-        self.confirmed = 0
-        self.evidence = 0
+        self.lowmq = 0
+        self.strong = 0
+        self.weak = 0
 
     def add_reads(self, pileup_reads):
         """Add a bunch of pysam.PileupRead objects to this pileup"""
@@ -292,7 +311,7 @@ class Pileup:
         # check for decent mapping quality
         mq = alignment.mapping_quality
         if mq < args.minmq:
-            self.poormq += 1
+            self.lowmq += 1
             return
 
         if read.indel:
@@ -330,9 +349,9 @@ class Pileup:
         """Does this pileup have enough data to consider this locus covered?"""
         return self.qual_total() >= args.minconfirm
 
-    def unmappable(self):
+    def poormq(self):
         """Good quality sequence, but can't be mapped"""
-        return self.poormq > (self.total_depth())
+        return self.lowmq > (self.total_depth())
 
     def ref_qual(self):
         return self.alleles[1, self.refindex]
@@ -355,41 +374,21 @@ class Pileup:
         qualsum = float(self.qual_total())
         qualfraction = quals / qualsum
 
+        # Any alleles which have any evidence at all
         evidence = quals > 0
-        self.evidence = (evidence * Pileup.ALLELE_MASKS).sum()
+        self.weak = (evidence * Pileup.ALLELE_MASKS).sum()
 
+        # Alleles with sufficient evidence to confirm
         confirmed = np.logical_and(quals > minconfirm, qualfraction > minfrac)
-        self.confirmed = (confirmed * Pileup.ALLELE_MASKS).sum()
+        self.strong = (confirmed * Pileup.ALLELE_MASKS).sum()
 
-        if args.verbose and self.confirmed and self.refmask != self.confirmed:
-            print self.refmask, self.alleles[0], self.alleles[1], qualfraction, self.evidence, self.confirmed
+        if args.verbose and self.strong and self.refmask != self.strong:
+            print self.refmask, self.alleles[0], self.alleles[1], qualfraction, self.weak, self.strong
         return
-
-        winner = qualorder[-1]
-        if quals[winner] >= minconfirm and qualfraction[winner] >= consensus:
-            self.called = True
-            if refindex != winner:
-                self.snp = winner
-                if args.verbose: print 'SNP', Pileup.BASES[refindex], Pileup.BASES[winner]
-        else:
-            second = qualorder[-2]
-            if quals[second] >= minconfirm:
-                self.multi = second
-                if args.verbose: print 'Multi', Pileup.BASES[refindex], Pileup.BASES[winner], Pileup.BASES[second]
-            else:
-                self.ambiguous = True
-                if args.verbose: print 'Amb'
-
-        if args.verbose and not self.confirmed:
-            print self.refindex, self.alleles[0], self.alleles[1], qualfraction, qualorder, evidence, conf
-
-    def __str__(self):
-        return "<Pileup n=%d b=%s bad=%d rq=%d>" % (self.depth(), str(self.alleles), self.bad,
-                                                                      self.ref_qual())
 
 
 def pct(numerator, denominator, precision=None):
-    """Makes into a percent"""
+    """Makes into a percent, avoiding division by zero"""
     if numerator > 0 and denominator > 0:
         value = (100.0 * numerator) / denominator
     else:
@@ -414,7 +413,7 @@ vcf_header = \
 ##FILTER=<ID=cv,Description="Coverage too low">
 ##FILTER=<ID=hc,Description="Coverage abnormally high">
 ##FILTER=<ID=amb,Description="Ambiguous SNP call">
-##FILTER=<ID=um,Description="Unmappable position">
+##FILTER=<ID=um,Description="Poor mapping quality position">
 ##FILTER=<ID=del,Description="Deletion at position">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
 """
@@ -459,7 +458,7 @@ def write_vcf(pileups, output=None, date=date.today(), reference=None):
                 # not enough reads to say anything
                 elif not pileup.covered():
                     # due to not being mappable
-                    if pileup.unmappable():
+                    if pileup.poormq():
                         FILTER = 'um'
                     # just not covered enough
                     else:

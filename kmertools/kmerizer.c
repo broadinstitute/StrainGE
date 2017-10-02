@@ -300,6 +300,57 @@ kmerizer_intersect_counts(PyObject *self, PyObject *args)
 }
 
 
+static PyObject *
+kmerizer_diff(PyObject *self, PyObject *args)
+{
+  PyObject *kmers1, *kmers2;
+
+  if (!PyArg_ParseTuple(args, "OO", &kmers1, &kmers2))
+    return NULL;
+
+  npy_intp k1size = *PyArray_DIMS(kmers1);
+  npy_intp k2size = *PyArray_DIMS(kmers2);
+
+  kmer_t *k1 = PyArray_GETPTR1(kmers1, 0);
+  kmer_t *k2 = PyArray_GETPTR1(kmers2, 0);
+
+  int kcount = k1size - kmerizer_count_common_internal(k1, k1size, k2, k2size);
+
+  /* allocate output array */
+  npy_intp dim = kcount;
+
+  PyObject *kmersOut = PyArray_SimpleNew(1, &dim, NPY_ULONG);
+
+  kmer_t *kout = PyArray_GETPTR1(kmersOut, 0);
+  int i1, i2;
+
+  /* walk through sorted arrays in parallel */
+  for (kcount = 0, i1 = 0, i2 = 0; i1 < k1size && i2 < k2size; ) {
+    kmer_t kmer1 = k1[i1];
+    kmer_t kmer2 = k2[i2];
+    /*printf("count=%d i1=%d i2=%d k1=%lx k2=%lx c1=%d c2=%d\n", kcount, i1, i2, kmer1, kmer2, c1[i1], c2[i2]);*/
+    if (kmer1 == kmer2) {
+      /* in both */
+      ++i1;
+      ++i2;
+    } else if (kmer1 < kmer2) {
+      /* only in kmers1 */
+      kout[kcount++] = kmer1;
+      ++i1;
+    } else {
+      /* only in kmers2 */
+      ++i2;
+    }
+  }
+  /* leftovers in kmers1 */
+  while (i1 < k1size) {
+    kout[kcount++] = k1[i1++];
+  }
+
+  return Py_BuildValue("N", kmersOut);
+}
+
+
 /* implementation of FNV1a for 64bit->64bit */
 /* 64 bit FNV_prime = 240 + 28 + 0xb3 */
 #define FNV_PRIME 1099511628211UL
@@ -349,6 +400,8 @@ static PyMethodDef KmerizerMethods[] = {
        "Return intersection of two sorted kmer arrays."},
       {"intersect_counts",  kmerizer_intersect_counts, METH_VARARGS,
        "Return count array for intersection of kmer arrays."},
+      {"diff",  kmerizer_diff, METH_VARARGS,
+       "Return set difference of two sorted kmer arrays (in first but not second)."},
       {"fnvhash_kmers",  kmerizer_fnvhash_kmers, METH_VARARGS,
        "Hash kmers using FNV1a hash algorithm."},
       {NULL, NULL, 0, NULL}        /* Sentinel */

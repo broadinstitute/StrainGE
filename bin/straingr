@@ -44,7 +44,7 @@ bases = set(list("ACGT"))
 
 
 
-class Reference:
+class Genome:
     def __init__(self, fasta):
         self.scaffolds = [Scaffold(scaffold.name, scaffold.seq.upper()) for scaffold in kmertools.openSeqFile(fasta)]
         self.length = sum([s.length for s in self.scaffolds])
@@ -67,16 +67,16 @@ class Reference:
         self.coverage = np.concatenate([s.coverage for s in self.scaffolds])
         meanCoverage = self.coverage.sum() / float(self.length)
         highCutoff = self.poissonCutoff(meanCoverage)
-        print >>logfile, "Total coverage:", self.length, round(meanCoverage, 2), highCutoff,
+        print >>logfile, "Total length=%d coverage=%.2f cutoff=%d" % (self.length, meanCoverage, highCutoff),
 
         nonzero = self.coverage[self.coverage > 0]
         nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
         highCutoff = self.poissonCutoff(nonzeroCoverage)
-        print >>logfile, "nonzero:", nonzero.size, round(nonzeroCoverage, 2), highCutoff,
+        print >>logfile, "nonzero=%d nzcoverage=%.2f cutoff=%d" % (nonzero.size, nonzeroCoverage, highCutoff),
 
         nice = nonzero[nonzero < highCutoff]
         niceCoverage = float(nice.sum()) / float(nice.size)
-        print >>logfile, "nice:", nice.size, round(niceCoverage, 2)
+        print >>logfile, "nice=%d nicecoverage=%.2f" % (nice.size, niceCoverage)
 
         for s in self.scaffolds:
             s.callAlleles(highCutoff)
@@ -115,7 +115,6 @@ class Scaffold:
         self.sequence = sequence
         self.length = len(sequence)
         self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
-
         # pileup stats
         self.refmask = np.zeros(self.length, dtype=np.uint8)
         self.coverage = np.zeros(self.length, dtype=np.uint32)
@@ -266,7 +265,7 @@ class Pileup:
         """
 
         # first dimension is count, qualsum
-        self.alleles = np.zeros((2, Pileup.ALLELES), dtype=np.int32)
+        self.alleles = np.zeros((2, 6), dtype=np.int32)
         # index into allele array for reference base
         self.refmask = (1 << Pileup.BASES.find(refbase)) if refbase != "N" else 0
         self.bad = 0
@@ -405,7 +404,7 @@ class CallStats:
         self.snps = np.count_nonzero(snps)
         self.snpPct = pct(self.snps, self.covered)
         self.multi = np.count_nonzero(multi)
-        self.multiPct = pct(self.multi, self.covered)
+        self.multiPct = pct(self.multi, self.snps)
         self.high = np.count_nonzero(high)
         self.highPct = pct(self.high, length)
 
@@ -434,15 +433,13 @@ def pct(numerator, denominator, precision=None):
         value = round(value, precision)
     return value
 
-
-
 ##################################
 ### Main
 ##################################
 
 print >>logfile, "Loading reference genome"
 logfile.flush()
-reference = Reference(args.reference)
+reference = Genome(args.reference)
 
 for bamfile in args.bam:
     reference.process(bamfile)

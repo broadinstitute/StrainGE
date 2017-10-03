@@ -93,27 +93,32 @@ class Scaffold:
         self.name = name
         self.sequence = sequence
         self.length = len(sequence)
-        self.covered = 0
-        self.confirmed = 0
-        self.snps = 0
-        self.unmapped = 0
-        self.goodcoverage = 0
-        self.highcoverage = 0
-        self.gaps = []
-        self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
 
+        self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
+        # pileup stats
         self.coverage = np.zeros(self.length, dtype=np.uint32)
         self.refmask = np.zeros(self.length, dtype=np.uint8)
-        #
-        self.highCoverage = np.full(self.length, False, dtype=np.bool)
+        # allele call stats
         self.strong = np.zeros(self.length, dtype=np.uint8)
         self.weak = np.zeros(self.length, dtype=np.uint8)
-        self.snps = np.zeros(self.length, dtype=np.int8)
-        self.multi = np.zeros(self.length, dtype=np.bool)
-        self.confirmed = np.zeros(self.length, dtype=np.bool)
+        # allele call arrays computed here
+        self.highCoverage = None
+        self.snps = None
+        self.multi = None
+        self.confirmed = None
+
+        # Summary stats
+        self.meancoverage = 0
+        self.ncovered = 0
+        self.nconfirmed = 0
+        self.nsnps = 0
+        self.nmulti = 0
+        self.nhigh = 0
+        self.gaps = []
+
 
     def makePileups(self, bam):
-        print >>logfile, "Processing", self.name, "length", self.length,
+        print >>logfile, "Processing", self.name, "length:", self.length,
         logfile.flush()
 
         for column in bam.pileup(self.name):
@@ -125,11 +130,13 @@ class Scaffold:
             self.coverage[i] = p.depth()
             self.refmask[i] = p.refmask
 
-        print >>logfile, "raw coverage: %.2f" % (float(self.coverage.sum()) / float(self.length))
+        self.meancoverage = float(self.coverage.sum()) / float(self.length)
+
+        print >>logfile, "raw coverage:", round(self.meancoverage, 2)
         logfile.flush()
 
     def callAlleles(self, highCutoff):
-        print >>logfile, "Calling", self.name, "length", self.length,
+        print >>logfile, "Calling", self.name, "length:", self.length,
         logfile.flush()
 
         self.highCoverage = self.coverage > highCutoff
@@ -143,20 +150,20 @@ class Scaffold:
                 self.strong[i] = p.strong
                 self.weak[i] = p.weak
 
-        self.covered = self.strong > 0
         self.confirmed = (self.strong & self.refmask) > 0
         self.snps = (self.strong & ~self.refmask) > 0
         self.multi = (self.strong & (self.strong - 1)) > 0
 
-        ncovered = self.covered.sum()
-        nconfirmed = self.confirmed.sum()
-        nsnps = self.snps.sum()
-        nmulti = self.multi.sum()
+        self.ncovered = np.count_nonzero(self.strong)
+        self.nconfirmed = self.confirmed.sum()
+        self.nsnps = self.snps.sum()
+        self.nmulti = self.multi.sum()
 
-        print >>logfile, "covered:", ncovered, pct(ncovered, self.length, 2), \
-            "confirmed:", nconfirmed, pct(nconfirmed, ncovered, 2), \
-            "snps:", nsnps, pct(nsnps, ncovered, 2), \
-            "multi:", nmulti, pct(nmulti, ncovered, 2)
+        print >>logfile, "covered:", self.ncovered, pct(self.ncovered, self.length, 2), \
+            "coverage:", round(self.meancoverage, 2), \
+            "confirmed:", self.nconfirmed, pct(self.nconfirmed, self.ncovered, 2), \
+            "snps:", self.nsnps, pct(self.nsnps, self.ncovered, 2), \
+            "multi:", self.nmulti, pct(self.nmulti, self.ncovered, 2)
         logfile.flush()
 
 

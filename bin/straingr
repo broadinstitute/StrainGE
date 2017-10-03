@@ -49,20 +49,28 @@ class Reference:
     def __init__(self, fasta):
         self.scaffolds = [Scaffold(scaffold.name, scaffold.seq.upper()) for scaffold in kmertools.openSeqFile(fasta)]
         self.length = sum([s.length for s in self.scaffolds])
-        print >>logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
+        # These are filled out after allele calling
+        self.refmask = None
         self.coverage = None
+        self.highCoverage = None
+        self.strong = None
+        self.weak = None
+        self.summaryStats = None
+
+        print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
 
     def process(self, bam):
         with pysam.AlignmentFile(bamfile, "rb") as bam:
             for s in self.scaffolds:
                 s.makePileups(bam)
 
-        coverage = np.concatenate([s.coverage for s in self.scaffolds])
-        meanCoverage = coverage.sum() / float(self.length)
+        self.refmask = np.concatenate([s.refmask for s in self.scaffolds])
+        self.coverage = np.concatenate([s.coverage for s in self.scaffolds])
+        meanCoverage = self.coverage.sum() / float(self.length)
         highCutoff = self.poissonCutoff(meanCoverage)
         print >>logfile, "Total coverage:", self.length, round(meanCoverage, 2), highCutoff,
 
-        nonzero = coverage[coverage > 0]
+        nonzero = self.coverage[self.coverage > 0]
         nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
         highCutoff = self.poissonCutoff(nonzeroCoverage)
         print >>logfile, "nonzero:", nonzero.size, round(nonzeroCoverage, 2), highCutoff,
@@ -73,6 +81,16 @@ class Reference:
 
         for s in self.scaffolds:
             s.callAlleles(highCutoff)
+
+        self.highCoverage = np.concatenate([s.highCoverage for s in self.scaffolds])
+        self.strong = np.concatenate([s.strong for s in self.scaffolds])
+        self.weak = np.concatenate([s.weak for s in self.scaffolds])
+
+        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage)
+        print >>logfile, "TOTAL",
+        self.summaryStats.log()
+        logfile.flush()
+
 
 
     def poissonCutoff(self, mean, cutoff = 0.9999999):
@@ -93,29 +111,17 @@ class Scaffold:
         self.name = name
         self.sequence = sequence
         self.length = len(sequence)
-
         self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
+
         # pileup stats
-        self.coverage = np.zeros(self.length, dtype=np.uint32)
         self.refmask = np.zeros(self.length, dtype=np.uint8)
+        self.coverage = np.zeros(self.length, dtype=np.uint32)
         # allele call stats
         self.strong = np.zeros(self.length, dtype=np.uint8)
         self.weak = np.zeros(self.length, dtype=np.uint8)
         # allele call arrays computed here
         self.highCoverage = None
-        self.snps = None
-        self.multi = None
-        self.confirmed = None
-
-        # Summary stats
-        self.meancoverage = 0
-        self.ncovered = 0
-        self.nconfirmed = 0
-        self.nsnps = 0
-        self.nmulti = 0
-        self.nhigh = 0
-        self.gaps = []
-
+        self.summaryStats = None
 
     def makePileups(self, bam):
         print >>logfile, "Processing", self.name, "length:", self.length,
@@ -132,16 +138,14 @@ class Scaffold:
 
         self.meancoverage = float(self.coverage.sum()) / float(self.length)
 
-        print >>logfile, "raw coverage:", round(self.meancoverage, 2)
+        print >>logfile, "coverage:", round(self.meancoverage, 2)
         logfile.flush()
 
     def callAlleles(self, highCutoff):
-        print >>logfile, "Calling", self.name, "length:", self.length,
+        print >>logfile, "Calling", self.name,
         logfile.flush()
 
         self.highCoverage = self.coverage > highCutoff
-        print >>logfile, "high:", self.highCoverage.sum(),
-        logfile.flush()
 
         for i in xrange(self.length):
             if self.coverage[i] and not self.highCoverage[i]:
@@ -150,23 +154,8 @@ class Scaffold:
                 self.strong[i] = p.strong
                 self.weak[i] = p.weak
 
-        self.confirmed = (self.strong & self.refmask) > 0
-        self.snps = (self.strong & ~self.refmask) > 0
-        self.multi = (self.strong & (self.strong - 1)) > 0
-
-        self.ncovered = np.count_nonzero(self.strong)
-        self.nconfirmed = self.confirmed.sum()
-        self.nsnps = self.snps.sum()
-        self.nmulti = self.multi.sum()
-
-        print >>logfile, "covered:", self.ncovered, pct(self.ncovered, self.length, 2), \
-            "coverage:", round(self.meancoverage, 2), \
-            "confirmed:", self.nconfirmed, pct(self.nconfirmed, self.ncovered, 2), \
-            "snps:", self.nsnps, pct(self.nsnps, self.ncovered, 2), \
-            "multi:", self.nmulti, pct(self.nmulti, self.ncovered, 2)
-        logfile.flush()
-
-
+        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage)
+        self.summaryStats.log()
 
 
     def process(self, bam):
@@ -276,7 +265,7 @@ class Pileup:
         # first dimension is count, qualsum
         self.alleles = np.zeros((2, Pileup.ALLELES), dtype=np.int32)
         # index into allele array for reference base
-        self.refmask = (1 << Pileup.BASES.find(refbase)) if refbase != "N" else -1
+        self.refmask = (1 << Pileup.BASES.find(refbase)) if refbase != "N" else 0
         self.bad = 0
         self.lowmq = 0
         self.strong = 0
@@ -392,6 +381,34 @@ class Pileup:
         if args.verbose and self.strong and self.refmask != self.strong:
             print self.refmask, self.alleles[0], self.alleles[1], qualfraction, self.weak, self.strong
         return
+
+
+class CallStats:
+    def __init__(self, length, refmask, coverage, strong, high):
+        confirmed = (strong & refmask)
+        snps = (strong & ~refmask)
+        multi = (strong & (strong - 1))
+        self.length = length
+        self.covered = np.count_nonzero(strong)
+        self.coveredPct = pct(self.covered, length)
+        self.meancoverage = float(coverage.sum()) / float(length)
+        self.confirmed = np.count_nonzero(confirmed)
+        self.confirmedPct = pct(self.confirmed, self.covered)
+        self.snps = np.count_nonzero(snps)
+        self.snpPct = pct(self.snps, self.covered)
+        self.multi = np.count_nonzero(multi)
+        self.multiPct = pct(self.multi, self.covered)
+        self.high = np.count_nonzero(high)
+        self.highPct = pct(self.high, length)
+
+    def log(self):
+        print >>logfile, "length:", self.length, "covered:", self.covered, round(self.coveredPct, 2), \
+            "coverage:", round(self.meancoverage, 2), \
+            "confirmed:", self.confirmed, round(self.confirmedPct, 2), \
+            "snps:", self.snps, round(self.snpPct, 2), \
+            "multi:", self.multi, round(self.multiPct, 2),\
+            "high:", self.high, round(self.highPct, 2)
+        logfile.flush()
 
 
 def pct(numerator, denominator, precision=None):

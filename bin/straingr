@@ -127,7 +127,7 @@ class Scaffold:
         self.summaryStats = None
 
     def makePileups(self, bam):
-        print >>logfile, "Processing", self.name, "length:", self.length,
+        print >>logfile, "Processing", self.name, "length=%d" % self.length,
         logfile.flush()
 
         for column in bam.pileup(self.name):
@@ -141,7 +141,7 @@ class Scaffold:
 
         self.meancoverage = float(self.coverage.sum()) / float(self.length)
 
-        print >>logfile, "coverage:", round(self.meancoverage, 2)
+        print >>logfile, "coverage=%.2f" %self.meancoverage
         logfile.flush()
 
     def callAlleles(self, highCutoff):
@@ -387,8 +387,8 @@ class Pileup:
 
 
 class CallStats:
-    FIELDS = (("length", "%d"), ("covered", "%d"), ("coveredPct", "%.2f"), ("coverage", "%.2f"), ("confirmed", "%d"), \
-              ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%d"), ("multi", "%d"), ("multiPct", "%.2f"), \
+    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("covered", "%d"), ("coveredPct", "%.2f"), ("confirmed", "%d"), \
+              ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"), ("multiPct", "%.2f"), \
               ("high", "%d"), ("highPct", "%.2f"))
     #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
@@ -409,7 +409,7 @@ class CallStats:
         self.high = np.count_nonzero(high)
         self.highPct = pct(self.high, length)
 
-        self.values = (self.length, self.covered, self.coveredPct, self.coverage, self.confirmed, self.confirmedPct,
+        self.values = (self.length, self.coverage, self.covered, self.coveredPct, self.confirmed, self.confirmedPct,
                        self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct)
 
     def log(self):
@@ -424,11 +424,6 @@ class CallStats:
             print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CallStats.FIELDS, self.values)])
 
 
-
-
-
-
-
 def pct(numerator, denominator, precision=None):
     """Makes into a percent, avoiding division by zero"""
     if numerator > 0 and denominator > 0:
@@ -439,142 +434,6 @@ def pct(numerator, denominator, precision=None):
         value = round(value, precision)
     return value
 
-
-vcf_header = \
-"""##fileformat=VCFv4.0
-##fileDate={date}
-##source=StrainGR
-##reference={ref}
-##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
-##INFO=<ID=RF,Number=1,Type=Float,Description="Reference Fraction">
-##INFO=<ID=BQ,Number=1,Type=Integer,Description="RMS base quality">
-##INFO=<ID=MQ,Number=1,Type=Integer,Description="RMS mapping quality">
-##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
-##INFO=<ID=SBQ,Number=.,Type=Integer,Description="SNP base quality">
-##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
-##FILTER=<ID=cv,Description="Coverage too low">
-##FILTER=<ID=hc,Description="Coverage abnormally high">
-##FILTER=<ID=amb,Description="Ambiguous SNP call">
-##FILTER=<ID=um,Description="Poor mapping quality position">
-##FILTER=<ID=del,Description="Deletion at position">
-#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
-"""
-
-vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};RF={RF:g};BQ={BQ:.0f};MQ={MQ:.0f}"
-
-def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ=None, SMQ=None):
-    string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP, RF=RF, BQ=BQ, MQ=MQ)
-    if AF:
-        string += ";AF={}".format(AF)
-    if SBQ:
-        string += ";SBQ={}".format(SBQ)
-    if SMQ:
-        string += ";SMQ={}".format(SMQ)
-    
-    return string+"\n"
-
-
-def write_vcf(pileups, output=None, date=date.today(), reference=None):
-    """Write SNPs to a VCF file"""
-    with open(output, 'wb') as w:
-        w.write(vcf_header.format(date=date, ref=reference))
-        # for pileup in pileups:
-        for scaffold in pileups.pileups:
-            for refpos in pileups.pileups[scaffold]:
-                pileup = pileups.pileups[scaffold][refpos]
-                af = ''
-                sbq = ''
-                smq = ''
-                ALT = '.'
-                
-                # start with qual as ref
-                if pileup.ref_count:
-                    QUAL = np.sqrt(float(pileup.ref_qual_ss)/pileup.ref_count)
-                else:
-                    QUAL = 0
-                
-                # higher pileup than expected by random chance
-                if pileup.hc:
-                    FILTER = "hc"
-                
-                # not enough reads to say anything
-                elif not pileup.covered():
-                    # due to not being mappable
-                    if pileup.poormq():
-                        FILTER = 'um'
-                    # just not covered enough
-                    else:
-                        FILTER = "cv"
-                
-                # reference has been confirmed
-                elif pileup.confirmed():
-                    FILTER="PASS"
-                
-                # reference not confirmed and there are other alleles
-                elif pileup.others:
-                    snp = pileup.base_call()
-                    
-                    # confirmed a snp
-                    if snp:
-                        QUAL = np.sqrt(float(pileup.others[snp][1])/pileup.others[snp][0])
-                        FILTER="PASS"
-                        ALT = snp
-                        af = format(float(pileup.others[snp][0])/pileup.count, ".3f").rstrip('0').rstrip('.')
-                        sbq = format(QUAL, ".0f")
-                        smq = format(np.sqrt(float(pileup.others[snp][2])/pileup.others[snp][0]), ".0f")
-                    
-                    # ambiguous call
-                    else:
-                        QUAL = 0
-                        snp_count = 0
-                        for _snp in pileup.others:
-                            QUAL += pileup.others[_snp][1]
-                            snp_count += pileup.others[_snp][0]
-                        # qual is RMS of all SNPs... is this right?
-                        # perhaps qual of reference is better, but not sure
-                        QUAL = np.sqrt(float(QUAL)/snp_count)
-                        FILTER="amb"
-                    
-                        sorted_alt = pileup.sort_alts()
-                        ALT = ','.join(sorted_alt)
-                        
-                        for alt in sorted_alt:
-                            temp = pileup.others[alt]
-                            if af:
-                                af += ','
-                                sbq += ','
-                                smq += ','
-                            af += format(float(temp[0])/pileup.count, ".3f").rstrip('0').rstrip('.')
-                            sbq += format(np.sqrt(float(temp[1])/temp[0]), ".0f")
-                            smq += format(np.sqrt(float(temp[2])/temp[0]), ".0f")
-                
-                # else should not have any cases...
-                else:
-                    print >>logfile, "Uh oh...", str(pileup)
-                
-                if pileup.count:
-                    BQ = np.sqrt(float(pileup.qual_ss)/pileup.count)
-                    MQ = np.sqrt(float(pileup.mq_ss)/pileup.count)
-                else:
-                    BQ = 0
-                    MQ = 0
-                
-                
-                w.write(vcf_row(CHROM=pileup.chrom,
-                                    POS=pileup.pos,
-                                    ID='.',
-                                    REF=pileup.refbase,
-                                    ALT=ALT,
-                                    QUAL=QUAL,
-                                    FILTER=FILTER,
-                                    DP=pileup.count,
-                                    RF=pileup.ref_fraction(),
-                                    BQ=BQ,
-                                    MQ=MQ,
-                                    AF=af,
-                                    SBQ=sbq,
-                                    SMQ=smq,
-                                    ))
 
 
 ##################################
@@ -588,10 +447,143 @@ reference = Reference(args.reference)
 for bamfile in args.bam:
     reference.process(bamfile)
 
-    #vcf_out = '.'.join(file.split('.')[:-1])+'.vcf'
-    #print >>log, "Writing to vcf file: %s" % vcf_out
-    #write_vcf(pileups, vcf_out, date=date.today(), reference=args.reference)
-    # pkl_out = '.'.join(file.split('.')[:-1])+'.pkl'
-    # print >>log, "Writing to pickle file: %s" % pkl_out
-    # grtools.save_pileups(pileups, pkl_out)
 
+######## ARCHIVE ##########
+
+#
+# vcf_header = \
+#     """##fileformat=VCFv4.0
+#     ##fileDate={date}
+#     ##source=StrainGR
+#     ##reference={ref}
+#     ##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
+#     ##INFO=<ID=RF,Number=1,Type=Float,Description="Reference Fraction">
+#     ##INFO=<ID=BQ,Number=1,Type=Integer,Description="RMS base quality">
+#     ##INFO=<ID=MQ,Number=1,Type=Integer,Description="RMS mapping quality">
+#     ##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
+#     ##INFO=<ID=SBQ,Number=.,Type=Integer,Description="SNP base quality">
+#     ##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
+#     ##FILTER=<ID=cv,Description="Coverage too low">
+#     ##FILTER=<ID=hc,Description="Coverage abnormally high">
+#     ##FILTER=<ID=amb,Description="Ambiguous SNP call">
+#     ##FILTER=<ID=um,Description="Poor mapping quality position">
+#     ##FILTER=<ID=del,Description="Deletion at position">
+#     #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
+#     """
+#
+# vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};RF={RF:g};BQ={BQ:.0f};MQ={MQ:.0f}"
+#
+#
+# def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ=None, SMQ=None):
+#     string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP,
+#                                    RF=RF, BQ=BQ, MQ=MQ)
+#     if AF:
+#         string += ";AF={}".format(AF)
+#     if SBQ:
+#         string += ";SBQ={}".format(SBQ)
+#     if SMQ:
+#         string += ";SMQ={}".format(SMQ)
+#
+#     return string + "\n"
+#
+#
+# def write_vcf(pileups, output=None, date=date.today(), reference=None):
+#     """Write SNPs to a VCF file"""
+#     with open(output, 'wb') as w:
+#         w.write(vcf_header.format(date=date, ref=reference))
+#         # for pileup in pileups:
+#         for scaffold in pileups.pileups:
+#             for refpos in pileups.pileups[scaffold]:
+#                 pileup = pileups.pileups[scaffold][refpos]
+#                 af = ''
+#                 sbq = ''
+#                 smq = ''
+#                 ALT = '.'
+#
+#                 # start with qual as ref
+#                 if pileup.ref_count:
+#                     QUAL = np.sqrt(float(pileup.ref_qual_ss) / pileup.ref_count)
+#                 else:
+#                     QUAL = 0
+#
+#                 # higher pileup than expected by random chance
+#                 if pileup.hc:
+#                     FILTER = "hc"
+#
+#                 # not enough reads to say anything
+#                 elif not pileup.covered():
+#                     # due to not being mappable
+#                     if pileup.poormq():
+#                         FILTER = 'um'
+#                     # just not covered enough
+#                     else:
+#                         FILTER = "cv"
+#
+#                 # reference has been confirmed
+#                 elif pileup.confirmed():
+#                     FILTER = "PASS"
+#
+#                 # reference not confirmed and there are other alleles
+#                 elif pileup.others:
+#                     snp = pileup.base_call()
+#
+#                     # confirmed a snp
+#                     if snp:
+#                         QUAL = np.sqrt(float(pileup.others[snp][1]) / pileup.others[snp][0])
+#                         FILTER = "PASS"
+#                         ALT = snp
+#                         af = format(float(pileup.others[snp][0]) / pileup.count, ".3f").rstrip('0').rstrip('.')
+#                         sbq = format(QUAL, ".0f")
+#                         smq = format(np.sqrt(float(pileup.others[snp][2]) / pileup.others[snp][0]), ".0f")
+#
+#                     # ambiguous call
+#                     else:
+#                         QUAL = 0
+#                         snp_count = 0
+#                         for _snp in pileup.others:
+#                             QUAL += pileup.others[_snp][1]
+#                             snp_count += pileup.others[_snp][0]
+#                         # qual is RMS of all SNPs... is this right?
+#                         # perhaps qual of reference is better, but not sure
+#                         QUAL = np.sqrt(float(QUAL) / snp_count)
+#                         FILTER = "amb"
+#
+#                         sorted_alt = pileup.sort_alts()
+#                         ALT = ','.join(sorted_alt)
+#
+#                         for alt in sorted_alt:
+#                             temp = pileup.others[alt]
+#                             if af:
+#                                 af += ','
+#                                 sbq += ','
+#                                 smq += ','
+#                             af += format(float(temp[0]) / pileup.count, ".3f").rstrip('0').rstrip('.')
+#                             sbq += format(np.sqrt(float(temp[1]) / temp[0]), ".0f")
+#                             smq += format(np.sqrt(float(temp[2]) / temp[0]), ".0f")
+#
+#                 # else should not have any cases...
+#                 else:
+#                     print >> logfile, "Uh oh...", str(pileup)
+#
+#                 if pileup.count:
+#                     BQ = np.sqrt(float(pileup.qual_ss) / pileup.count)
+#                     MQ = np.sqrt(float(pileup.mq_ss) / pileup.count)
+#                 else:
+#                     BQ = 0
+#                     MQ = 0
+#
+#                 w.write(vcf_row(CHROM=pileup.chrom,
+#                                 POS=pileup.pos,
+#                                 ID='.',
+#                                 REF=pileup.refbase,
+#                                 ALT=ALT,
+#                                 QUAL=QUAL,
+#                                 FILTER=FILTER,
+#                                 DP=pileup.count,
+#                                 RF=pileup.ref_fraction(),
+#                                 BQ=BQ,
+#                                 MQ=MQ,
+#                                 AF=af,
+#                                 SBQ=sbq,
+#                                 SMQ=smq,
+#                                 ))

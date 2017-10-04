@@ -130,6 +130,9 @@ class Genome:
         # common locations where either has a variant from reference
         variants, variantCount = self.compareThing(common, ((self.strong | other.strong) & ~self.refmask) > 0, "variant")
 
+        # common locations where either has a variant from reference
+        variantAgree, variantAgreeCount = self.compareThing(variants, self.strong == other.strong, "variantAgree")
+
         # variant in A but not B
         AnotB, AnotBcount = self.compareThing(variants, (self.strong & ~other.strong & ~self.refmask) > 0, "AnotB")
 
@@ -320,7 +323,8 @@ class Pileup:
         # first dimension is count, qualsum
         self.alleles = np.zeros((2, 6), dtype=np.int32)
         # index into allele array for reference base
-        self.refmask = (1 << Pileup.BASES.find(refbase)) if refbase != "N" else 0
+        refindex = Pileup.BASES.find(refbase)
+        self.refmask = (1 << refindex) if refindex >= 0 else 0
         self.bad = 0
         self.lowmq = 0
         self.strong = 0

@@ -16,17 +16,19 @@ Strain Genome Recovery (StrainGR) Tool
 """)
 parser.add_argument("--output", "-o",
                     help="output file")
+parser.add_argument("--compare", "-c", action='store_true',
+                    help="compare against first listed strain bam")
 parser.add_argument("--verbose", "-v",
                     help="increase output verbosity", action="store_true")
-parser.add_argument("--minqual", "-q", type=int, default=5,
+parser.add_argument("--minqual", type=int, default=5,
                     help='minimum base Quality score to consider')
-parser.add_argument("--minmq", "-m", type=int, default=5,
+parser.add_argument("--minmq", type=int, default=5,
                     help='minimum read Mapping quality score to consider')
-parser.add_argument("--minconfirm", "-c", type=int, default=50,
+parser.add_argument("--minconfirm", type=int, default=50,
                     help="minimum Pileup quality sum to confirm reference or SNP (with minfrac)")
-parser.add_argument("--mingap", "-g", type=int, default=2000,
+parser.add_argument("--mingap", type=int, default=2000,
                     help="minimum contiguous uncovered (Gap) region to flag")
-parser.add_argument("--minfrac", "-f", type=float, default=0.1,
+parser.add_argument("--minfrac", type=float, default=0.1,
                     help="minimum fraction of evidence to confirm presence (with minconfirm)")
 parser.add_argument("--log", "-l",
                     help="log file")
@@ -43,11 +45,17 @@ bases = set(list("ACGT"))
 
 
 
+class Reference:
+    def __init__(self, fasta):
+        self.scaffolds = [scaffold for scaffold in kmertools.openSeqFile(fasta)]
+        self.length = sum([len(s) for s in self.scaffolds])
+        print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
 
 class Genome:
-    def __init__(self, fasta):
-        self.scaffolds = [Scaffold(scaffold.name, scaffold.seq.upper()) for scaffold in kmertools.openSeqFile(fasta)]
-        self.length = sum([s.length for s in self.scaffolds])
+    def __init__(self, reference, bamfile):
+        self.reference = reference
+        self.length = reference.length
+        self.bamfile = bamfile
         # These are filled out after allele calling
         self.refmask = None
         self.coverage = None
@@ -56,18 +64,19 @@ class Genome:
         self.weak = None
         self.summaryStats = None
 
-        print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
+        self.process(bamfile)
 
     def process(self, bam):
+        print >>logfile, "Processing", bam
+        scaffolds = [Scaffold(scaffold.name, scaffold.seq.upper()) for scaffold in reference.scaffolds]
         with pysam.AlignmentFile(bamfile, "rb") as bam:
-            for s in self.scaffolds:
+            for s in scaffolds:
                 s.makePileups(bam)
 
-        self.refmask = np.concatenate([s.refmask for s in self.scaffolds])
-        self.coverage = np.concatenate([s.coverage for s in self.scaffolds])
+        self.refmask = np.concatenate([s.refmask for s in scaffolds])
+        self.coverage = np.concatenate([s.coverage for s in scaffolds])
         meanCoverage = self.coverage.sum() / float(self.length)
-        highCutoff = self.poissonCutoff(meanCoverage)
-        print >>logfile, "Total length=%d coverage=%.2f cutoff=%d" % (self.length, meanCoverage, highCutoff),
+        print >>logfile, "Total length=%d coverage=%.2f" % (self.length, meanCoverage),
 
         nonzero = self.coverage[self.coverage > 0]
         nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
@@ -78,12 +87,12 @@ class Genome:
         niceCoverage = float(nice.sum()) / float(nice.size)
         print >>logfile, "nice=%d nicecoverage=%.2f" % (nice.size, niceCoverage)
 
-        for s in self.scaffolds:
+        for s in scaffolds:
             s.callAlleles(highCutoff)
 
-        self.highCoverage = np.concatenate([s.highCoverage for s in self.scaffolds])
-        self.strong = np.concatenate([s.strong for s in self.scaffolds])
-        self.weak = np.concatenate([s.weak for s in self.scaffolds])
+        self.highCoverage = np.concatenate([s.highCoverage for s in scaffolds])
+        self.strong = np.concatenate([s.strong for s in scaffolds])
+        self.weak = np.concatenate([s.weak for s in scaffolds])
 
         self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage)
         print >>logfile, "TOTAL",
@@ -92,7 +101,7 @@ class Genome:
         if args.output:
             with open(args.output, 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
-                for s in self.scaffolds:
+                for s in scaffolds:
                     s.summaryStats.tabular(outfile, s.name)
                 self.summaryStats.tabular(outfile, "TOTAL")
 
@@ -107,6 +116,50 @@ class Genome:
             i += 1
             ifact *= i
         return i - 1
+
+    def compare(self, other):
+        print >>logfile, "Comparing", self.bamfile, "versus", other.bamfile,
+        logfile.flush()
+
+        # locations where both have a call in common
+        common, commonCount = self.compareThing(np.ones_like(self.refmask), np.logical_and(self.strong, other.strong), "common")
+
+        # common locations where either has a variant from reference
+        agree, agreeCount = self.compareThing(common, self.strong == other.strong, "agree")
+
+        # common locations where either has a variant from reference
+        variants, variantCount = self.compareThing(common, ((self.strong | other.strong) & ~self.refmask) > 0, "variant")
+
+        # variant in A but not B
+        AnotB, AnotBcount = self.compareThing(variants, (self.strong & ~other.strong & ~self.refmask) > 0, "AnotB")
+
+        # variant in A but not B weakly
+        AnotBweak, AnotBweakCount = self.compareThing(variants, (self.strong & ~other.weak & ~self.refmask) > 0, "AnotBweak")
+
+        # variant in B not A
+        BnotA, BnotAcount = self.compareThing(variants, (other.strong & ~self.strong & ~self.refmask) > 0, "BnotA")
+
+        # variant in B not A weakly
+        BnotAweak, BnotAweakCount = self.compareThing(variants, (other.strong & ~self.weak & ~self.refmask) > 0, "BnotAweak")
+
+        # common locations where either has a variant from reference
+        commonVariants, commonVariantCount = self.compareThing(variants, (self.strong & other.strong) > 0, "commonvariant")
+
+        print >>logfile
+        logfile.flush()
+
+
+
+
+    def compareThing(self, common, thing, label):
+        commonCount = np.count_nonzero(common)
+        commonThings = np.logical_and(common, thing)
+        commonThingsCount = np.count_nonzero(commonThings)
+        print >>logfile, "%s=%d %s_pct=%.2f" % (label, commonThingsCount, label, pct(commonThingsCount, commonCount)),
+        logfile.flush()
+        return commonThings, commonThingsCount
+
+
 
 
 class Scaffold:
@@ -126,7 +179,7 @@ class Scaffold:
         self.summaryStats = None
 
     def makePileups(self, bam):
-        print >>logfile, "Processing", self.name, "length=%d" % self.length,
+        print >>logfile, "Generating pileups for", self.name, "length=%d" % self.length,
         logfile.flush()
 
         for column in bam.pileup(self.name):
@@ -144,7 +197,7 @@ class Scaffold:
         logfile.flush()
 
     def callAlleles(self, highCutoff):
-        print >>logfile, "Calling", self.name,
+        print >>logfile, "Calling alleles in", self.name,
         logfile.flush()
 
         self.highCoverage = self.coverage > highCutoff
@@ -439,10 +492,19 @@ def pct(numerator, denominator, precision=None):
 
 print >>logfile, "Loading reference genome"
 logfile.flush()
-reference = Genome(args.reference)
+print args.reference
+reference = Reference(args.reference)
+baseline = None
 
 for bamfile in args.bam:
-    reference.process(bamfile)
+    genome = Genome(reference, bamfile)
+    if args.compare:
+        if not baseline:
+            baseline = genome
+        else:
+            baseline.compare(genome)
+
+
 
 
 ######## ARCHIVE ##########

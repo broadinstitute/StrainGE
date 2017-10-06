@@ -3,6 +3,7 @@
 
 import argparse
 import math
+import os
 import sys
 from datetime import date
 import numpy as np
@@ -14,10 +15,12 @@ import kmertools
 parser = argparse.ArgumentParser(description="""
 Strain Genome Recovery (StrainGR) Tool
 """)
-parser.add_argument("--output", "-o",
-                    help="output file")
+parser.add_argument("--table", "-t", action="store_true",
+                    help="generate tabular output in <bambasename>.tsv")
 parser.add_argument("--compare", "-c", action='store_true',
                     help="compare against first listed strain bam")
+parser.add_argument("--delta", "-d", action='store_true',
+                    help="log specific differences between strains")
 parser.add_argument("--verbose", "-v",
                     help="increase output verbosity", action="store_true")
 parser.add_argument("--minqual", type=int, default=5,
@@ -41,8 +44,6 @@ args = parser.parse_args()
 logfile = open(args.log, 'w') if args.log else sys.stdout
 
 
-bases = set(list("ACGT"))
-
 
 
 class Reference:
@@ -51,17 +52,19 @@ class Reference:
         self.length = sum([len(s) for s in self.scaffolds])
         print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
 
-class Genome:
+class Sample:
     def __init__(self, reference, bamfile):
         self.reference = reference
         self.length = reference.length
         self.bamfile = bamfile
+
         # These are filled out after allele calling
         self.refmask = None
         self.coverage = None
         self.highCoverage = None
         self.strong = None
         self.weak = None
+        self.gaps = []
         self.summaryStats = None
 
         self.process(bamfile)
@@ -81,25 +84,25 @@ class Genome:
         nonzero = self.coverage[self.coverage > 0]
         nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
         highCutoff = self.poissonCutoff(nonzeroCoverage)
-        print >>logfile, "nonzero=%d nzcoverage=%.2f cutoff=%d" % (nonzero.size, nonzeroCoverage, highCutoff),
+        mingap = self.gapcutoff(meanCoverage)
+        print >>logfile, "nonzero=%d nzcoverage=%.2f cutoff=%d mingap=%d" % (nonzero.size, nonzeroCoverage, highCutoff, mingap)
+        logfile.flush()
 
-        nice = nonzero[nonzero < highCutoff]
-        niceCoverage = float(nice.sum()) / float(nice.size)
-        print >>logfile, "nice=%d nicecoverage=%.2f" % (nice.size, niceCoverage)
 
         for s in scaffolds:
             s.callAlleles(highCutoff)
+            self.gaps += s.findGaps(mingap)
+            s.stats()
 
         self.highCoverage = np.concatenate([s.highCoverage for s in scaffolds])
         self.strong = np.concatenate([s.strong for s in scaffolds])
         self.weak = np.concatenate([s.weak for s in scaffolds])
 
-        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage)
-        print >>logfile, "TOTAL",
-        self.summaryStats.log()
+        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
+        self.summaryStats.log("TOTAL")
 
-        if args.output:
-            with open(args.output, 'w') as outfile:
+        if args.table:
+            with open(self.strainName() + ".tsv", 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
                 for s in scaffolds:
                     s.summaryStats.tabular(outfile, s.name)
@@ -117,51 +120,19 @@ class Genome:
             ifact *= i
         return i - 1
 
-    def compare(self, other):
-        print >>logfile, "Comparing", self.bamfile, "versus", other.bamfile,
-        logfile.flush()
+    def gapcutoff(self, coverage):
+        return int(round(args.mingap / (1.0 - math.exp(-coverage))))
 
-        # locations where both have a call in common
-        common, commonCount = self.compareThing(np.ones_like(self.refmask), np.logical_and(self.strong, other.strong), "common")
+    def poisson0(self, mean, cutoff = 0.000001):
+        gapcutoff
+        math.log()
+        return math.exp(-mean)
 
-        # common locations where either has a variant from reference
-        agree, agreeCount = self.compareThing(common, self.strong == other.strong, "agree")
-
-        # common locations where either has a variant from reference
-        variants, variantCount = self.compareThing(common, ((self.strong | other.strong) & ~self.refmask) > 0, "variant")
-
-        # common locations where either has a variant from reference
-        variantAgree, variantAgreeCount = self.compareThing(variants, self.strong == other.strong, "variantAgree")
-
-        # variant in A but not B
-        AnotB, AnotBcount = self.compareThing(variants, (self.strong & ~other.strong & ~self.refmask) > 0, "AnotB")
-
-        # variant in A but not B weakly
-        AnotBweak, AnotBweakCount = self.compareThing(variants, (self.strong & ~other.weak & ~self.refmask) > 0, "AnotBweak")
-
-        # variant in B not A
-        BnotA, BnotAcount = self.compareThing(variants, (other.strong & ~self.strong & ~self.refmask) > 0, "BnotA")
-
-        # variant in B not A weakly
-        BnotAweak, BnotAweakCount = self.compareThing(variants, (other.strong & ~self.weak & ~self.refmask) > 0, "BnotAweak")
-
-        # common locations where either has a variant from reference
-        commonVariants, commonVariantCount = self.compareThing(variants, (self.strong & other.strong) > 0, "commonvariant")
-
-        print >>logfile
-        logfile.flush()
-
-
-
-
-    def compareThing(self, common, thing, label):
-        commonCount = np.count_nonzero(common)
-        commonThings = np.logical_and(common, thing)
-        commonThingsCount = np.count_nonzero(commonThings)
-        print >>logfile, "%s=%d %s_pct=%.2f" % (label, commonThingsCount, label, pct(commonThingsCount, commonCount)),
-        logfile.flush()
-        return commonThings, commonThingsCount
-
+    def strainName(self):
+        basename = os.path.basename(self.bamfile)
+        if basename.lower().endswith(".bam"):
+            basename = basename[:-4]
+        return basename
 
 
 
@@ -180,6 +151,7 @@ class Scaffold:
         # allele call arrays computed here
         self.highCoverage = None
         self.summaryStats = None
+        self.gaps = []
 
     def makePileups(self, bam):
         print >>logfile, "Generating pileups for", self.name, "length=%d" % self.length,
@@ -212,7 +184,21 @@ class Scaffold:
                 self.strong[i] = p.strong
                 self.weak[i] = p.weak
 
-        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage)
+
+    def findGaps(self, mingap):
+        lastCovered = -1
+        for i in xrange(self.length):
+            p = self.pileups[i]
+            if p.strong or p.poormq():
+                if lastCovered >= 0 and i - lastCovered > mingap:
+                    self.gaps.append(Region(self.name, lastCovered+1, i-1))
+                lastCovered = i
+        if self.length - lastCovered >= mingap:
+            self.gaps.append(Region(self.name, lastCovered + 1, self.length - 1))
+        return self.gaps
+
+    def stats(self):
+        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
         self.summaryStats.log()
 
 
@@ -263,7 +249,7 @@ class Scaffold:
             # del pileup.reads
 
             if args.verbose:
-                print >> logfile, pileup, pileup.strong()
+                print >> logfile, pileup, pileup.strong
 
         coverage = float(goodcoverage) / float(length)
         mixed = covered - (confirmed + snps)
@@ -442,13 +428,14 @@ class Pileup:
         return
 
 
+
 class CallStats:
     FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("covered", "%d"), ("coveredPct", "%.2f"), ("confirmed", "%d"), \
               ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"), ("multiPct", "%.2f"), \
-              ("high", "%d"), ("highPct", "%.2f"))
+              ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"), ("gapLength", "%d"))
     #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
-    def __init__(self, length, refmask, coverage, strong, high):
+    def __init__(self, length, refmask, coverage, strong, high, gaps):
         confirmed = (strong & refmask)
         snps = (strong & ~refmask)
         multi = (strong & (strong - 1))
@@ -464,12 +451,19 @@ class CallStats:
         self.multiPct = pct(self.multi, self.snps)
         self.high = np.count_nonzero(high)
         self.highPct = pct(self.high, length)
+        self.gapCount = len(gaps)
+        self.gapLength = sum([g.length for g in gaps])
 
         self.values = (self.length, self.coverage, self.covered, self.coveredPct, self.confirmed, self.confirmedPct,
-                       self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct)
+                       self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct,
+                       self.gapCount, self.gapLength)
 
-    def log(self):
-        s = ' '.join([(field[0] + '=' + field[1]) % value for field, value in zip(CallStats.FIELDS, self.values)])
+    def log(self, name=None):
+        if name:
+            first = [name]
+        else:
+            first = []
+        s = ' '.join(first + [(field[0] + '=' + field[1]) % value for field, value in zip(CallStats.FIELDS, self.values)])
         print >>logfile, s
         logfile.flush()
 
@@ -478,6 +472,111 @@ class CallStats:
             print >>out, "\t".join(["name"] + [field for field, fmt in CallStats.FIELDS])
         else:
             print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CallStats.FIELDS, self.values)])
+
+
+
+class CompareStats:
+    FIELDS = [("common", "%d"), ("commonPct", "%.2f"), ("disagree", "%d"), ("disagreePct", "%.2f"), ("variants", "%d"), \
+              ("variantPct", "%.2f"), ("commonVariant", "%d"), ("commonVariantPct", "%.2f"), ("variantAgree", "%d"),
+              ("variantAgreePct", "%.2f"), ("AnotB", "%d"), ("AnotBpct", "%.2f"), \
+              ("AnotBweak", "%d"), ("AnotBweakPct", "%.2f"), ("BnotA", "%d"), ("BnotApct", "%.2f"), \
+              ("BnotAweak", "%d"), ("BnotAweakPct", "%.2f"), ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.2f"), \
+              ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.2f")]
+    #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
+
+    def __init__(self, strainA, strainB):
+        self.strainA = strainA
+        self.strainB = strainB
+        self.values = self.compare(strainA, strainB)
+        self.values += self.compareGaps()
+
+    def compare(self, strainA, strainB):
+        print >>logfile, "Comparing", strainA.bamfile, "versus",
+        logfile.flush()
+
+        # locations where both have a call in common
+        common, commonCount, commonPct = self.compareThing(np.ones_like(strainA.refmask), np.logical_and(strainA.strong, strainB.strong), "common")
+
+        # common locations where A & B disagree
+        disagree, disagreeCount, disagreePct = self.compareThing(common, strainA.strong != strainB.strong, "disagree")
+
+        # common locations where either has a variant from reference
+        variants, variantCount, variantPct = self.compareThing(common, ((strainA.strong | strainB.strong) & ~strainA.refmask) > 0, "variant")
+
+        # variant locations where both have a shared variant
+        commonVariants, commonVariantCount, commonVariantPct = self.compareThing(variants, (strainA.strong & strainB.strong) > 0, "commonvariant")
+
+        # variant locations where both agree
+        variantAgree, variantAgreeCount, variantAgreePct = self.compareThing(variants, strainA.strong == strainB.strong, "variantAgree")
+
+        # variant in A but not B
+        AnotB, AnotBcount, AnotBpct = self.compareThing(variants, (strainA.strong & ~strainB.strong & ~strainA.refmask) > 0, "AnotB")
+
+        # variant in A but not B weakly
+        AnotBweak, AnotBweakCount, AnotBweakPct = self.compareThing(variants, (strainA.strong & ~strainB.weak & ~strainA.refmask) > 0, "AnotBweak")
+
+        # variant in B not A
+        BnotA, BnotAcount, BnotApct = self.compareThing(variants, (strainB.strong & ~strainA.strong & ~strainA.refmask) > 0, "BnotA")
+
+        # variant in B not A weakly
+        BnotAweak, BnotAweakCount, BnotAweakPct = self.compareThing(variants, (strainB.strong & ~strainA.weak & ~strainA.refmask) > 0, "BnotAweak")
+
+        return [commonCount, commonPct, disagreeCount, disagreePct, variantCount, variantPct,
+                commonVariantCount, commonVariantPct,
+                variantAgreeCount, variantAgreePct, AnotBcount, AnotBpct, AnotBweakCount, AnotBweakPct,
+                BnotAcount, BnotApct, BnotAweakCount, BnotAweakPct]
+
+    def compareThing(self, common, thing, label):
+        commonCount = np.count_nonzero(common)
+        commonThings = np.logical_and(common, thing)
+        commonThingsCount = np.count_nonzero(commonThings)
+        percent = pct(commonThingsCount, commonCount)
+        return commonThings, commonThingsCount, percent
+
+    def compareGaps(self):
+        Agaps = self.strainA.gaps
+        Bgaps = self.strainB.gaps
+        Alength = sum([g.length for g in Agaps])
+        Blength = sum([g.length for g in Bgaps])
+        Ashared = filter(lambda ag: any([ag.overlaps(bg) for bg in Bgaps]), Agaps)
+        AsharedLength = sum([g.length for g in Ashared])
+        Bshared = filter(lambda bg: any([bg.overlaps(ag) for ag in Agaps]), Bgaps)
+        BsharedLength = sum([g.length for g in Bshared])
+        return [Alength, AsharedLength, pct(AsharedLength, Alength), Blength, BsharedLength, pct(BsharedLength, Blength)]
+
+    def log(self, name):
+        s = ' '.join([name] + [(field[0] + '=' + field[1]) % value for field, value in zip(CompareStats.FIELDS, self.values)])
+        print >>logfile, s
+        logfile.flush()
+
+    def tabular(self, out, name, header=False):
+        if header:
+            print >>out, "\t".join(["name"] + [field for field, fmt in CompareStats.FIELDS])
+        else:
+            print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, self.values)])
+
+
+class Region:
+    def __init__(self, id, start, stop):
+        self.id = id
+        self.start = start
+        self.stop = stop
+        self.length = stop - start + 1
+        assert self.length > 0, "Region length must be positive"
+
+    def overlaps(self, other):
+        return self.id == other.id and other.start <= self.stop and other.stop >= self.start
+
+    def distance(self, other):
+        assert self.id == other.id
+        return min(abs(self.end - other.start), abs(other.end - self.start)) if not self.overlap() else 0
+
+    def combine(self, other):
+        assert self.id == other.id
+        return Region(self.id, min(self.start, other.start), max(self.end, other.end))
+
+    def __repr__(self):
+        return "<%s %d-%d>" % (self.id, self.start, self.stop)
 
 
 def pct(numerator, denominator, precision=None):
@@ -499,154 +598,18 @@ logfile.flush()
 print args.reference
 reference = Reference(args.reference)
 baseline = None
+compareFile = None
 
 for bamfile in args.bam:
-    genome = Genome(reference, bamfile)
+    sample = Sample(reference, bamfile)
+    sampleName = sample.strainName()
     if args.compare:
         if not baseline:
-            baseline = genome
+            baseline = sample
         else:
-            baseline.compare(genome)
-
-
-
-
-######## ARCHIVE ##########
-
-#
-# vcf_header = \
-#     """##fileformat=VCFv4.0
-#     ##fileDate={date}
-#     ##source=StrainGR
-#     ##reference={ref}
-#     ##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
-#     ##INFO=<ID=RF,Number=1,Type=Float,Description="Reference Fraction">
-#     ##INFO=<ID=BQ,Number=1,Type=Integer,Description="RMS base quality">
-#     ##INFO=<ID=MQ,Number=1,Type=Integer,Description="RMS mapping quality">
-#     ##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
-#     ##INFO=<ID=SBQ,Number=.,Type=Integer,Description="SNP base quality">
-#     ##INFO=<ID=SMQ,Number=.,Type=Integer,Description="SNP mapping quality">
-#     ##FILTER=<ID=cv,Description="Coverage too low">
-#     ##FILTER=<ID=hc,Description="Coverage abnormally high">
-#     ##FILTER=<ID=amb,Description="Ambiguous SNP call">
-#     ##FILTER=<ID=um,Description="Poor mapping quality position">
-#     ##FILTER=<ID=del,Description="Deletion at position">
-#     #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
-#     """
-#
-# vcf_row_string = "{CHROM}\t{POS:d}\t{ID}\t{REF}\t{ALT}\t{QUAL:.0f}\t{FILTER}\tDP={DP:d};RF={RF:g};BQ={BQ:.0f};MQ={MQ:.0f}"
-#
-#
-# def vcf_row(CHROM, POS, ID, REF, ALT, QUAL, FILTER, DP, RF, BQ, MQ, AF=None, SBQ=None, SMQ=None):
-#     string = vcf_row_string.format(CHROM=CHROM, POS=POS, ID=ID, REF=REF, ALT=ALT, QUAL=QUAL, FILTER=FILTER, DP=DP,
-#                                    RF=RF, BQ=BQ, MQ=MQ)
-#     if AF:
-#         string += ";AF={}".format(AF)
-#     if SBQ:
-#         string += ";SBQ={}".format(SBQ)
-#     if SMQ:
-#         string += ";SMQ={}".format(SMQ)
-#
-#     return string + "\n"
-#
-#
-# def write_vcf(pileups, output=None, date=date.today(), reference=None):
-#     """Write SNPs to a VCF file"""
-#     with open(output, 'wb') as w:
-#         w.write(vcf_header.format(date=date, ref=reference))
-#         # for pileup in pileups:
-#         for scaffold in pileups.pileups:
-#             for refpos in pileups.pileups[scaffold]:
-#                 pileup = pileups.pileups[scaffold][refpos]
-#                 af = ''
-#                 sbq = ''
-#                 smq = ''
-#                 ALT = '.'
-#
-#                 # start with qual as ref
-#                 if pileup.ref_count:
-#                     QUAL = np.sqrt(float(pileup.ref_qual_ss) / pileup.ref_count)
-#                 else:
-#                     QUAL = 0
-#
-#                 # higher pileup than expected by random chance
-#                 if pileup.hc:
-#                     FILTER = "hc"
-#
-#                 # not enough reads to say anything
-#                 elif not pileup.covered():
-#                     # due to not being mappable
-#                     if pileup.poormq():
-#                         FILTER = 'um'
-#                     # just not covered enough
-#                     else:
-#                         FILTER = "cv"
-#
-#                 # reference has been confirmed
-#                 elif pileup.confirmed():
-#                     FILTER = "PASS"
-#
-#                 # reference not confirmed and there are other alleles
-#                 elif pileup.others:
-#                     snp = pileup.base_call()
-#
-#                     # confirmed a snp
-#                     if snp:
-#                         QUAL = np.sqrt(float(pileup.others[snp][1]) / pileup.others[snp][0])
-#                         FILTER = "PASS"
-#                         ALT = snp
-#                         af = format(float(pileup.others[snp][0]) / pileup.count, ".3f").rstrip('0').rstrip('.')
-#                         sbq = format(QUAL, ".0f")
-#                         smq = format(np.sqrt(float(pileup.others[snp][2]) / pileup.others[snp][0]), ".0f")
-#
-#                     # ambiguous call
-#                     else:
-#                         QUAL = 0
-#                         snp_count = 0
-#                         for _snp in pileup.others:
-#                             QUAL += pileup.others[_snp][1]
-#                             snp_count += pileup.others[_snp][0]
-#                         # qual is RMS of all SNPs... is this right?
-#                         # perhaps qual of reference is better, but not sure
-#                         QUAL = np.sqrt(float(QUAL) / snp_count)
-#                         FILTER = "amb"
-#
-#                         sorted_alt = pileup.sort_alts()
-#                         ALT = ','.join(sorted_alt)
-#
-#                         for alt in sorted_alt:
-#                             temp = pileup.others[alt]
-#                             if af:
-#                                 af += ','
-#                                 sbq += ','
-#                                 smq += ','
-#                             af += format(float(temp[0]) / pileup.count, ".3f").rstrip('0').rstrip('.')
-#                             sbq += format(np.sqrt(float(temp[1]) / temp[0]), ".0f")
-#                             smq += format(np.sqrt(float(temp[2]) / temp[0]), ".0f")
-#
-#                 # else should not have any cases...
-#                 else:
-#                     print >> logfile, "Uh oh...", str(pileup)
-#
-#                 if pileup.count:
-#                     BQ = np.sqrt(float(pileup.qual_ss) / pileup.count)
-#                     MQ = np.sqrt(float(pileup.mq_ss) / pileup.count)
-#                 else:
-#                     BQ = 0
-#                     MQ = 0
-#
-#                 w.write(vcf_row(CHROM=pileup.chrom,
-#                                 POS=pileup.pos,
-#                                 ID='.',
-#                                 REF=pileup.refbase,
-#                                 ALT=ALT,
-#                                 QUAL=QUAL,
-#                                 FILTER=FILTER,
-#                                 DP=pileup.count,
-#                                 RF=pileup.ref_fraction(),
-#                                 BQ=BQ,
-#                                 MQ=MQ,
-#                                 AF=af,
-#                                 SBQ=sbq,
-#                                 SMQ=smq,
-#                                 ))
+            compare = CompareStats(baseline, sample)
+            compare.log(sampleName)
+            if not compareFile:
+                compareFile = open(baseline.strainName() + ".compare.tsv", 'w')
+                compare.tabular(compareFile, "sample", True)
+            compare.tabular(compareFile, sampleName)

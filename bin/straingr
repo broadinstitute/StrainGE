@@ -79,13 +79,14 @@ class Sample:
         self.refmask = np.concatenate([s.refmask for s in scaffolds])
         self.coverage = np.concatenate([s.coverage for s in scaffolds])
         meanCoverage = self.coverage.sum() / float(self.length)
-        print >>logfile, "Total length=%d coverage=%.2f" % (self.length, meanCoverage),
+        medianCoverage = float(np.median(self.coverage))
+        highCutoff = self.poissonCutoff(max(medianCoverage, 0.5))
+        mingap = self.gapcutoff(meanCoverage)
+        print >>logfile, "Total length=%d coverage=%.2f median=%.1f cutoff=%d mingap=%d" % (self.length, meanCoverage, medianCoverage, highCutoff, mingap),
 
         nonzero = self.coverage[self.coverage > 0]
         nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
-        highCutoff = self.poissonCutoff(nonzeroCoverage)
-        mingap = self.gapcutoff(meanCoverage)
-        print >>logfile, "nonzero=%d nzcoverage=%.2f cutoff=%d mingap=%d" % (nonzero.size, nonzeroCoverage, highCutoff, mingap)
+        print >>logfile, "nonzero=%d nzcoverage=%.2f" % (nonzero.size, nonzeroCoverage)
         logfile.flush()
 
 
@@ -127,6 +128,7 @@ class Sample:
         gapcutoff
         math.log()
         return math.exp(-mean)
+
 
     def strainName(self):
         basename = os.path.basename(self.bamfile)
@@ -430,9 +432,9 @@ class Pileup:
 
 
 class CallStats:
-    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("covered", "%d"), ("coveredPct", "%.2f"), ("confirmed", "%d"), \
-              ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"), ("multiPct", "%.2f"), \
-              ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"), ("gapLength", "%d"))
+    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("covered", "%d"), ("coveredPct", "%.2f"), ("evenness", "%.2f"),
+              ("confirmed", "%d"), ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
+              ("multiPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"), ("gapLength", "%d"))
     #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
     def __init__(self, length, refmask, coverage, strong, high, gaps):
@@ -443,6 +445,8 @@ class CallStats:
         self.covered = np.count_nonzero(strong)
         self.coveredPct = pct(self.covered, length)
         self.coverage = float(coverage.sum()) / float(length)
+        lw = landerWaterman(self.coverage)
+        self.evenness = self.coveredPct / (100.0 * lw * lw) if lw > 0 else 0
         self.confirmed = np.count_nonzero(confirmed)
         self.confirmedPct = pct(self.confirmed, self.covered)
         self.snps = np.count_nonzero(snps)
@@ -454,8 +458,8 @@ class CallStats:
         self.gapCount = len(gaps)
         self.gapLength = sum([g.length for g in gaps])
 
-        self.values = (self.length, self.coverage, self.covered, self.coveredPct, self.confirmed, self.confirmedPct,
-                       self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct,
+        self.values = (self.length, self.coverage, self.covered, self.coveredPct, self.evenness, self.confirmed,
+                       self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct,
                        self.gapCount, self.gapLength)
 
     def log(self, name=None):
@@ -578,6 +582,13 @@ class Region:
     def __repr__(self):
         return "<%s %d-%d>" % (self.id, self.start, self.stop)
 
+def landerWaterman(coverage):
+    """
+    Use Lander-Waterman relation to compute expect fraction of genome covered given mean coverage.
+    :param coverage: mean coverage
+    :return: expected fraction of genome covered
+    """
+    return 1.0 - math.exp(-coverage)
 
 def pct(numerator, denominator, precision=None):
     """Makes into a percent, avoiding division by zero"""

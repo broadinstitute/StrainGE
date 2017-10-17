@@ -432,7 +432,7 @@ class Pileup:
 
 
 class CallStats:
-    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("covered", "%d"), ("coveredPct", "%.2f"), ("evenness", "%.2f"),
+    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("covered", "%d"), ("coveredPct", "%.2f"), ("evenness", "%.2f"),
               ("confirmed", "%d"), ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
               ("multiPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"), ("gapLength", "%d"))
     #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
@@ -445,6 +445,7 @@ class CallStats:
         self.covered = np.count_nonzero(strong)
         self.coveredPct = pct(self.covered, length)
         self.coverage = float(coverage.sum()) / float(length)
+        self.median = int(round(np.median(coverage)))
         lw = landerWaterman(self.coverage)
         self.evenness = self.coveredPct / (100.0 * lw * lw) if lw > 0 else 0
         self.confirmed = np.count_nonzero(confirmed)
@@ -458,7 +459,7 @@ class CallStats:
         self.gapCount = len(gaps)
         self.gapLength = sum([g.length for g in gaps])
 
-        self.values = (self.length, self.coverage, self.covered, self.coveredPct, self.evenness, self.confirmed,
+        self.values = (self.length, self.coverage, self.median, self.covered, self.coveredPct, self.evenness, self.confirmed,
                        self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct,
                        self.gapCount, self.gapLength)
 

@@ -47,18 +47,24 @@ logfile = open(args.log, 'w') if args.log else sys.stdout
 
 
 class Reference:
+    """
+    Holds reference sequence information...scaffolds in Biopython SeqRecord objects.
+    """
     def __init__(self, fasta):
         self.scaffolds = [scaffold for scaffold in kmertools.openSeqFile(fasta)]
         self.length = sum([len(s) for s in self.scaffolds])
         print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
 
 class Sample:
+    """
+    Collects and holds information about alignments of sample reads (from a supplied BAM file) against a reference.
+    """
     def __init__(self, reference, bamfile):
         self.reference = reference
         self.length = reference.length
         self.bamfile = bamfile
 
-        # These are filled out after allele calling
+        # These are filled out after allele calling. Most are numpy arrays with one element for each genomic position.
         self.refmask = None
         self.coverage = None
         self.highCoverage = None
@@ -70,18 +76,38 @@ class Sample:
         self.process(bamfile)
 
     def process(self, bam):
+        """
+        Does the heavy lifting of scanning the BAM file. The basic flow is:
+        1) process the alignments on a scaffold-by-scaffold basis, generating ScaffoldsPileups objects
+        2) generate some summary statistics and heuristic thresholds (e.g., read depth cutoff)
+        3) scan through the ScaffoldPileups and make calls
+        4) compute summary call statistics for each scaffold as well as the total for the genome
+
+        :param bam: BAM file containing reads for a sample aligned to the reference genome.
+        """
         print >>logfile, "Processing", bam
-        scaffolds = [Scaffold(scaffold.name, scaffold.seq.upper()) for scaffold in reference.scaffolds]
+
+        # Create ScaffoldPileups objects for each scaffold, and scan the bam to fill them out.
+        scaffolds = [ScaffoldPileups(scaffold.name, scaffold.seq.upper()) for scaffold in reference.scaffolds]
         with pysam.AlignmentFile(bamfile, "rb") as bam:
             for s in scaffolds:
                 s.makePileups(bam)
 
+        # Pull together essential stats for the whole genome so we can set thresholds
         self.refmask = np.concatenate([s.refmask for s in scaffolds])
         self.coverage = np.concatenate([s.coverage for s in scaffolds])
-        meanCoverage = self.coverage.sum() / float(self.length)
+        meanCoverage = float(self.coverage.sum()) / float(self.length)
         medianCoverage = float(np.median(self.coverage))
+
+        # Based on coverage, set a high limit for plausible coverage of a given position based on Poisson probability;
+        # because we are dealing with metagenomic samples, too improbabily high coverage is likely a result of reads
+        # from other organisms aligning to conserved regions, so we can't make a confident call on our target organism.
+        # Here, we use the median coverage rather than the mean since our coverage might be dominated by conserved regions.
         highCutoff = self.poissonCutoff(max(medianCoverage, 0.5))
-        mingap = self.gapcutoff(meanCoverage)
+
+        # When we look for blocks without coverage (possible large deletions from recombination events), we attempt
+        # to scale the minimum size to be significant, because at very low coverage, we expect large uncovered regions.
+        mingap = self.gapCutoff(meanCoverage)
         print >>logfile, "Total length=%d coverage=%.2f median=%.1f cutoff=%d mingap=%d" % (self.length, meanCoverage, medianCoverage, highCutoff, mingap),
 
         nonzero = self.coverage[self.coverage > 0]
@@ -89,12 +115,13 @@ class Sample:
         print >>logfile, "nonzero=%d nzcoverage=%.2f" % (nonzero.size, nonzeroCoverage)
         logfile.flush()
 
-
+        # Scan through ScaffoldPileups, make calls using the thresholds set above, and compute summary stats
         for s in scaffolds:
             s.callAlleles(highCutoff)
             self.gaps += s.findGaps(mingap)
             s.stats()
 
+        # Now gather the essentials for the whole genome so we can compute summary stats.
         self.highCoverage = np.concatenate([s.highCoverage for s in scaffolds])
         self.strong = np.concatenate([s.strong for s in scaffolds])
         self.weak = np.concatenate([s.weak for s in scaffolds])
@@ -102,6 +129,8 @@ class Sample:
         self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
         self.summaryStats.log("TOTAL")
 
+        # If tabular output has been requested, create a tab-separated values output file with entries
+        # for each scaffold and total.
         if args.table:
             with open(self.strainName() + ".tsv", 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
@@ -110,7 +139,10 @@ class Sample:
                 self.summaryStats.tabular(outfile, "TOTAL")
 
     def poissonCutoff(self, mean, cutoff = 0.9999999):
-        """Calculate the Poisson CDF and find where it reaches the cutoff"""
+        """
+        Calculate the Poisson CDF and find where it reaches the cutoff. Default cutoff is one part in 10M, so
+        not likely to occur in a typical bacterial genome.
+        """
         i = 0
         ifact = 1.0
         expmean = math.exp(-mean)
@@ -121,16 +153,19 @@ class Sample:
             ifact *= i
         return i - 1
 
-    def gapcutoff(self, coverage):
-        return int(round(args.mingap / (1.0 - math.exp(-coverage))))
-
-    def poisson0(self, mean, cutoff = 0.000001):
-        gapcutoff
-        math.log()
-        return math.exp(-mean)
-
+    def gapCutoff(self, coverage):
+        """
+        Attempt to scale the minimum significant uncoveraged region by coverage (for low coverage)
+        :param coverage: expected coverage
+        :return: scaled minimum gap (using args.mingap as baseline)
+        """
+        return int(round(args.mingap / landerWaterman(coverage)))
 
     def strainName(self):
+        """
+        Derive "strain name" from basename of bam file...used to derive other output file names
+        :return: basename suitable for appending output file extensions
+        """
         basename = os.path.basename(self.bamfile)
         if basename.lower().endswith(".bam"):
             basename = basename[:-4]
@@ -138,24 +173,39 @@ class Sample:
 
 
 
-class Scaffold:
+class ScaffoldPileups:
+    """
+    Object to compute an hold all the pileups for each location in an input genome element (scaffold).
+    Detail information is contained in Pileup objects for each locus; summary information is in numpy arrays (coverage,
+    strong, weak, ...) with one element per locus.
+    """
     def __init__(self, name, sequence):
         self.name = name
         self.sequence = sequence
         self.length = len(sequence)
+
+        # large memory requirement done this way (object per locus). could be refactored by having multidimensional
+        # array with allele evidence for the whole scaffold.
         self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
         # pileup stats
         self.refmask = np.zeros(self.length, dtype=np.uint8)
         self.coverage = np.zeros(self.length, dtype=np.uint32)
-        # allele call stats
+        # allele calls: strong and weak are both byte arrays with one bit set for each present allele (A,C,G,T + ins + del)
         self.strong = np.zeros(self.length, dtype=np.uint8)
         self.weak = np.zeros(self.length, dtype=np.uint8)
         # allele call arrays computed here
         self.highCoverage = None
         self.summaryStats = None
+        # list of Region objects for uncovered regions
         self.gaps = []
 
     def makePileups(self, bam):
+        """
+        Loop over loci and add the info from each covering read. Also sets count of "good" coverage and refmask, which
+        is the bitmask corresponding to the reference allele for each comparison later.
+
+        :param bam: open bam file (pysam object).
+        """
         print >>logfile, "Generating pileups for", self.name, "length=%d" % self.length,
         logfile.flush()
 
@@ -174,6 +224,15 @@ class Scaffold:
         logfile.flush()
 
     def callAlleles(self, highCutoff):
+        """
+        Loop over loci compiling evidence for alleles present. Ignore pileups deeper than highCutoff, because those
+        probably contain alignments from other organisms (e.g., this might be a conserved region).
+
+        "strong" means there is suffiently strong evidnece to "call" the allele as present
+        "weak" means any evidence at all supporting the allele, even if not strong enought to be strong
+
+        :param highCutoff: max pileup depth
+        """
         print >>logfile, "Calling alleles in", self.name,
         logfile.flush()
 
@@ -188,9 +247,18 @@ class Scaffold:
 
 
     def findGaps(self, mingap):
+        """
+        Find coverage gaps, indicating possible deleted portions in our strain vs the reference (e.g., possible
+        recombination events). Gaps are defined here as insufficient evidence to call anything, taking into account
+        regions of poor mapping quality won't be called as a matter of course (but may still be "covered").
+
+        :param mingap: don't report gaps unless they consist of this many consecutive loci which can't be called
+        :return: list of Region objects corresponding to the coverage gaps, also set as self.gaps
+        """
         lastCovered = -1
         for i in xrange(self.length):
             p = self.pileups[i]
+            # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
             if p.strong or p.poormq():
                 if lastCovered >= 0 and i - lastCovered > mingap:
                     self.gaps.append(Region(self.name, lastCovered+1, i-1))
@@ -200,86 +268,11 @@ class Scaffold:
         return self.gaps
 
     def stats(self):
+        """
+        Populate and report call statistics for this scaffold.
+        """
         self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
         self.summaryStats.log()
-
-
-    def process(self, bam):
-        """Scan the pileups for each locus in the scaffold"""
-
-        print >>logfile, "Processing", self.name, self
-        last_covered = -1
-        goodcoverage = 0
-
-        for column in bam.pileup(self.name):
-            refpos = column.reference_pos
-            pileup = Pileup(self.sequence[refpos])
-            pileup.add_reads(column.pileups)
-            self.pileups[refpos] = pileup
-
-            if args.verbose:
-                refbase = self.sequence[refpos]
-                print >> logfile, "Ref:", column.reference_name, refpos, refbase, column.nsegments
-            goodcoverage += pileup.depth()
-            if pileup.covered():
-                covered += 1
-                if pileup.strong():
-                    confirmed += 1
-                else:
-                    # keep read info for covered, non-ref alleles
-                    # self.insert_into_db(pileup)
-                    if pileup.base_call():
-                        snps += 1
-                if refpos - last_covered > args.min_gap:
-                    gap = (last_covered + 1, refpos - last_covered)
-                    print >> logfile, "Coverage gap:", gap[0], gap[1]
-                    gaps.append(gap)
-                last_covered = refpos
-            else:
-                if pileup.unmappable():
-                    unmapped += 1
-                    # not a real gap, just can't map to this region
-                    if refpos - last_covered > args.min_gap:
-                        gap = (last_covered + 1, refpos - last_covered)
-                        print >> logfile, "Coverage gap:", gap[0], gap[1]
-                        gaps.append(gap)
-                    last_covered = refpos
-                    # if keep:
-                    # keep all pileups anyway
-                    # self.insert_into_db(pileup)
-
-            # del pileup.reads
-
-            if args.verbose:
-                print >> logfile, pileup, pileup.strong
-
-        coverage = float(goodcoverage) / float(length)
-        mixed = covered - (confirmed + snps)
-
-        print >> logfile, "good coverage: %.1fx" % (coverage,)
-        print >> logfile, "covered: %d %.1f%%" % (covered, pct(covered, length))
-        print >> logfile, "confirmed: %d %.2f%%" % (confirmed, pct(confirmed, covered))
-        print >> logfile, "snps: %d %.3f%%" % (snps, pct(snps, covered))
-        if snps > 0:
-            snp_rate = "%.0f" % (float(covered) / float(snps))
-            print >> logfile, "snp rate:", snp_rate
-        else:
-            snp_rate = ""
-        print >> logfile, "mixed: %d %.3f%%" % (mixed, pct(mixed, covered))
-        if mixed > 0:
-            mixed_rate = float(covered) / float(mixed)
-            if mixed_rate > 0:
-                mixed_quality = math.log10(mixed_rate) * 10.0
-            else:
-                mixed_quality = 0
-            mixed_rate = "%.0f" % (mixed_rate)
-            print >> logfile, "mixed rate: %s Q%.0f" % (mixed_rate, mixed_quality)
-        else:
-            mixed_rate = ""
-            mixed_quality = 0
-        gap_total = sum([g[1] for g in gaps])
-        print >> logfile, "gaps:", len(gaps), "totaling", gap_total
-        print >> logfile, "unmapped: %d %.1f%%" % (unmapped, pct(unmapped, length))
 
 
 class Pileup:

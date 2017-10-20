@@ -14,6 +14,7 @@ import kmertools
 parser = argparse.ArgumentParser()
 parser.add_argument("--reference", "-r", help="reference file prefix for bowtie2")
 parser.add_argument("--bam", "-b", help="bam containing aligned reads")
+parser.add_argument("--cutoff", "-c", type=int, default=100, help="ignore pileups deeper than this")
 parser.add_argument("--statsout", "-o", help="hdf5 file in which to save stats")
 parser.add_argument("--statsin", "-i", help="hdf5 file from which to load stats")
 parser.add_argument("--graph", "-g", help="graph output file (.png best)")
@@ -61,7 +62,7 @@ def compute_stats(reference_file, bamfile):
                 mismatches = []
                 qsum = 0
                 matchsum = 0
-                if len(column.pileups) > 500:
+                if len(column.pileups) > args.cutoff:
                     continue
                 for read in column.pileups:
                     alignment = read.alignment

@@ -283,15 +283,16 @@ class Pileup:
     """
 
     # bases and their indicies (plus I for insertion, D for deletion)
-    BASES = "ACGTID"
+    ALLELES = "ACGTID"
     A = 0
     C = 1
     G = 2
     T = 3
     I = 4
     D = 5
-    ALLELES = len(BASES)
-    ALLELE_MASKS = 1 << np.arange(ALLELES, dtype=np.int32)
+    N_ALLELES = len(ALLELES)
+    # we note presence of alleles by setting a bit corresponding to the allele index above
+    ALLELE_MASKS = 1 << np.arange(N_ALLELES, dtype=np.int32)
 
 
     def __init__(self, refbase):
@@ -302,13 +303,18 @@ class Pileup:
         """
 
         # first dimension is count, qualsum
-        self.alleles = np.zeros((2, 6), dtype=np.int32)
+        self.alleles = np.zeros((2, Pileup.N_ALLELES), dtype=np.int32)
         # index into allele array for reference base
-        refindex = Pileup.BASES.find(refbase)
+        refindex = Pileup.ALLELES.find(refbase)
+        # allele bitmask corresponding to reference base
         self.refmask = (1 << refindex) if refindex >= 0 else 0
+        # alignments covering this position but rejected for some reason (bad pairing, poor quality, etc)
         self.bad = 0
+        # otherwise good alignments with low mapping quality (probably because this is a repeat)
         self.lowmq = 0
+        # bitmask for recording strong evidence of alleles
         self.strong = 0
+        # bitmask for recording weak (any) evidence of alleles
         self.weak = 0
 
     def add_reads(self, pileup_reads):
@@ -337,7 +343,7 @@ class Pileup:
             self.bad += 1
             return
 
-        # get base quality (note this is next base if deletion)
+        # get base quality (note this is next base if deletion, but we won't use that)
         pos = read.query_position_or_next
         qual = alignment.query_qualities[pos]
         if qual < args.minqual:
@@ -346,21 +352,24 @@ class Pileup:
 
         # check for decent mapping quality
         mq = alignment.mapping_quality
+        # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
         if mq < args.minmq:
             self.lowmq += 1
             return
 
         if read.indel:
             if read.is_del:
+                # deletion
                 baseIndex = Pileup.D
-                # if the base isn't there, base qual doesn't make sense
+                # if the base isn't there, base qual doesn't make sense, so just use mq
                 qual = mq
             else:
+                # then it must be an insertion
                 baseIndex = Pileup.I
         else:
             # base call must be real base (e.g., not N)
             base = alignment.query_sequence[pos]
-            baseIndex = Pileup.BASES.find(base)
+            baseIndex = Pileup.ALLELES.find(base)
             if baseIndex < 0:
                 self.bad += 1
                 return
@@ -370,88 +379,127 @@ class Pileup:
         self.alleles[0, baseIndex] += 1
         self.alleles[1, baseIndex] += q
 
-    def depth(self):
-        """Sum of all quality evidence"""
-        return self.alleles[0].sum()
-
-    def qual_total(self):
-        """Sum of all quality evidence"""
-        return self.alleles[1].sum()
-
-    def total_depth(self):
-        return self.depth() + self.bad
-
-    def covered(self):
-        """Does this pileup have enough data to consider this locus covered?"""
-        return self.qual_total() >= args.minconfirm
-
-    def poormq(self):
-        """Good quality sequence, but can't be mapped"""
-        return self.lowmq > (self.total_depth())
-
-    def ref_qual(self):
-        return self.alleles[1, self.refindex]
-
-    def ref_fraction(self):
-        """Fraction of evidence which supports reference base"""
-        return float(self.ref_qual()) / float(self.qual_total())
-
-    def confirmed(self):
-        """Does this pileup confirm the reference?"""
-        rq = self.ref_qual()
-        return rq >= args.minconfirm and \
-               (rq == self.qual_total() or self.ref_fraction() > args.consensus)
-
     def callAlleles(self):
+        """
+        Calls alleles present at this locus.
+        "strong" contains the bits of alleles with sufficient evidnece for a confident call
+        "weak" contains those with any evidence at all
+        "confirmed" is set if there is strong evidence for reference base
+        """
         minconfirm = args.minconfirm
         minfrac = args.minfrac
 
         quals = self.alleles[1]
-        qualsum = float(self.qual_total())
+        qualsum = float(quals.sum())
+        # qualfraction is array containing fraction of evidence for each allele
         qualfraction = quals / qualsum
 
         # Any alleles which have any evidence at all
         evidence = quals > 0
+        # boolean * mask will give array of 0 where boolean is false, else allele, then sum() sets them all!
         self.weak = (evidence * Pileup.ALLELE_MASKS).sum()
 
-        # Alleles with sufficient evidence to confirm
+        # Alleles with sufficient evidence to confirm (minimum qual sum and minimum qual fraction)
         confirmed = np.logical_and(quals > minconfirm, qualfraction > minfrac)
         self.strong = (confirmed * Pileup.ALLELE_MASKS).sum()
 
         if args.verbose and self.strong and self.refmask != self.strong:
             print self.refmask, self.alleles[0], self.alleles[1], qualfraction, self.weak, self.strong
-        return
 
+    def depth(self):
+        """
+        :return: Count of all good reads (int)
+        """
+        return self.alleles[0].sum()
+
+    def qual_total(self):
+        """
+        :return: Sum of all quality evidence (int)
+        """
+        return self.alleles[1].sum()
+
+    def total_depth(self):
+        """
+        :return: Count of all reads, including those rejected for some reason (int)
+        """
+        return self.depth() + self.bad
+
+    def covered(self):
+        """
+        :return: Does this pileup have enough data to consider this locus covered? (boolean)
+        """
+        return self.qual_total() >= args.minconfirm
+
+    def poormq(self):
+        """
+        :return: Poor mapping quality at this position? (boolean)
+        """
+        # heuristic: more low mapping quality than "good" coverage
+        return self.lowmq > self.depth()
+
+    def ref_qual(self):
+        """
+        :return: sum of quality evidence for reference base (int)
+        """
+        return self.alleles[1, self.refindex]
+
+    def ref_fraction(self):
+        """
+        :return: Fraction of evidence which supports reference base (float)
+        """
+        return float(self.ref_qual()) / float(self.qual_total())
+
+    def confirmed(self):
+        """
+        :return: Does this pileup confirm the reference? (boolean)
+        """
+        rq = self.ref_qual()
+        return rq >= args.minconfirm and (rq == self.qual_total() or self.ref_fraction() > args.consensus)
 
 
 class CallStats:
+    """
+    Class to compute and log lots of stats (for scaffold or whole genome) given a few summary pileup arrays.
+    """
+
+    # these are al the fields and formats in the order we want to show them
     FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("covered", "%d"), ("coveredPct", "%.2f"), ("evenness", "%.2f"),
               ("confirmed", "%d"), ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
               ("multiPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"), ("gapLength", "%d"))
-    #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
     def __init__(self, length, refmask, coverage, strong, high, gaps):
+        # locaitons where we have strong evidence of reference base
         confirmed = (strong & refmask)
+        # locations where we have strong evidence of something other than reference (not mutually exclusive!)
         snps = (strong & ~refmask)
-        multi = (strong & (strong - 1))
+        # locations where we have strong evidnece for multiple bases (x&(x-1) turns off only highest bit in x :))
+        multi = (strong & (strong - 1)) > 0
         self.length = length
+        # covered if we have any strong call
         self.covered = np.count_nonzero(strong)
         self.coveredPct = pct(self.covered, length)
         self.coverage = float(coverage.sum()) / float(length)
         self.median = int(round(np.median(coverage)))
+        # evenness is measure of expected "covered" vs coverage (low if coverage concentrated in small portion)
         lw = landerWaterman(self.coverage)
         self.evenness = self.coveredPct / (100.0 * lw * lw) if lw > 0 else 0
+        # confirmed count
         self.confirmed = np.count_nonzero(confirmed)
         self.confirmedPct = pct(self.confirmed, self.covered)
+        # snp count
         self.snps = np.count_nonzero(snps)
         self.snpPct = pct(self.snps, self.covered)
+        # multi count
         self.multi = np.count_nonzero(multi)
         self.multiPct = pct(self.multi, self.snps)
+        # count of locations not called because coverage too high
         self.high = np.count_nonzero(high)
         self.highPct = pct(self.high, length)
+        # count of gaps (uncovered reginos) and their cumulative length
         self.gapCount = len(gaps)
         self.gapLength = sum([g.length for g in gaps])
 
+        # values correspond to order of FIELDS above
         self.values = (self.length, self.coverage, self.median, self.covered, self.coveredPct, self.evenness, self.confirmed,
                        self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct,
                        self.gapCount, self.gapLength)
@@ -466,6 +514,7 @@ class CallStats:
         logfile.flush()
 
     def tabular(self, out, name, header=False):
+        # write out in tabular output file format (just spit out header if flag set)
         if header:
             print >>out, "\t".join(["name"] + [field for field, fmt in CallStats.FIELDS])
         else:
@@ -474,21 +523,33 @@ class CallStats:
 
 
 class CompareStats:
+    """
+    Class to compare stats from two samples
+    """
+
+    # list of fields and formats, a la CallStats
     FIELDS = [("common", "%d"), ("commonPct", "%.2f"), ("disagree", "%d"), ("disagreePct", "%.2f"), ("variants", "%d"), \
               ("variantPct", "%.2f"), ("commonVariant", "%d"), ("commonVariantPct", "%.2f"), ("variantAgree", "%d"),
               ("variantAgreePct", "%.2f"), ("AnotB", "%d"), ("AnotBpct", "%.2f"), \
               ("AnotBweak", "%d"), ("AnotBweakPct", "%.2f"), ("BnotA", "%d"), ("BnotApct", "%.2f"), \
               ("BnotAweak", "%d"), ("BnotAweakPct", "%.2f"), ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.2f"), \
               ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.2f")]
-    #tab_line = "{ref}\t{bam}\t{chrom}\t{length:d}\t{goodcov:.2f}\t{covered:d}\t{pcovered:.1f}\t{confirmed:d}\t{pconfirmed:.2f}\t{snps:d}\t{psnps:.2f}\t{snprate}\t{mixed:d}\t{pmixed:.2f}\t{mixedrate}\t{mixedquality:.0f}\t{gaps:d}\t{gaptotal:d}\t{unmapped:d}\t{highcov:d}\t{highthresh:d}\n"
 
     def __init__(self, strainA, strainB):
+        # takes CallStats from strainA, strainB
         self.strainA = strainA
         self.strainB = strainB
+
+        # gather values, a la CallStats
         self.values = self.compare(strainA, strainB)
         self.values += self.compareGaps()
 
     def compare(self, strainA, strainB):
+        """
+        :param strainA: CallStats object for strainA
+        :param strainB: CallStats object for strainB
+        :return: list of computed values
+        """
         print >>logfile, "Comparing", strainA.bamfile, "versus",
         logfile.flush()
 
@@ -525,6 +586,14 @@ class CompareStats:
                 BnotAcount, BnotApct, BnotAweakCount, BnotAweakPct]
 
     def compareThing(self, common, thing, label):
+        """
+        Computes occurance of a condition within a set, and returns those stats.
+
+        :param common: flag for locations to consider
+        :param thing: condition we're looking for in common
+        :param label: name for this comparison
+        :return: array where command and condition are true, count of that, and percentage with respect to common
+        """
         commonCount = np.count_nonzero(common)
         commonThings = np.logical_and(common, thing)
         commonThingsCount = np.count_nonzero(commonThings)
@@ -532,6 +601,10 @@ class CompareStats:
         return commonThings, commonThingsCount, percent
 
     def compareGaps(self):
+        """
+        More stats, this time about uncovered regions in common.
+        :return: list of gap stats
+        """
         Agaps = self.strainA.gaps
         Bgaps = self.strainB.gaps
         Alength = sum([g.length for g in Agaps])
@@ -543,11 +616,21 @@ class CompareStats:
         return [Alength, AsharedLength, pct(AsharedLength, Alength), Blength, BsharedLength, pct(BsharedLength, Blength)]
 
     def log(self, name):
+        """
+        Log stats to console.
+        :param name: string to put in front of the stats
+        """
         s = ' '.join([name] + [(field[0] + '=' + field[1]) % value for field, value in zip(CompareStats.FIELDS, self.values)])
         print >>logfile, s
         logfile.flush()
 
     def tabular(self, out, name, header=False):
+        """
+        Log stats to tabular (tsv) output.
+        :param out: file object to write the record to
+        :param name: string for first colummn
+        :param header: print header instead of stats
+        """
         if header:
             print >>out, "\t".join(["name"] + [field for field, fmt in CompareStats.FIELDS])
         else:
@@ -555,6 +638,10 @@ class CompareStats:
 
 
 class Region:
+    """
+    Class to define a consecutive genomic region, defined as a name (e.g., scaffold name), start & stop positions.
+    """
+
     def __init__(self, id, start, stop):
         self.id = id
         self.start = start
@@ -563,13 +650,26 @@ class Region:
         assert self.length > 0, "Region length must be positive"
 
     def overlaps(self, other):
+        """
+        :param other: another Region
+        :return: True if they overlap
+        """
         return self.id == other.id and other.start <= self.stop and other.stop >= self.start
 
     def distance(self, other):
+        """
+        :param other: another Region
+        :return: how far apart they are (must be from same element)
+        """
         assert self.id == other.id
         return min(abs(self.end - other.start), abs(other.end - self.start)) if not self.overlap() else 0
 
     def combine(self, other):
+        """
+        Merge regions
+        :param other: another Region
+        :return: merged region
+        """
         assert self.id == other.id
         return Region(self.id, min(self.start, other.start), max(self.end, other.end))
 
@@ -598,9 +698,8 @@ def pct(numerator, denominator, precision=None):
 ### Main
 ##################################
 
-print >>logfile, "Loading reference genome"
+print >>logfile, "Loading reference genome", args.reference
 logfile.flush()
-print args.reference
 reference = Reference(args.reference)
 baseline = None
 compareFile = None
@@ -609,12 +708,15 @@ for bamfile in args.bam:
     sample = Sample(reference, bamfile)
     sampleName = sample.strainName()
     if args.compare:
+        # if we're comparing, use first sample bam as baseline
         if not baseline:
             baseline = sample
         else:
             compare = CompareStats(baseline, sample)
             compare.log(sampleName)
             if not compareFile:
+                # create comparison output file and print header
                 compareFile = open(baseline.strainName() + ".compare.tsv", 'w')
                 compare.tabular(compareFile, "sample", True)
+            # write tabular output
             compare.tabular(compareFile, sampleName)

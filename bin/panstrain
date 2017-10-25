@@ -165,8 +165,10 @@ with h5py.File(args.pan, 'r') as h5pan:
         for s in strainNames:
             strainKmerSet(s)
 
-
-    for i in range(args.iterations):
+    rKeys = [k for k in resultFormats] # edited by Tim
+    rFormats = [resultFormats[k] for k in rKeys]
+    print >>output, "\t".join(rKeys)
+    for i in range(args.iterations):           
         print >>sys.stderr, "Finding strain", i + 1
         results = []
         bestScore = 0
@@ -190,11 +192,7 @@ with h5py.File(args.pan, 'r') as h5pan:
             r["i"] = i
 
         results.sort(lambda a, b: cmp(b["score"], a["score"]))
-
-        rKeys = [k for k in resultFormats if k in results[0].keys()]
-        rFormats = [resultFormats[k] for k in rKeys]
-        if i == 0:
-            print >>output, "\t".join(rKeys)
+        
         for r in results[:args.top]:
             rValues = tuple((r[k] for k in rKeys))
             print >>output, ("\t".join(rFormats)) % rValues

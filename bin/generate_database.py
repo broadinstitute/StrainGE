@@ -169,6 +169,10 @@ def _cluster_kmersim(kmersim, kmerfiles, cutoff=0.95):
             w.write("\n".join(sort[1:])+"\n")
         
     print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))
+
+    with open(os.path.join(root, "included.txt"), 'wb') as w:
+        w.write("\n".join(["{}.hdf5".format(name) for name in keep]))
+    
     return ["{}.hdf5".format(name) for name in keep]
 
 

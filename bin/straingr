@@ -132,7 +132,7 @@ class Sample:
         # If tabular output has been requested, create a tab-separated values output file with entries
         # for each scaffold and total.
         if args.table:
-            with open(self.strainName() + ".tsv", 'w') as outfile:
+            with open(os.path.join(os.path.dirname(self.bamfile), self.strainName() + ".tsv"), 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
                 for s in scaffolds:
                     s.summaryStats.tabular(outfile, s.name)

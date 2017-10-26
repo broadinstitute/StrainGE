@@ -22,7 +22,7 @@ parser.add_argument("-t", "--top", type=int, default=1, help="How many best matc
 parser.add_argument("-s", "--score", type=float, default=0.005, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.5, help="minimum evenness")
 parser.add_argument("-S", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
-parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
+#parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
 parser.add_argument("-p", "--threads", type=int, default=1, help="Parallel threads (implies --cache)")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
@@ -30,7 +30,7 @@ args = parser.parse_args()
 
 cache = args.cache or args.threads > 1
 # coverage normalization factor
-covmult = float(args.readlength) / float(args.readlength - args.K + 1)
+#covmult = float(args.readlength) / float(args.readlength - args.K + 1)
 
 strainKmerSets = {}
 
@@ -78,7 +78,7 @@ def scoreStrain(name):
     # kmer coverage: mean coverage of every strain kmer that is in the sample
     kcoverage = float(strainSampleCount) / float(strainSampleKmers.size)
     # genome coverage: mean coverage of every strain kmer
-    gcoverage = covmult * float(strainSampleCount) / float(strainCounts.sum())
+    gcoverage = float(strainSampleCount) / float(strainCounts.sum())
 
     # converse of covered: what fraction of pangenome sample kmers are in this strain?
     accounted = float(strainSampleKmers.size) / float(panSampleKmers.size)
@@ -105,7 +105,7 @@ def scoreStrain(name):
 
         strainSampleWeights = 1.0 / kmerizer.intersect_counts(strainKmers, strainPanCounts, strainSampleKmers)
         countweight = (strainSampleCounts * strainSampleWeights).sum()
-        wcoverage = covmult * countweight / strainTotalWeight
+        wcoverage = countweight / strainTotalWeight
         # wsample = countweight / (1.0 / samplePanCounts).sum()
         #
         specificity = wcoverage / gcoverage
@@ -165,7 +165,8 @@ with h5py.File(args.pan, 'r') as h5pan:
         for s in strainNames:
             strainKmerSet(s)
 
-    rKeys = [k for k in resultFormats] # edited by Tim
+    # print output header
+    rKeys = [k for k in resultFormats if k != "spec" or args.scoring == "weighted"]
     rFormats = [resultFormats[k] for k in rKeys]
     print >>output, "\t".join(rKeys)
     for i in range(args.iterations):           

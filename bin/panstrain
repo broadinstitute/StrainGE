@@ -131,6 +131,8 @@ resultFormats = OrderedDict([("i", "%d"),
 
 print >>sys.stderr, "Loading sample", args.sample
 sample = kmertools.kmerSetFromFile(args.sample)
+sampleKmerTotal = sample.counts.sum()
+print >>sys.stderr, "%.2e total kmers in sample" % (sampleKmerTotal,)
 
 excludeKmers = None
 
@@ -149,9 +151,11 @@ with h5py.File(args.pan, 'r') as h5pan:
 
     # common kmers contains all kmers of sample which are in pangenome
     panSampleKmers = kmerizer.intersect(sample.kmers, pan.kmers)
-    print >>sys.stderr, panSampleKmers.size, "pan kmers in sample"
+    print >>sys.stderr, panSampleKmers.size, "pan kmers in sample",
     # how often each common kmer occurs in sample
     panSampleCounts = kmerizer.intersect_counts(sample.kmers, sample.counts, panSampleKmers)
+    panSampleKmerPct = 100.0 * panSampleCounts.sum() / sampleKmerTotal
+    print >>sys.stderr, "(%.3f%%)" % (panSampleKmerPct,)
     # how often each common kmer occurs in pangenome
     samplePanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, panSampleKmers)
     assert panSampleKmers.size == panSampleCounts.size == samplePanCounts.size, "Intersection kmers & counts differ in size"
@@ -169,7 +173,7 @@ with h5py.File(args.pan, 'r') as h5pan:
     rKeys = [k for k in resultFormats if k != "spec" or args.scoring == "weighted"]
     rFormats = [resultFormats[k] for k in rKeys]
     print >>output, "\t".join(rKeys)
-    for i in range(args.iterations):           
+    for i in range(args.iterations):
         print >>sys.stderr, "Finding strain", i + 1
         results = []
         bestScore = 0
@@ -193,7 +197,7 @@ with h5py.File(args.pan, 'r') as h5pan:
             r["i"] = i
 
         results.sort(lambda a, b: cmp(b["score"], a["score"]))
-        
+
         for r in results[:args.top]:
             rValues = tuple((r[k] for k in rKeys))
             print >>output, ("\t".join(rFormats)) % rValues

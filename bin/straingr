@@ -716,7 +716,7 @@ for bamfile in args.bam:
             compare.log(sampleName)
             if not compareFile:
                 # create comparison output file and print header
-                compareFile = open(baseline.strainName() + ".compare.tsv", 'w')
+                compareFile = open(os.path.join(os.path.dirname(bamfile), baseline.strainName()) + ".compare.tsv", 'w')
                 compare.tabular(compareFile, "sample", True)
             # write tabular output
             compare.tabular(compareFile, sampleName)

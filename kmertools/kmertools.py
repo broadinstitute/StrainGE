@@ -187,7 +187,7 @@ class KmerSet:
         self.kmers = None
         self.counts = None
         self.fingerprint = None
-        # stats
+        # stats from kmerizing, if appropriate
         self.nSeqs = 0
         self.nBases = 0
         self.nKmers = 0
@@ -195,6 +195,7 @@ class KmerSet:
     def __eq__(self, other):
         return self.k == other.k and np.array_equal(self.fingerprint, other.fingerprint) \
                and np.array_equal(self.kmers, other.kmers) and np.array_equal(self.counts, other.counts)
+
 
     def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True, limit=0, prune=0):
         seqFile = openSeqFile(fileName)
@@ -264,6 +265,44 @@ class KmerSet:
         newSet = KmerSet(self.k)
         newSet.kmers, newSet.counts = kmerizer.merge_counts(self.kmers, self.counts, other.kmers, other.counts)
         return newSet
+
+    def intersect(self, kmers):
+        """
+        Compute intersection with given kmers
+        :param kmers: kmers to keep
+        :return: intersected KmerSet
+        """
+        kset = KmerSet(self.k)
+        kset.kmers = kmerizer.intersect(self.kmers, kmers)
+        kset.counts = kmerizer.intersect_counts(self.kmers, self.counts, kset.kmers)
+        return kset
+
+    def exclude(self, kmers):
+        """
+        Return KmerSet with excluded kmers removed.
+        :param kmers: kmers to exclude
+        :return: KmerSet with excluded kmers removed
+        """
+        kset = KmerSet(self.k)
+        kset.kmers = kmerizer.diff(self.kmers, kmers)
+        kset.counts = kmerizer.intersect_counts(self.kmers, self.counts, kset.kmers)
+        return kset
+
+    def mutualIntersect(self, other):
+        """
+        Compute intersection of two kmer sets and reduce both to their common kmers. BOTH sets are modified!
+        :param other: other KmerSet
+        :return: reduced self
+        """
+        intersection = kmerizer.intersect(self.kmers, other.kmers)
+        counts = kmerizer.intersect_counts(self.kmers, self.counts, intersection)
+        self.kmers = intersection
+        self.counts = counts
+
+        otherCounts = kmerizer.intersect_counts(other.kmers, other.counts, intersection)
+        other.kmers = intersection
+        other.counts = otherCounts
+        return self
 
     def printStats(self):
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \

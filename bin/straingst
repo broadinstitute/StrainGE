@@ -35,16 +35,127 @@ cache = args.cache or args.threads > 1
 
 strainKmerSets = {}
 
-def strainKmerSet(strainName):
-    global h5pan, strainKmerSets
-    if strainName in strainKmerSets:
-        return strainKmerSets[strainName]
-    else:
-        kset = kmertools.KmerSet()
-        kset.load_hdf5(h5pan[strainName])
-        if cache:
-            strainKmerSets[strainName] = kset
-        return kset
+class Sample(kmertools.KmerSet):
+    def __init__(self, hdf5file):
+        self.name = kmertools.nameFromPath(hdf5file)
+        print "Loading sample"
+        self.hdf5file = hdf5file
+        h5 = h5py.File(hdf5file, 'r')
+        self.load_hdf5(h5)
+        self.totalCount = self.counts.sum()
+        print self.kmers.size, "distinct kmers,", self.totalCount, "total kmers in sample"
+
+
+class PanGenome(kmertools.KmerSet):
+    def __init__(self, hdf5file):
+        self.hdf5file = hdf5file
+        print "Loading pan genome"
+        self.h5 = h5py.File(hdf5file, 'r')
+        self.load_hdf5(self.h5)
+        # Strains are groups within hdf5 file
+        self.strainNames = [name for name in self.h5.keys() if isinstance(self.h5[name], h5py.Group)]
+        print len(self.strainNames), "strains,", self.kmers.size, "kmers in pan genome"
+        self.strainCache = {}
+
+    def loadStrain(self, name):
+        if name in self.strainCache:
+            return strainCache[name]
+        else:
+            strain = Strain(self, name)
+            self.strainCache[name] = strain
+            return strain
+
+    def scoreSample(self, sample):
+        s = sample.intersect(self.kmers)
+        sample.kmers = s.kmers
+        sample.counts = s.counts
+        print sample.kmers.size, "pan kmers in sample"
+        results = map(lambda s: self.scoreStrain(s, sample), self.strainNames)
+
+    def scoreStrain(self, strainName, sample):
+        strain = self.loadStrain(strainName)
+        return strain.scoreSample(sample)
+
+    def processResults(self, results):
+        results.sort(lambda a, b: cmp(b.score, a.score))
+        print results[:3]
+
+
+class Strain(kmertools.KmerSet):
+    def __init__(self, pan, name):
+        self.name = name
+        self.load_hdf5(pan.h5[name])
+        self.panCounts = kmerizer.intersect_counts(self.kmers, self.counts, pan.kmers)
+        self.distinctKmers = self.kmers.size
+        self.totalKmers = self.counts.sum()
+        assert self.panCounts.size == self.distinctKmers, "Pan count intersection didn't match!"
+
+    def exclude(self, excludeKmers):
+        kset = super(Strain, self).exclude(excludeKmers)
+        self.panCounts = kmerizer.intersect_counts(self.kmers, self.panCounts, kset.kmers)
+        self.kmers = kset.kmers
+        self.counts = kset.counts
+
+    def scoreSample(self, sample, excludes = None):
+        if excludes:
+            self.exclude(excludes)
+
+        # distinct kmers in this strain and sample
+        kmers = kmerizer.intersect(self.kmers, sample.kmers)
+        # how many times each occurred in this strain
+        counts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
+        # how many times each strain kmer occurred in pan genome (for weighting)
+        panCounts = kmerizer.intersect_counts(self.kmers, self.panCounts, kmers)
+        # how many times did each common kmers occurred in sample?
+        sampleCounts = kmerizer.intersect_counts(sample.kmers, sample.counts, kmers)
+        sampleCount = sampleCounts.sum()
+
+        # Compute metrics
+        # what fraction of the distinct kmers are in the sample?
+        covered = float(kmers.size) / float(self.kmers.size)
+        # for each distinct kmer in common, how many times did it occur in the sample relative to the strain?
+        kmerCoverage = float(sampleCount) / float(counts.sum())
+        # mean genome coverage from all my kmers
+        genomeCoverage = float(sampleCount) / float(self.counts.sum())
+
+        # converse of covered: what fraction of pan genome sample kmers are accounted for by this sample?
+        accounted = float(kmers.size) / float(sample.kmers.size)
+        # Lander-Waterman estimate of percentage covered if randomly distributed across genome
+        estCovered = 1.0 - math.exp(-genomeCoverage)
+        # measure of evenness of coverage
+        evenness = covered / estCovered
+
+        weights = counts * (1.0 / panCounts)
+        weighted = (sampleCounts * weights).sum()
+        totalWeight = (self.counts * (1.0 / self.panCounts)).sum()
+        print weighted, totalWeight
+        weightedCoverage = weighted / totalWeight
+        specificity = weightedCoverage / genomeCoverage
+
+        score = covered * evenness * accounted
+
+        results = {"strainname": self.name,
+                   "gkmers": self.totalKmers,
+                   "xkmers": self.kmers.size,
+                   "cov": covered,
+                   "kcov": kmerCoverage,
+                   "gcov": genomeCoverage,
+                   "acct": accounted,
+                   "even": evenness,
+                   "wcov": weightedCoverage,
+                   "spec": specificity,
+                   "score": score}
+
+        print self.name, results
+
+        return results
+
+
+
+
+
+
+
 
 def tabout(things, file=sys.stdout):
     """
@@ -91,28 +202,13 @@ def scoreStrain(name):
 
     # converse of covered: what fraction of pangenome sample kmers are in this strain?
     accounted = float(strainSampleKmers.size) / float(panSampleKmers.size)
+
     # t2 = time.time()
 
     # Lander-Waterman estimate of percentage covered if uniform
     estCovered = 1.0 - math.exp(-gcoverage)
     # measure of evenness of coverage
     evenness = covered / estCovered
-
-    # Weights of each kmer in strain (inverse of occurrence in pangenome)
-    strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
-    strainWeights = 1.0 / strainPanCounts
-    strainTotalWeight = (strainWeights * strainCounts).sum()
-
-    strainSampleWeights = 1.0 / kmerizer.intersect_counts(strainKmers, strainPanCounts, strainSampleKmers)
-    countweight = (strainSampleCounts * strainSampleWeights).sum()
-    print countweight, strainTotalWeight
-    wcoverage = countweight / strainTotalWeight
-    # wsample = countweight / (1.0 / samplePanCounts).sum()
-    #
-    specificity = wcoverage / gcoverage
-
-    #score = covered * accounted * min(specificity, 1 / specificity)
-    score = covered * accounted * evenness
 
     result = {"strainname": name,
               "gkmers": strain.kmers.size,
@@ -121,12 +217,23 @@ def scoreStrain(name):
               "kcov": kcoverage,
               "gcov": gcoverage,
               "acct": accounted,
-              "wcov": wcoverage,
-              "spec": specificity,
-              "even": evenness,
-              "score": score}
+              "even": evenness}
 
-    print name, result
+    # Weights of each kmer in strain (inverse of occurrence in pangenome)
+    strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
+    strainWeights = 1.0 / strainPanCounts
+    strainTotalWeight = (strainWeights * strainCounts).sum()
+
+    strainSampleWeights = 1.0 / kmerizer.intersect_counts(strainKmers, strainPanCounts, strainSampleKmers)
+    countweight = (strainSampleCounts * strainSampleWeights).sum()
+    wcoverage = countweight / strainTotalWeight
+    # wsample = countweight / (1.0 / samplePanCounts).sum()
+    #
+    specificity = wcoverage / gcoverage
+    result["spec"] = specificity
+    #score = covered * accounted * min(specificity, 1 / specificity)
+    score = covered * accounted * evenness
+    result["score"] = score
 
     return result
 
@@ -142,6 +249,12 @@ resultFormats = OrderedDict([("i", "%d"),
                              ("even", "%.3f"),
                              ("spec", "%.2f"),
                              ("score", "%.3f")])
+
+
+pan = PanGenome(args.pan)
+sample = Sample(args.sample)
+pan.scoreSample(sample)
+exit(0)
 
 print >>sys.stderr, "Loading sample", args.sample
 sampleName = os.path.basename(args.sample)

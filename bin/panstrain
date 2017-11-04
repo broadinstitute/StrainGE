@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import sys
 import argparse
 from collections import OrderedDict
@@ -20,7 +21,7 @@ parser.add_argument("-o", "--output", help="output text file (default: standard 
 parser.add_argument("-i", "--iterations", type=int, default=5, help="max strains to look for (default: 5)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
 parser.add_argument("-s", "--score", type=float, default=0.005, help="minimum score")
-parser.add_argument("-e", "--evenness", type=float, default=0.5, help="minimum evenness")
+parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
 parser.add_argument("-S", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
 #parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
 parser.add_argument("-p", "--threads", type=int, default=1, help="Parallel threads (implies --cache)")
@@ -45,6 +46,14 @@ def strainKmerSet(strainName):
             strainKmerSets[strainName] = kset
         return kset
 
+def tabout(things, file=sys.stdout):
+    """
+    Print tab-separated sequence of things to line in file
+    :param things: sequence of things
+    :param file: output file
+    """
+    print >>file, "\t".join([str(x) for x in things])
+    file.flush()
 
 def scoreStrain(name):
     global excludeKmers, panSampleKmers, panSampleCounts
@@ -90,7 +99,9 @@ def scoreStrain(name):
     # measure of evenness of coverage
     evenness = covered / estCovered
 
-    result = {"name": name,
+    result = {"strainname": name,
+              "gkmers": strain.kmers.size,
+              "xkmers": strainKmers.size,
               "cov": covered,
               "kcov": kcoverage,
               "gcov": gcoverage,
@@ -120,7 +131,9 @@ def scoreStrain(name):
 
 
 resultFormats = OrderedDict([("i", "%d"),
-                             ("name", "%s"),
+                             ("strainname", "%s"),
+                             ("gkmers", "%d"),
+                             ("xkmers", "%d"),
                              ("cov", "%.3f"),
                              ("kcov", "%.2f"),
                              ("gcov", "%.2f"),
@@ -130,6 +143,9 @@ resultFormats = OrderedDict([("i", "%d"),
                              ("score", "%.3f")])
 
 print >>sys.stderr, "Loading sample", args.sample
+sampleName = os.path.basename(args.sample)
+if sampleName.endswith(".hdf5"):
+    sampleName = sampleName[:-5]
 sample = kmertools.kmerSetFromFile(args.sample)
 sampleKmerTotal = sample.counts.sum()
 print >>sys.stderr, "%.2e total kmers in sample" % (sampleKmerTotal,)
@@ -154,11 +170,17 @@ with h5py.File(args.pan, 'r') as h5pan:
     print >>sys.stderr, panSampleKmers.size, "pan kmers in sample",
     # how often each common kmer occurs in sample
     panSampleCounts = kmerizer.intersect_counts(sample.kmers, sample.counts, panSampleKmers)
-    panSampleKmerPct = 100.0 * panSampleCounts.sum() / sampleKmerTotal
+    panSampleCount = panSampleCounts.sum()
+    panSampleKmerPct = 100.0 * panSampleCount / sampleKmerTotal
+    panSampleKmerCov = float(panSampleCount) / panSampleKmers.size
     print >>sys.stderr, "(%.3f%%)" % (panSampleKmerPct,)
     # how often each common kmer occurs in pangenome
     samplePanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, panSampleKmers)
     assert panSampleKmers.size == panSampleCounts.size == samplePanCounts.size, "Intersection kmers & counts differ in size"
+    if args.output:
+        tabout(("samplename", "totalkmers", "distinct", "pkmers", "pkcov", "pan%"), output)
+        tabout((sampleName, sampleKmerTotal, sample.kmers.size, panSampleKmers.size,
+                round(panSampleKmerCov, 2), round(panSampleKmerPct, 3)), output)
 
     # release sample from memory
     sample = None
@@ -172,7 +194,7 @@ with h5py.File(args.pan, 'r') as h5pan:
     # print output header
     rKeys = [k for k in resultFormats if k != "spec" or args.scoring == "weighted"]
     rFormats = [resultFormats[k] for k in rKeys]
-    print >>output, "\t".join(rKeys)
+    tabout(rKeys, output)
     for i in range(args.iterations):
         print >>sys.stderr, "Finding strain", i + 1
         results = []
@@ -200,14 +222,14 @@ with h5py.File(args.pan, 'r') as h5pan:
 
         for r in results[:args.top]:
             rValues = tuple((r[k] for k in rKeys))
-            print >>output, ("\t".join(rFormats)) % rValues
+            tabout([fmt % value for fmt, value in zip(rFormats, rValues)], output)
 
         if args.output:
             output.flush()
         else:
             sys.stdout.flush()
 
-        bestKmers = strainKmerSet(results[0]["name"]).kmers
+        bestKmers = strainKmerSet(results[0]["strainname"]).kmers
 
         if excludeKmers is None:
             excludeKmers = bestKmers

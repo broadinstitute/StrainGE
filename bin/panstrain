@@ -108,24 +108,21 @@ def scoreStrain(name):
               "acct": accounted,
               "even": evenness}
 
-    if args.scoring == "weighted":
-        # Weights of each kmer in strain (inverse of occurrence in pangenome)
-        strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
-        strainWeights = 1.0 / strainPanCounts
-        strainTotalWeight = (strainWeights * strainCounts).sum()
+    # Weights of each kmer in strain (inverse of occurrence in pangenome)
+    strainPanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, strainKmers)
+    strainWeights = 1.0 / strainPanCounts
+    strainTotalWeight = (strainWeights * strainCounts).sum()
 
-        strainSampleWeights = 1.0 / kmerizer.intersect_counts(strainKmers, strainPanCounts, strainSampleKmers)
-        countweight = (strainSampleCounts * strainSampleWeights).sum()
-        wcoverage = countweight / strainTotalWeight
-        # wsample = countweight / (1.0 / samplePanCounts).sum()
-        #
-        specificity = wcoverage / gcoverage
-        score = covered * accounted * min(specificity, 1 / specificity)
-        result["spec"] = specificity
-        result["score"] = score
-    else:
-        score = covered * accounted * evenness
-        result["score"] = score
+    strainSampleWeights = 1.0 / kmerizer.intersect_counts(strainKmers, strainPanCounts, strainSampleKmers)
+    countweight = (strainSampleCounts * strainSampleWeights).sum()
+    wcoverage = countweight / strainTotalWeight
+    # wsample = countweight / (1.0 / samplePanCounts).sum()
+    #
+    specificity = wcoverage / gcoverage
+    result["spec"] = specificity
+    #score = covered * accounted * min(specificity, 1 / specificity)
+    score = covered * accounted * evenness
+    result["score"] = score
 
     return result
 
@@ -192,7 +189,7 @@ with h5py.File(args.pan, 'r') as h5pan:
             strainKmerSet(s)
 
     # print output header
-    rKeys = [k for k in resultFormats if k != "spec" or args.scoring == "weighted"]
+    rKeys = [k for k in resultFormats] # if k != "spec" or args.scoring == "weighted"]
     rFormats = [resultFormats[k] for k in rKeys]
     tabout(rKeys, output)
     for i in range(args.iterations):

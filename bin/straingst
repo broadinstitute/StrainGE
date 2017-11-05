@@ -36,8 +36,10 @@ class Sample(kmertools.KmerSet):
         self.hdf5file = hdf5file
         h5 = h5py.File(hdf5file, 'r')
         self.load_hdf5(h5)
-        self.totalCount = self.counts.sum()
-        print self.kmers.size, "distinct kmers,", self.totalCount, "total kmers in sample"
+        self.totalKmers = self.counts.sum()
+        self.distinctKmers = self.kmers.size
+
+        print self.distinctKmers, "distinct kmers,", self.totalKmers, "total kmers in sample"
 
 
 class PanGenome(kmertools.KmerSet):
@@ -60,14 +62,25 @@ class PanGenome(kmertools.KmerSet):
             return strain
 
     def scoreSample(self, sample, outFile=None):
+
         s = sample.intersect(self.kmers)
         sample.kmers = s.kmers
         sample.counts = s.counts
 
+        samplePanKmers = sample.counts.sum()
+        samplePanKcov = float(samplePanKmers) / float(sample.kmers.size)
+        samplePanPct = samplePanKmers * 100.0 / sample.totalKmers
+        print "%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct)
+
+        if outFile:
+
+            tabout(("sample", "totalkmers", "distinct", "pkmers", "pkcov", "pan%"), outFile)
+            tabout((sample.name, sample.totalKmers, sample.distinctKmers, sample.kmers.size,
+                    round(samplePanKcov, 3), round(samplePanPct, 3)), outFile)
+
         excludes = None
 
         for i in xrange(args.iterations):
-            print "Iteration", i, sample.kmers.size, "pan kmers in sample"
 
             if i == 0:
                 r = Result()
@@ -88,7 +101,7 @@ class PanGenome(kmertools.KmerSet):
                 if outFile:
                     tabout(results[t].format(i, human=False), outFile)
 
-            winningStrain = self.loadStrain(winner["strainname"])
+            winningStrain = self.loadStrain(winner["strain"])
             excludes = winningStrain.kmers
             sample.exclude(excludes)
 
@@ -114,9 +127,10 @@ class Strain(kmertools.KmerSet):
         if excludes is not None:
             self.exclude(excludes)
 
-        metrics = {"strainname": self.name,
-                   "gkmers": self.totalKmers,
-                   "ikmers": self.kmers.size}
+        metrics = {"strain": self.name,
+                   "gkmers": self.distinctKmers,
+                   "ikmers": self.kmers.size,
+                   "skmers": sample.kmers.size}
 
         if self.kmers.size < args.minfrac * self.distinctKmers:
             return Result(metrics)
@@ -184,37 +198,45 @@ class Result:
     def score(self):
         if not self.metrics:
             return 0
-        s = self.metrics["score"]
-        return s if s >= args.score and self.metrics["even"] >= args.evenness else 0
+        s = self["wscore"]
+        return s if s >= args.score and self["even"] >= args.evenness else 0
 
-    resultFormats = OrderedDict([("i", "%d"),
-                                 ("strainname", "%s"),
-                                 ("gkmers", "%d"),
-                                 ("ikmers", "%d"),
-                                 ("cov", "%.3f"),
-                                 ("kcov", "%.2f"),
-                                 ("gcov", "%.2f"),
-                                 ("acct", "%.3f"),
-                                 ("even", "%.3f"),
-                                 ("spec", "%.2f"),
-                                 ("score", "%.3f"),
-                                 ("wcov", "%.2f"),
-                                 ("wscore", "%.3f"),
-                                 ])
 
     def header(self, human=False):
-        return [k for k in Result.resultFormats.keys()]
+        return [Result.humanStrainFormat % k if k == "strain" and human else k for k in Result.resultFormats.keys()]
 
     def format(self, iteration, human=False):
         self.metrics["i"] = iteration
-        values = [fmt % (self[key],) for key, fmt in Result.resultFormats.iteritems()]
+        values = [self.formatValue(key, human) for key in Result.resultFormats]
         return values
+
+    def formatValue(self, thing, human=False):
+        fmt = Result.humanStrainFormat if thing == "strain" and human else Result.resultFormats[thing]
+        return fmt % (self[thing],)
 
     def __getitem__(self, item):
         return self.metrics.get(item, 0) if self.metrics else None
 
     def __repr__(self):
         return str(self.metrics)
+
+    resultFormats = OrderedDict([("i", "%d"),
+                                 ("strain", "%s"),
+                                 ("gkmers", "%d"),
+                                 ("ikmers", "%d"),
+                                 ("skmers", "%d"),
+                                 ("cov", "%.3f"),
+                                 ("kcov", "%.3f"),
+                                 ("gcov", "%.3f"),
+                                 ("acct", "%.3f"),
+                                 ("even", "%.3f"),
+                                 ("score", "%.3f"),
+                                 ("spec", "%.3f"),
+                                 ("wcov", "%.3f"),
+                                 ("wscore", "%.3f"),
+                                 ])
+    humanStrainFormat = "%-30s"
+
 
 def tabout(things, file=sys.stdout):
     """

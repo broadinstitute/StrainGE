@@ -95,7 +95,6 @@ class PanGenome(kmertools.KmerSet):
             if winner.score() < args.score:
                 break
 
-
             for t in xrange(args.top):
                 tabout(results[t].format(i, human=True))
                 if outFile:
@@ -155,7 +154,7 @@ class Strain(kmertools.KmerSet):
         # what fraction of the distinct kmers are in the sample?
         covered = float(kmers.size) / float(self.kmers.size)
         # for each distinct kmer in common, how many times did it occur in the sample relative to the strain?
-        kmerCoverage = float(sampleCount) / float(counts.sum())
+        kmerCoverage = float(sampleCount) / float(sampleCounts.size)
         # mean genome coverage from all my kmers
         genomeCoverage = float(sampleCount) / float(self.counts.sum())
 
@@ -256,3 +255,6 @@ outFile = open(args.output, 'w') if args.output else None
 pan = PanGenome(args.pan)
 sample = Sample(args.sample)
 pan.scoreSample(sample, outFile)
+if outFile:
+    outFile.close()
+

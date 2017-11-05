@@ -113,7 +113,7 @@ def scoreStrain(name):
     #score = covered * accounted * min(specificity, 1 / specificity)
     score = covered * accounted * evenness
 
-    result = {"strainname": name,
+    result = {"strain": name,
               "gkmers": strain.kmers.size,
               "xkmers": strainKmers.size,
               "cov": covered,
@@ -129,7 +129,7 @@ def scoreStrain(name):
 
 
 resultFormats = OrderedDict([("i", "%d"),
-                             ("strainname", "%s"),
+                             ("strain", "%s"),
                              ("gkmers", "%d"),
                              ("xkmers", "%d"),
                              ("cov", "%.3f"),
@@ -176,7 +176,7 @@ with h5py.File(args.pan, 'r') as h5pan:
     samplePanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, panSampleKmers)
     assert panSampleKmers.size == panSampleCounts.size == samplePanCounts.size, "Intersection kmers & counts differ in size"
     if args.output:
-        tabout(("samplename", "totalkmers", "distinct", "pkmers", "pkcov", "pan%"), output)
+        tabout(("sample", "totalkmers", "distinct", "pkmers", "pkcov", "pan%"), output)
         tabout((sampleName, sampleKmerTotal, sample.kmers.size, panSampleKmers.size,
                 round(panSampleKmerCov, 2), round(panSampleKmerPct, 3)), output)
 
@@ -227,7 +227,7 @@ with h5py.File(args.pan, 'r') as h5pan:
         else:
             sys.stdout.flush()
 
-        bestKmers = strainKmerSet(results[0]["strainname"]).kmers
+        bestKmers = strainKmerSet(results[0]["strain"]).kmers
 
         if excludeKmers is None:
             excludeKmers = bestKmers

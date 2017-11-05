@@ -20,7 +20,7 @@ parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size
 parser.add_argument("-o", "--output", help="output text file (default: standard out)")
 parser.add_argument("-i", "--iterations", type=int, default=5, help="max strains to look for (default: 5)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
-parser.add_argument("-s", "--score", type=float, default=0.005, help="minimum score")
+parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
 parser.add_argument("-S", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
 #parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")

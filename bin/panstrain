@@ -105,7 +105,6 @@ def scoreStrain(name):
 
     strainSampleWeights = 1.0 / kmerizer.intersect_counts(strainKmers, strainPanCounts, strainSampleKmers)
     countweight = (strainSampleCounts * strainSampleWeights).sum()
-    print countweight, strainTotalWeight
     wcoverage = countweight / strainTotalWeight
     # wsample = countweight / (1.0 / samplePanCounts).sum()
     #
@@ -125,8 +124,6 @@ def scoreStrain(name):
               "spec": specificity,
               "even": evenness,
               "score": score}
-
-    print name, result
 
     return result
 

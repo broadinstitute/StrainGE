@@ -270,23 +270,23 @@ class KmerSet:
         """
         Compute intersection with given kmers
         :param kmers: kmers to keep
-        :return: intersected KmerSet
+        :return: reduced version of self
         """
-        kset = KmerSet(self.k)
-        kset.kmers = kmerizer.intersect(self.kmers, kmers)
-        kset.counts = kmerizer.intersect_counts(self.kmers, self.counts, kset.kmers)
-        return kset
+        intersection = kmerizer.intersect(self.kmers, kmers)
+        self.counts = kmerizer.intersect_counts(self.kmers, self.counts, intersection)
+        self.kmers = intersection
+        return self
 
     def exclude(self, kmers):
         """
-        Return KmerSet with excluded kmers removed.
+        Return this KmerSet with excluded kmers removed.
         :param kmers: kmers to exclude
-        :return: KmerSet with excluded kmers removed
+        :return: reduced version of self
         """
-        kset = KmerSet(self.k)
-        kset.kmers = kmerizer.diff(self.kmers, kmers)
-        kset.counts = kmerizer.intersect_counts(self.kmers, self.counts, kset.kmers)
-        return kset
+        excluded = kmerizer.diff(self.kmers, kmers)
+        self.counts = kmerizer.intersect_counts(self.kmers, self.counts, excluded)
+        self.kmers = excluded
+        return self
 
     def mutualIntersect(self, other):
         """

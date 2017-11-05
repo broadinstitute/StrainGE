@@ -29,8 +29,6 @@ parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()
 
-strainKmerSets = {}
-
 class Sample(kmertools.KmerSet):
     def __init__(self, hdf5file):
         self.name = kmertools.nameFromPath(hdf5file)
@@ -61,7 +59,7 @@ class PanGenome(kmertools.KmerSet):
             self.strainCache[name] = strain
             return strain
 
-    def scoreSample(self, sample):
+    def scoreSample(self, sample, outFile=None):
         s = sample.intersect(self.kmers)
         sample.kmers = s.kmers
         sample.counts = s.counts
@@ -70,18 +68,28 @@ class PanGenome(kmertools.KmerSet):
 
         for i in xrange(args.iterations):
             print "Iteration", i, sample.kmers.size, "pan kmers in sample"
-            results = map(lambda s: self.scoreStrain(s, sample, excludes), self.strainNames)
-            top = self.processResults(results)
 
-            if not top:
-                return
+            if i == 0:
+                r = Result()
+                tabout(r.header(human=True))
+                if outFile:
+                    tabout(r.header(human=False), outFile)
+
+            results = map(lambda s: self.scoreStrain(s, sample, excludes), self.strainNames)
+            results.sort(lambda a, b: cmp(b.score(), a.score()))
+
+            winner = results[0]
+            if winner.score() < args.score:
+                break
+
 
             for t in xrange(args.top):
-                print top[t]
+                tabout(results[t].format(i, human=True))
+                if outFile:
+                    tabout(results[t].format(i, human=False), outFile)
 
-            winnerName = top[0]["strainname"]
-            winner = self.loadStrain(winnerName)
-            excludes = winner.kmers
+            winningStrain = self.loadStrain(winner["strainname"])
+            excludes = winningStrain.kmers
             sample.exclude(excludes)
 
 
@@ -91,8 +99,6 @@ class PanGenome(kmertools.KmerSet):
         return strain.scoreSample(sample, excludes)
 
     def processResults(self, results):
-        results = list(filter(lambda r: r and r["score"] >= args.score and r["even"] >= args.evenness, results))
-        results.sort(lambda a, b: cmp(b["score"], a["score"]))
         return results
 
 
@@ -108,14 +114,21 @@ class Strain(kmertools.KmerSet):
         if excludes is not None:
             self.exclude(excludes)
 
+        metrics = {"strainname": self.name,
+                   "gkmers": self.totalKmers,
+                   "ikmers": self.kmers.size}
+
         if self.kmers.size < args.minfrac * self.distinctKmers:
-            print self.name, "not enough kmers:", self.kmers.size
-            return None
+            return Result(metrics)
 
         strainPanCounts = kmerizer.intersect_counts(self.pan.kmers, self.pan.counts, self.kmers)
 
         # distinct kmers in this strain and sample
         kmers = kmerizer.intersect(self.kmers, sample.kmers)
+
+        if kmers.size == 0:
+            return Result(metrics)
+
         # how many times each occurred in this strain
         counts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
         # how many times each strain kmer occurred in pan genome (for weighting)
@@ -151,21 +164,57 @@ class Strain(kmertools.KmerSet):
         score = covered * evenness * accounted
         weightedScore = score * min(specificity, 1.0 / specificity)
 
-        results = {"strainname": self.name,
-                   "gkmers": self.totalKmers,
-                   "xkmers": self.kmers.size,
-                   "cov": covered,
-                   "kcov": kmerCoverage,
-                   "gcov": genomeCoverage,
-                   "acct": accounted,
-                   "even": evenness,
-                   "wcov": weightedCoverage,
-                   "spec": specificity,
-                   "score": score,
-                   "wscore": weightedScore}
+        metrics["cov"] = covered
+        metrics["kcov"] = kmerCoverage
+        metrics["gcov"] = genomeCoverage
+        metrics["acct"] = accounted
+        metrics["even"] = evenness
+        metrics["wcov"] = weightedCoverage
+        metrics["spec"] = specificity
+        metrics["score"] = score
+        metrics["wscore"] = weightedScore
 
-        return results
+        return Result(metrics)
 
+
+class Result:
+    def __init__(self, metrics=None):
+        self.metrics = metrics
+
+    def score(self):
+        if not self.metrics:
+            return 0
+        s = self.metrics["score"]
+        return s if s >= args.score and self.metrics["even"] >= args.evenness else 0
+
+    resultFormats = OrderedDict([("i", "%d"),
+                                 ("strainname", "%s"),
+                                 ("gkmers", "%d"),
+                                 ("ikmers", "%d"),
+                                 ("cov", "%.3f"),
+                                 ("kcov", "%.2f"),
+                                 ("gcov", "%.2f"),
+                                 ("acct", "%.3f"),
+                                 ("even", "%.3f"),
+                                 ("spec", "%.2f"),
+                                 ("score", "%.3f"),
+                                 ("wcov", "%.2f"),
+                                 ("wscore", "%.3f"),
+                                 ])
+
+    def header(self, human=False):
+        return [k for k in Result.resultFormats.keys()]
+
+    def format(self, iteration, human=False):
+        self.metrics["i"] = iteration
+        values = [fmt % (self[key],) for key, fmt in Result.resultFormats.iteritems()]
+        return values
+
+    def __getitem__(self, item):
+        return self.metrics.get(item, 0) if self.metrics else None
+
+    def __repr__(self):
+        return str(self.metrics)
 
 def tabout(things, file=sys.stdout):
     """
@@ -176,19 +225,12 @@ def tabout(things, file=sys.stdout):
     print >>file, "\t".join([str(x) for x in things])
     file.flush()
 
-resultFormats = OrderedDict([("i", "%d"),
-                             ("strainname", "%s"),
-                             ("gkmers", "%d"),
-                             ("xkmers", "%d"),
-                             ("cov", "%.3f"),
-                             ("kcov", "%.2f"),
-                             ("gcov", "%.2f"),
-                             ("acct", "%.3f"),
-                             ("even", "%.3f"),
-                             ("spec", "%.2f"),
-                             ("score", "%.3f")])
 
+##################
+##### MAIN
+##################
 
+outFile = open(args.output, 'w') if args.output else None
 pan = PanGenome(args.pan)
 sample = Sample(args.sample)
-pan.scoreSample(sample)
+pan.scoreSample(sample, outFile)

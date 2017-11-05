@@ -1,36 +1,28 @@
 #!/usr/bin/env python
-import os
-import sys
+
 import argparse
 from collections import OrderedDict
 import math
-from multiprocessing import Pool
-import numpy as np
+import sys
+import h5py
 import kmertools
 import kmerizer
-import h5py
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-f", "--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
-                    action="store_true")
-parser.add_argument("-v", "--verbose", action='store_true', help="More output")
-parser.add_argument("-K", type=int, default=kmertools.DEFAULT_K, help="Kmer size (default: %d)" % (kmertools.DEFAULT_K))
 parser.add_argument("-o", "--output", help="output text file (default: standard out)")
 parser.add_argument("-i", "--iterations", type=int, default=5, help="max strains to look for (default: 5)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
-parser.add_argument("-m", "--minfrac", type=float, default=0.05, help="minimum fraction of original kmers in strain")
-parser.add_argument("-s", "--score", type=float, default=0.005, help="minimum score")
+parser.add_argument("-f", "--minfrac", type=float, default=0.01, help="minimum fraction of original kmers in strain")
+parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
-parser.add_argument("-S", "--scoring", choices=("default", "weighted"), default="default", help="scoring algorithm")
-#parser.add_argument("-r", "--readlength", type=int, default=101, help="Read length (for better coverage estimates, default: 101)")
-parser.add_argument("-p", "--threads", type=int, default=1, help="Parallel threads (implies --cache)")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()
 
 class Sample(kmertools.KmerSet):
     def __init__(self, hdf5file):
+        super(Sample, self).__init__()
         self.name = kmertools.nameFromPath(hdf5file)
         print "Loading sample"
         self.hdf5file = hdf5file
@@ -44,6 +36,7 @@ class Sample(kmertools.KmerSet):
 
 class PanGenome(kmertools.KmerSet):
     def __init__(self, hdf5file):
+        super(PanGenome, self).__init__()
         self.hdf5file = hdf5file
         print "Loading pan genome"
         self.h5 = h5py.File(hdf5file, 'r')
@@ -84,7 +77,7 @@ class PanGenome(kmertools.KmerSet):
 
             if i == 0:
                 r = Result()
-                tabout(r.header(human=True))
+                tabout(r.header(human=True, strainLength=max([len(name) for name in pan.strainNames])))
                 if outFile:
                     tabout(r.header(human=False), outFile)
 
@@ -116,6 +109,7 @@ class PanGenome(kmertools.KmerSet):
 
 class Strain(kmertools.KmerSet):
     def __init__(self, pan, name):
+        super(Strain, self).__init__()
         self.name = name
         self.pan = pan
         self.load_hdf5(pan.h5[name])
@@ -193,6 +187,7 @@ class Strain(kmertools.KmerSet):
 class Result:
     def __init__(self, metrics=None):
         self.metrics = metrics
+        self.humanReadableFormat = "%-30s"
 
     def score(self):
         if not self.metrics:
@@ -201,8 +196,10 @@ class Result:
         return s if s >= args.score and self["even"] >= args.evenness else 0
 
 
-    def header(self, human=False):
-        return [Result.humanStrainFormat % k if k == "strain" and human else k for k in Result.resultFormats.keys()]
+    def header(self, human=False, strainLength=None):
+        if strainLength:
+            self.humanReadableFormat = "%" + str(-(strainLength + 1)) + "s"
+        return [self.humanReadableFormat % k if k == "strain" and human else k for k in Result.resultFormats.keys()]
 
     def format(self, iteration, human=False):
         self.metrics["i"] = iteration
@@ -210,7 +207,7 @@ class Result:
         return values
 
     def formatValue(self, thing, human=False):
-        fmt = Result.humanStrainFormat if thing == "strain" and human else Result.resultFormats[thing]
+        fmt = self.humanReadableFormat if thing == "strain" and human else Result.resultFormats[thing]
         return fmt % (self[thing],)
 
     def __getitem__(self, item):
@@ -234,7 +231,6 @@ class Result:
                                  ("wcov", "%.3f"),
                                  ("wscore", "%.3f"),
                                  ])
-    humanStrainFormat = "%-30s"
 
 
 def tabout(things, file=sys.stdout):

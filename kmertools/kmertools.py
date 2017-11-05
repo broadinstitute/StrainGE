@@ -176,7 +176,7 @@ def similarityNumeratorDenominator(kmers1, kmers2, scoring="jaccard"):
     return intersection, denom
 
 
-class KmerSet:
+class KmerSet(object):
     """
     Holds array of kmers and their associated counts & stats.
     """

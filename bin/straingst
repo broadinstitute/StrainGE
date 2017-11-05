@@ -77,7 +77,7 @@ class PanGenome(kmertools.KmerSet):
 
             if i == 0:
                 r = Result()
-                tabout(r.header(human=True, strainLength=max([len(name) for name in pan.strainNames])))
+                tabout(r.header(human=True))
                 if outFile:
                     tabout(r.header(human=False), outFile)
 
@@ -187,7 +187,7 @@ class Strain(kmertools.KmerSet):
 class Result:
     def __init__(self, metrics=None):
         self.metrics = metrics
-        self.humanReadableFormat = "%-30s"
+        self.humanReadableFormat = "%-32s"
 
     def score(self):
         if not self.metrics:
@@ -196,9 +196,7 @@ class Result:
         return s if s >= args.score and self["even"] >= args.evenness else 0
 
 
-    def header(self, human=False, strainLength=None):
-        if strainLength:
-            self.humanReadableFormat = "%" + str(-(strainLength + 1)) + "s"
+    def header(self, human=False):
         return [self.humanReadableFormat % k if k == "strain" and human else k for k in Result.resultFormats.keys()]
 
     def format(self, iteration, human=False):

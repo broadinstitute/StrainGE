@@ -16,11 +16,11 @@ parser = argparse.ArgumentParser(description="""
 Strain Genome Recovery (StrainGR) Tool
 """)
 parser.add_argument("--table", "-t", action="store_true",
-                    help="generate tabular output in <bambasename>.tsv")
+                    help="generate tabular output in <bambasename>.stats.tsv")
 parser.add_argument("--compare", "-c", action='store_true',
                     help="compare against first listed strain bam")
-parser.add_argument("--delta", "-d", action='store_true',
-                    help="log specific differences between strains")
+parser.add_argument("--details", "-d", action='store_true',
+                    help="log specific differences between reference and strain(s) in <bambasename>.details.tsv")
 parser.add_argument("--verbose", "-v",
                     help="increase output verbosity", action="store_true")
 parser.add_argument("--minqual", type=int, default=5,
@@ -52,8 +52,24 @@ class Reference:
     """
     def __init__(self, fasta):
         self.scaffolds = [scaffold for scaffold in kmertools.openSeqFile(fasta)]
-        self.length = sum([len(s) for s in self.scaffolds])
+        self.lengths = [len(s) for s in self.scaffolds]
+        self.length = sum(self.lengths)
         print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
+
+
+    def scaffoldCoord(self, coord):
+        """
+        Turn a zero-based genome-wide coordinate into a scaffold & coordinate within scaffold (1-based)
+        :param coord: zero-based genome-wide coordinate
+        :return: (scaffold, scaffoldCoord)
+        """
+        offset = 0
+        for scaffold, length in zip(self.scaffolds, self.lengths):
+            if coord < offset + length:
+                return (scaffold.name, coord + 1 - offset)
+            offset += length
+
+
 
 class Sample:
     """
@@ -132,11 +148,22 @@ class Sample:
         # If tabular output has been requested, create a tab-separated values output file with entries
         # for each scaffold and total.
         if args.table:
-            with open(os.path.join(os.path.dirname(self.bamfile), self.strainName() + ".tsv"), 'w') as outfile:
+            fileName = self.strainName() + ".stats.tsv"
+            print >>logfile, "Writing stats to", fileName
+            logfile.flush()
+            with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
                 for s in scaffolds:
                     s.summaryStats.tabular(outfile, s.name)
                 self.summaryStats.tabular(outfile, "TOTAL")
+
+        if args.details:
+            fileName = self.strainName() + ".details.tsv"
+            print >>logfile, "Writing allele differences to", fileName
+            logfile.flush()
+            with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
+                self.details(outfile)
+
 
     def poissonCutoff(self, mean, cutoff = 0.9999999):
         """
@@ -176,6 +203,65 @@ class Sample:
         if basename.lower().endswith(".bam"):
             basename = basename[:-4]
         return basename
+
+    def details(self, outfile):
+        """
+        Write allele differences from reference to output file
+        :param outfile: output file
+        """
+        print >>outfile, "\t".join(["scaffold", "coord", "ref", "alleles"])
+        for i in xrange(self.length):
+            mask = self.strong[i]
+            if mask and mask != self.refmask[i]:
+                scaffold, coord = self.reference.scaffoldCoord(i)
+                ref = self.maskString(self.refmask[i])
+                alleles = self.strongWeakString(self.strong[i], self.weak[i])
+                print >>outfile, "\t".join([scaffold, str(coord), ref, alleles])
+
+    def compareDetails(self, other, outfile):
+        """
+        Write allele differences between this and another strain to output file
+        :param other: other strain
+        :param outfile: output file
+        """
+        print >>outfile, "\t".join(["scaffold", "coord", "ref", self.strainName(), other.strainName()])
+        for i in xrange(self.length):
+            mask = self.strong[i]
+            otherMask = other.strong[i]
+            if mask and otherMask and mask != otherMask:
+                scaffold, coord = self.reference.scaffoldCoord(i)
+                ref = self.maskString(self.refmask[i])
+                alleles = self.strongWeakString(self.strong[i], self.weak[i])
+                otherAlleles = self.strongWeakString(other.strong[i], other.weak[i])
+                print >>outfile, "\t".join([scaffold, str(coord), ref, alleles, otherAlleles])
+
+    def maskString(self, mask):
+        """
+        Turn an allele bitmask into a string of alleles
+        :param mask: allele bitmask
+        :return: string representation of alleles
+        """
+        return ','.join([Pileup.ALLELES[a] for a in xrange(Pileup.N_ALLELES) if mask & Pileup.ALLELE_MASKS[a]])
+
+    def strongWeakString(self, strong, weak):
+        """
+        Return a string representing strong/weak alleles. Multiple alleles will be separted by commas. If there
+        are weak alleles which aren't strong, they will be separtaed from the strong alleles by a '/'.
+        Example: A,C/T (A & C are strong, T is weak)
+        :param strong: string mask
+        :param weak: weak mask
+        :return: strong/weak allele string
+        """
+        s = '.'
+        if strong:
+            s = self.maskString(strong)
+        w = weak & ~strong
+        if w:
+            s += '/' + self.maskString(w)
+        return s
+
+
+
 
 
 
@@ -714,7 +800,7 @@ for bamfile in args.bam:
     sample = Sample(reference, bamfile)
     sampleName = sample.strainName()
     if args.compare:
-        # if we're comparing, use first sample bam as baseline
+        # if we're comparing, use first sample bam as baseli
         if not baseline:
             baseline = sample
         else:
@@ -726,3 +812,6 @@ for bamfile in args.bam:
                 compare.tabular(compareFile, "sample", True)
             # write tabular output
             compare.tabular(compareFile, sampleName)
+            if args.details:
+                with open(os.path.join(os.path.dirname(bamfile), sample.strainName()) + ".compare.details.tsv", 'w') as compareDetails:
+                    baseline.compareDetails(sample, compareDetails)

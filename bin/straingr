@@ -44,8 +44,6 @@ args = parser.parse_args()
 logfile = open(args.log, 'w') if args.log else sys.stdout
 
 
-
-
 class Reference:
     """
     Holds reference sequence information...scaffolds in Biopython SeqRecord objects.
@@ -68,7 +66,6 @@ class Reference:
             if coord < offset + length:
                 return (scaffold.name, coord + 1 - offset)
             offset += length
-
 
 
 class Sample:
@@ -206,7 +203,11 @@ class Sample:
 
     def details(self, outfile):
         """
-        Write allele differences from reference to output file
+        Write allele differences from reference to output file. Example:
+        NZ_CP012633.1	1876026	A	C
+        NZ_CP012633.1	2247779	G	T/G
+        NZ_CP012633.1	2730361	C	C,G
+
         :param outfile: output file
         """
         print >>outfile, "\t".join(["scaffold", "coord", "ref", "alleles"])
@@ -220,7 +221,11 @@ class Sample:
 
     def compareDetails(self, other, outfile):
         """
-        Write allele differences between this and another strain to output file
+        Write allele differences between this and another strain to output file. Example:
+        NZ_CP012633.1	98692	A	C	A
+        NZ_CP012633.1	99146	G	G	G,T
+        NZ_CP012633.1	122725	T	A/C,T	T
+
         :param other: other strain
         :param outfile: output file
         """
@@ -235,14 +240,6 @@ class Sample:
                 otherAlleles = self.strongWeakString(other.strong[i], other.weak[i])
                 print >>outfile, "\t".join([scaffold, str(coord), ref, alleles, otherAlleles])
 
-    def maskString(self, mask):
-        """
-        Turn an allele bitmask into a string of alleles
-        :param mask: allele bitmask
-        :return: string representation of alleles
-        """
-        return ','.join([Pileup.ALLELES[a] for a in xrange(Pileup.N_ALLELES) if mask & Pileup.ALLELE_MASKS[a]])
-
     def strongWeakString(self, strong, weak):
         """
         Return a string representing strong/weak alleles. Multiple alleles will be separted by commas. If there
@@ -252,17 +249,22 @@ class Sample:
         :param weak: weak mask
         :return: strong/weak allele string
         """
-        s = '.'
-        if strong:
-            s = self.maskString(strong)
+        s = self.maskString(strong)
         w = weak & ~strong
         if w:
             s += '/' + self.maskString(w)
         return s
 
-
-
-
+    def maskString(self, mask):
+        """
+        Turn an allele bitmask into a string of alleles
+        :param mask: allele bitmask
+        :return: string representation of alleles
+        """
+        if mask:
+            return ','.join([Pileup.ALLELES[a] for a in xrange(Pileup.N_ALLELES) if mask & Pileup.ALLELE_MASKS[a]])
+        else:
+            return ''
 
 
 class ScaffoldPileups:
@@ -612,8 +614,7 @@ class CallStats:
         else:
             print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CallStats.FIELDS, self.values)])
 
-
-
+xs
 class CompareStats:
     """
     Class to compare stats from two samples

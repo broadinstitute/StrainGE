@@ -614,7 +614,7 @@ class CallStats:
         else:
             print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CallStats.FIELDS, self.values)])
 
-xs
+
 class CompareStats:
     """
     Class to compare stats from two samples

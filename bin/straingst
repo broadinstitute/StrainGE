@@ -8,8 +8,60 @@ import h5py
 import kmertools
 import kmerizer
 
-"""
-Strain Genome Search Tool (StrainGST)
+DOC = """Strain Genome Search Tool (StrainGST)
+
+Finds strains from a pan genome in a given sample.
+
+Sample metrics:
+
+    sample: sample name
+    
+    totalkmers: total kmers in sample; generally number of bases in all reads * (1 - (K - 1) / readlength)
+    
+    distinct: distinct kmers in sample 
+    
+    pkmers: total pan genome kmers in sample (including counts)
+    
+    pkcov: mean count of pan kmers in sample
+    
+    pan%: percentage of pan genome kmers in sample, i.e., pan genome abundance
+
+Strain scoring metrics:
+    
+    i: strain-finding iteration
+    
+    strain: name of strain
+    
+    gkmers: distinct kmers in strain genome
+    
+    ikmers: distinct kmers being evaluated this iteration after excluding those from prior winning strains
+    
+    skmers: distinct pan-genome kmers in sample this iteration after excluding those from prior winning strains
+    
+    cov: covered...fraction of genomic kmers in sample
+    
+    kcov: kmer coverage...for each genomic kmer present in sample, mean number of times it occurs
+    
+    gcov: genome coverage...for each genomic kmer, mean number of times it occurs
+    
+    acct: fraction of pan-genome sample kmers accounted for by this strain
+    
+    even: measure of evenness of coverage based on Lander-Waterman relation; if coverage is randomly sampled 
+          through the genome, this will be near 1.0. If coverage is concentrated in a subset of the genome, 
+          it will be lower.
+    
+    score0: simple scoring metric (old panstrain score)
+    
+    spec: specificity is a measure of how specific the sample kmers are to this strain. If they are randomly
+          sampled, this should be close to 1. A low number indicates that the sample kmers that hit this
+          strain also tend to be found in other strains. A high number indicates that more kmers specific to this
+          strain are found that would be exected from random sampling, e.g., maybe the sample only contains a
+          chunk of this genome. spec = wcov / cov
+          
+    wcov: weighted coverage; like genome coverage, but each genomic kmer is weighted by the inverse of the number
+          of times it occurs in the pan genome. 
+          
+    score: new scoring metric using kmer weighting. score = score0 * min(spec, 1/spec)
 """
 
 parser = argparse.ArgumentParser()
@@ -319,7 +371,7 @@ class Result:
 
     def __getitem__(self, item):
         """
-        Allow indexing a la dict, returning 0 for non-existant metrics
+        Allow indexing a la dict, returning 0 for non-existent metrics
         :param item: item (metric name)
         :return: item value
         """
@@ -344,6 +396,7 @@ class Result:
                                  ("wcov", "%.3f"),
                                  ("score", "%.3f"),
                                  ])
+
 
 
 def tabout(things, file=sys.stdout):

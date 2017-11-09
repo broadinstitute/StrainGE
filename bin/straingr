@@ -19,8 +19,8 @@ parser.add_argument("--table", "-t", action="store_true",
                     help="generate tabular output in <bambasename>.stats.tsv")
 parser.add_argument("--compare", "-c", action='store_true',
                     help="compare against first listed strain bam")
-parser.add_argument("--details", "-d", action='store_true',
-                    help="log specific differences between reference and strain(s) in <bambasename>.details.tsv")
+parser.add_argument("--details", "-d", action='count',
+                    help="log specific differences between reference and strain(s) in <bambasename>.details.tsv; if used twice, include ref matches")
 parser.add_argument("--verbose", "-v",
                     help="increase output verbosity", action="store_true")
 parser.add_argument("--minqual", type=int, default=5,
@@ -213,7 +213,8 @@ class Sample:
         print >>outfile, "\t".join(["scaffold", "coord", "ref", "alleles"])
         for i in xrange(self.length):
             mask = self.strong[i]
-            if mask and mask != self.refmask[i]:
+            # if double-details, then include ref matches!
+            if mask and (mask != self.refmask[i] or args.details > 1):
                 scaffold, coord = self.reference.scaffoldCoord(i)
                 ref = self.maskString(self.refmask[i])
                 alleles = self.strongWeakString(self.strong[i], self.weak[i])
@@ -233,7 +234,7 @@ class Sample:
         for i in xrange(self.length):
             mask = self.strong[i]
             otherMask = other.strong[i]
-            if mask and otherMask and mask != otherMask:
+            if mask and otherMask and (mask != otherMask or args.details > 1):
                 scaffold, coord = self.reference.scaffoldCoord(i)
                 ref = self.maskString(self.refmask[i])
                 alleles = self.strongWeakString(self.strong[i], self.weak[i])
@@ -572,7 +573,8 @@ class CallStats:
         # covered if we have any strong call
         self.covered = np.count_nonzero(strong)
         self.coveredPct = pct(self.covered, length)
-        self.coverage = float(coverage.sum()) / float(length)
+        # exclude high coverage areas when computing mean coverage
+        self.coverage = float(coverage[~high].sum()) / float(length)
         self.median = int(round(np.median(coverage)))
         # evenness is measure of expected "covered" vs coverage (low if coverage concentrated in small portion)
         lw = landerWaterman(self.coverage)

@@ -574,7 +574,7 @@ class CallStats:
         self.covered = np.count_nonzero(strong)
         self.coveredPct = pct(self.covered, length)
         # exclude high coverage areas when computing mean coverage
-        self.coverage = float(coverage[~high].sum()) / float(length)
+        self.coverage = float(coverage[high==0].sum()) / float(length)
         self.median = int(round(np.median(coverage)))
         # evenness is measure of expected "covered" vs coverage (low if coverage concentrated in small portion)
         lw = landerWaterman(self.coverage)

@@ -23,6 +23,7 @@ def extract(seqFile, outputDir):
         # remove all after comma
         name = seq.description.split(',')[0]
         name = name.replace("Escherichia coli", "E_coli")
+        name = name.replace("Enterococcus", "En")
         name = name.replace("Shigella", "S")
         name = name.replace(" strain", "")
         name = name.replace(" str.", "")

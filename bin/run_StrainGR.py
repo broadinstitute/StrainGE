@@ -169,6 +169,23 @@ def run_panstrain(kmerfiles, pankmer, score=0.005, evenness=0.5, k=23, fingerpri
         print "ERROR! Exception while running panstrain: ", e
 
 
+
+def run_straingst(kmerfiles, pankmer, score=0.005, evenness=0.5, k=23):
+    """Run straingst on samples"""
+    try:
+        straingst = [os.path.join(bin_folder, "straingst"), "-K", str(k), "-o", "straingst.k{}.tsv".format(k), "-s", str(score), "-e", str(evenness), pankmer]
+        straingst.extend(kmerfiles)
+        print >>sys.stderr, "Running straingst strain detection. Please wait..."
+        with open("straingst.k{}.log".format(k), 'wb') as w:
+            subprocess.check_call(straingst, stdout=w, stderr=w)
+        return True
+    except (KeyboardInterrupt, SystemExit):
+        print >>sys.stderr, "Interrupting..."
+    except Exception as e:
+        print "ERROR! Exception while running straingst: ", e
+
+
+
 def parse_panstrain(k=23):
     """Parse panstrain results"""
     results = {}
@@ -187,7 +204,27 @@ def parse_panstrain(k=23):
             results[sample].append(temp[2])
     
     return results
-            
+
+def parse_straingst(k=23):
+    """Parse straingst results"""
+    results = {}
+    straingst_file = "straingst.k{}.tsv".format(k)
+    if not os.path.isfile(straingst_file):
+        print >>sys.stderr, "No straingst results found"
+        return
+
+    with open(straingst_file, 'rb') as f:
+        f.readline() # skip general info header
+        f.readline() # skip general info
+        f.readlin() # skip strain header
+        for line in f:
+            temp = line.strip().split("\t")
+            sample = temp[0]
+            if sample not in results:
+                results[sample] = []
+            results[sample].append(temp[2])
+    
+    return results  
 
 
 def write_bowtie2_commands(results, kmerfiles, reference, threads=1):
@@ -302,11 +339,11 @@ def main():
     # parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
     parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors at high coverage)",
                         action="store_true")
-    parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set (faster for many references)",
-                        action="store_true")
+    #parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set (faster for many references)",
+    #                    action="store_true")
     parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
-    parser.add_argument("--panstrain", action="store_true", help="Use panstrain (instead of treepath) to estimate strains")
-    parser.add_argument("--no-cache", action="store_true", help="Do not cache pan genome kmer files (saves RAM)")
+    parser.add_argument("--treepath", action="store_true", help="Use treepath (instead of straingst) to estimate strains")
+    #parser.add_argument("--no-cache", action="store_true", help="Do not cache pan genome kmer files (saves RAM)")
     parser.add_argument("-s", "--min_score", type=float, default=0.1, help="minimum score of a node in a tree to keep (default: 0.1)")
     parser.add_argument("--no-bowtie2", help="Do not run bowtie2 alignments", 
                         action="store_true")
@@ -319,15 +356,15 @@ def main():
         print >>sys.stderr, "No reference specified, assuming current working directory"
         args.reference = os.path.curdir
 
-    if args.panstrain:
-        pankmer = os.path.join(args.reference, "pankmer.hdf5")
-        if not os.path.isfile(pankmer):
-            print >>sys.stderr, "Cannot find pan genome kmer file in {}".format(args.reference)
-            sys.exit(1)
-    else:
+    if args.treepath:
         kmertree = os.path.join(args.reference, "tree.hdf5")
         if not os.path.isfile(kmertree):
             print >>sys.stderr, "Cannot find tree.hdf5 file in {}".format(args.reference)
+            sys.exit(1)
+    else:
+        pankmer = os.path.join(args.reference, "pankmer.hdf5")
+        if not os.path.isfile(pankmer):
+            print >>sys.stderr, "Cannot find pan genome kmer file in {}".format(args.reference)
             sys.exit(1)
 
     kmersize_file = os.path.join(args.reference, "kmersize")
@@ -352,22 +389,23 @@ def main():
         print >>sys.stderr, "ERROR! No kmerized samples found"
         sys.exit(1)
 
-
-    if args.panstrain:
-        cache = not args.no_cache
-        if not run_panstrain(kmerfiles.keys(), pankmer, k=k, fingerprint=args.fingerprint, cache=cache):
-            sys.exit(1)
-        results = parse_panstrain(k)
-        if not results:
-            print >>sys.stderr, "ERROR! No panstrain results"
-            sys.exit(1)
-    else:
+    if args.treepath:
         if not run_treepath(kmerfiles.keys(), kmertree, min_score=args.min_score, k=k):
             sys.exit(1)
 
         results = parse_treepath(k)
         if not results:
             print >>sys.stderr, "ERROR! No treepath results"
+            sys.exit(1)
+    else:
+        # cache = not args.no_cache
+        # if not run_panstrain(kmerfiles.keys(), pankmer, k=k, fingerprint=args.fingerprint, cache=cache):
+        if not run_straingst(kmerfiles.keys(), pankmer, k=k):
+            sys.exit(1)
+        # results = parse_panstrain(k)
+        results = parse_straingst(k)
+        if not results:
+            print >>sys.stderr, "ERROR! No panstrain results"
             sys.exit(1)
 
     if args.no_bowtie2:

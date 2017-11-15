@@ -48,7 +48,6 @@ def __kmerseq(cmd):
         raise e
 
 
-
 def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, threads=1):
     """Kmerize a list of fasta files"""
     try:

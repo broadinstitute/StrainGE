@@ -169,7 +169,6 @@ def run_panstrain(kmerfiles, pankmer, score=0.005, evenness=0.5, k=23, fingerpri
         print "ERROR! Exception while running panstrain: ", e
 
 
-
 def run_straingst(kmerfiles, pankmer, score=0.005, evenness=0.5, k=23):
     """Run straingst on samples"""
     try:
@@ -183,7 +182,6 @@ def run_straingst(kmerfiles, pankmer, score=0.005, evenness=0.5, k=23):
         print >>sys.stderr, "Interrupting..."
     except Exception as e:
         print "ERROR! Exception while running straingst: ", e
-
 
 
 def parse_panstrain(k=23):
@@ -204,6 +202,7 @@ def parse_panstrain(k=23):
             results[sample].append(temp[2])
     
     return results
+
 
 def parse_straingst(k=23):
     """Parse straingst results"""

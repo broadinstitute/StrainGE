@@ -334,8 +334,8 @@ def run_straingr(bamfiles, reference):
 ###
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("reference", help="directory containing reference files")
     parser.add_argument("sample", nargs="+", help="sample sequence file(s). If paired end reads, keep pairs together with ','")
-    parser.add_argument("-r", "--reference", help="directory containing reference files")
     # parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
     parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors at high coverage)",
                         action="store_true")

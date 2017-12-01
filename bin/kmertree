@@ -16,7 +16,7 @@ treeNodeCount = 0
 
 class KmerTreeNode:
     """Class to recursively hold tree representation"""
-    def __init__(self, kmers, name = None, children = [], counts = None):
+    def __init__(self, kmers, name = None, children = [], counts = None, similarity = None):
         global treeNodeCount
         if name:
             self.name = name
@@ -29,6 +29,10 @@ class KmerTreeNode:
         self.score = None
         self.common = None
         self.denominator = None
+        if similarity:
+            self.distance = 1 - similarity
+        else:
+            self.distance = 1
 
     def isLeaf(self):
         return not self.children
@@ -43,9 +47,9 @@ class KmerTreeNode:
 
     def nwk(self):
         if self.isLeaf():
-            return "%s:%g" % (self.name, self.score)
+            return "%s:%g" % (self.name, self.distance)
         else:
-            return "(" + ",".join([c.nwk() for c in self.children]) + "):%g" % self.score 
+            return "(" + ",".join([c.nwk() for c in self.children]) + "):%g" % self.distance 
 
     def saveHdf5(self, h5node, compress = True):
         if compress is True:
@@ -154,7 +158,7 @@ def similarityScores(tree, scores, simscore="jaccard"):
     pairScores.sort(lambda a, b: cmp(b[1], a[1]))
     return pairScores
 
-def newTreeNode(children):
+def newTreeNode(children, similarity=None):
     """
     Make a new node, propagating up the kmers in common among the children, leaving the children with
     their kmers not in common.
@@ -162,7 +166,7 @@ def newTreeNode(children):
     :return: the new node
     """
     intersection = reduce(lambda x, y: kmerizer.intersect(x.kmers, y.kmers), children)
-    node = KmerTreeNode(intersection, children=children)
+    node = KmerTreeNode(intersection, children=children, similarity=similarity)
     for child in children:
         child.kmers = np.setdiff1d(child.kmers, intersection, assume_unique=True)
     return node
@@ -173,7 +177,7 @@ def buildTree(tree, scores, simscore="jaccard"):
     closePair, score = pairScores[0]
     if score == 0:
         print >>sys.stderr, "Warning! Zero score detected. No shared k-mers left."
-    newNode = newTreeNode(list(closePair))
+    newNode = newTreeNode(list(closePair), similarity=score)
     newTree = [x for x in tree if x not in closePair]
     newTree.append(newNode)
     print "%.5f" % score,

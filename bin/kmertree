@@ -171,6 +171,8 @@ def newTreeNode(children):
 def buildTree(tree, scores, simscore="jaccard"):
     pairScores = similarityScores(tree, scores, simscore)
     closePair, score = pairScores[0]
+    if score == 0:
+        print >>sys.stderr, "Warning! Zero score detected. No shared k-mers."
     newNode = newTreeNode(list(closePair))
     newTree = [x for x in tree if x not in closePair]
     newTree.append(newNode)

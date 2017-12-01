@@ -47,9 +47,9 @@ class KmerTreeNode:
 
     def nwk(self):
         if self.isLeaf():
-            return "%s:%g" % (self.name, self.distance)
+            return self.name
         else:
-            return "(" + ",".join([c.nwk() for c in self.children]) + "):%g" % self.distance 
+            return "(" + ",".join(["%s:%g" % (c.nwk(), self.distance) for c in self.children]) + ")"
 
     def saveHdf5(self, h5node, compress = True):
         if compress is True:

@@ -134,10 +134,17 @@ def kmerSetFromFile(filePath, k = DEFAULT_K):
 def similarityScore(kmers1, kmers2, scoring="jaccard"):
     """Compute Jaccard similarity index"""
     # count of kmers in common
+    if kmers1.size == 0 or kmers2.size == 0:
+        return 0
     intersection = float(kmerizer.count_common(kmers1, kmers2))
+    if intersection == 0:
+        return 0
     if scoring == "jaccard":
         # Use Jaccard similarity index
-        score = intersection / (kmers1.size + kmers2.size - intersection)
+        denom = kmers1.size + kmers2.size - intersection
+        if denom == 0:
+            return 0
+        score = intersection / denom
     elif scoring == "minsize":
         # Use intersection / min_size (proper subset scores 1.0)
         score = intersection / min(kmers1.size, kmers2.size)

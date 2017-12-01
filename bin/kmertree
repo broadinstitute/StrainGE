@@ -43,9 +43,9 @@ class KmerTreeNode:
 
     def nwk(self):
         if self.isLeaf():
-            return self.name
+            return "%s:%g" % (self.name, self.score)
         else:
-            return "(" + ",".join([c.nwk() for c in self.children]) + ")"
+            return "(" + ",".join([c.nwk() for c in self.children]) + "):%g" % self.score 
 
     def saveHdf5(self, h5node, compress = True):
         if compress is True:
@@ -172,7 +172,7 @@ def buildTree(tree, scores, simscore="jaccard"):
     pairScores = similarityScores(tree, scores, simscore)
     closePair, score = pairScores[0]
     if score == 0:
-        print >>sys.stderr, "Warning! Zero score detected. No shared k-mers."
+        print >>sys.stderr, "Warning! Zero score detected. No shared k-mers left."
     newNode = newTreeNode(list(closePair))
     newTree = [x for x in tree if x not in closePair]
     newTree.append(newNode)

@@ -418,4 +418,6 @@ pan = PanGenome(args.pan)
 sample = Sample(args.sample)
 pan.scoreSample(sample, outFile)
 if outFile:
+    # print line once finished to denote complete file
+    print >>outFile, "# Done."
     outFile.close()

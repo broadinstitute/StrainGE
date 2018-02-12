@@ -429,7 +429,7 @@ class Pileup:
         alignment = read.alignment
 
         # if this is a paired read, make sure the pairs are properly aligned
-        if (not alignment.is_paired) or (not alignment.is_proper_pair):
+        if alignment.is_paired and not alignment.is_proper_pair:
             self.bad += 1
             return
 

@@ -189,7 +189,11 @@ class Sample:
         :param coverage: expected coverage
         :return: scaled minimum gap (using args.mingap as baseline)
         """
-        return int(round(args.mingap / landerWaterman(coverage)))
+        lw = landerWaterman(coverage)
+        if lw > 1:
+            return int(round(args.mingap / lw))
+        else:
+            return int(round(args.mingap))
 
     def strainName(self):
         """

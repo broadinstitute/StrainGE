@@ -124,7 +124,10 @@ class Sample:
         print >>logfile, "Total length=%d coverage=%.2f median=%.1f cutoff=%d mingap=%d" % (self.length, meanCoverage, medianCoverage, highCutoff, mingap),
 
         nonzero = self.coverage[self.coverage > 0]
-        nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
+        if nonzero.size > 0:
+            nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
+        else:
+            nonzeroCoverage = 0
         print >>logfile, "nonzero=%d nzcoverage=%.2f" % (nonzero.size, nonzeroCoverage)
         logfile.flush()
 

@@ -440,10 +440,11 @@ class Pileup:
             return
 
         # check that inferred insert size is at least read length
-        tlen = alignment.template_length
-        if abs(tlen) < alignment.query_length:
-            self.bad += 1
-            return
+        if alignment.is_paired:
+            tlen = alignment.template_length
+            if abs(tlen) < alignment.query_length:
+                self.bad += 1
+                return
 
         # get base quality (note this is next base if deletion, but we won't use that)
         pos = read.query_position_or_next

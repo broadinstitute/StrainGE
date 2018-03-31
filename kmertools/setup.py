@@ -6,9 +6,10 @@ setup (name = 'kmertools',
        author = 'Bruce Walker',
        author_email = 'bruce@w1bw.us',
        description = 'Kmer generation and manipulation modules',
+       install_requires = ['pysam', 'h5py', 'numpy'],
        py_modules = ['kmertools', 'grtools'],
-       ext_modules = [Extension('kmerizer', sources = ['kmerizer.c'])],
-       include_dirs=[numpy.get_include()])
+       ext_modules = [Extension('kmerizer', sources = ['kmerizer.c'], include_dirs = [numpy.get_include()])]
+       )
 
 
 

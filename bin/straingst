@@ -71,7 +71,7 @@ parser.add_argument("-t", "--top", type=int, default=1, help="How many best matc
 parser.add_argument("-f", "--minfrac", type=float, default=0.01, help="minimum fraction of original kmers in strain")
 parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
-parser.add_argument("-v", "--verbose", action='store-true', help="verbose output")
+parser.add_argument("-v", "--verbose", action='store_true', help="verbose output")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()

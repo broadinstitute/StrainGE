@@ -71,6 +71,7 @@ parser.add_argument("-t", "--top", type=int, default=1, help="How many best matc
 parser.add_argument("-f", "--minfrac", type=float, default=0.01, help="minimum fraction of original kmers in strain")
 parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
+parser.add_argument("-v", "--verbose", action='store-true', help="verbose output")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()
@@ -174,7 +175,7 @@ class PanGenome(kmertools.KmerSet):
                     tabout(r.header(human=False), outFile)
 
             # Score all strains and sort results by score
-            results = map(lambda s: self.scoreStrain(s, sample, excludes), self.strainNames)
+            results = map(lambda s: self.scoreStrain(s, sample, excludes, i), self.strainNames)
             results.sort(lambda a, b: cmp(b.score(), a.score()))
 
             winner = results[0]
@@ -197,7 +198,7 @@ class PanGenome(kmertools.KmerSet):
 
         return winners
 
-    def scoreStrain(self, strainName, sample, excludes=None):
+    def scoreStrain(self, strainName, sample, excludes=None, iteration=0):
         """
         Load a strain and score it against sample, optionally excluding an array of kmers
         :param strainName: strain name (name of group in PanGenome hdf5 file)
@@ -207,7 +208,12 @@ class PanGenome(kmertools.KmerSet):
         """
 
         strain = self.loadStrain(strainName)
-        return strain.scoreSample(sample, excludes)
+        result = strain.scoreSample(sample, excludes)
+
+        if args.verbose:
+            result.format(iteration, True)
+
+        return result
 
 
 class Strain(kmertools.KmerSet):

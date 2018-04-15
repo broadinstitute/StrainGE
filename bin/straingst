@@ -211,7 +211,7 @@ class PanGenome(kmertools.KmerSet):
         result = strain.scoreSample(sample, excludes)
 
         if args.verbose:
-            result.format(iteration, True)
+            print result.format(iteration, True)
 
         return result
 

@@ -322,6 +322,13 @@ class KmerSet(object):
         self.fingerprint.sort()
         return self.fingerprint
 
+    def fingerprintAsKmerSet(self):
+        assert self.fingerprint is not None
+        kset = KmerSet(k=self.k)
+        kset.kmers = self.fingerprint
+        kset.counts = np.ones_like(kset.kmers, dtype=np.uint64)
+        return kset
+
     def freqFilter(self, minFreq = 1, maxFreq = None):
         condition = (self.counts >= minFreq)
         if maxFreq:

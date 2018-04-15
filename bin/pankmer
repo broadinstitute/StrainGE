@@ -8,7 +8,7 @@ import h5py
 parser = argparse.ArgumentParser()
 parser.add_argument("-o", "--output", help="pangenome output hdf5 file")
 parser.add_argument("--K", type=int, default=kmertools.DEFAULT_K, help="Kmer size")
-parser.add_argument("--fingerprint", "-f", action="store_true", help="Generate MinHash fingerprint")
+parser.add_argument("--fingerprint", "-f", action="store_true", help="use MinHash fingerprints rather than whole genomes")
 parser.add_argument('strains', nargs='+', help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
 
@@ -21,6 +21,9 @@ with h5py.File(args.output, 'w') as h5:
 
         kset = kmertools.kmerSetFromFile(s)
 
+        if args.fingerprint:
+            kset = kset.fingerprintAsKmerSet()
+
         strainGroup = h5.create_group(name)
 
         kset.save_hdf5(strainGroup, compress="gzip")
@@ -29,9 +32,6 @@ with h5py.File(args.output, 'w') as h5:
             panKmerSet = kset
         else:
             panKmerSet = panKmerSet.mergeKmerSet(kset)
-
-    if args.fingerprint:
-        panKmerSet.minHash()
 
     panKmerSet.save_hdf5(h5, compress="gzip")
 

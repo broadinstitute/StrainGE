@@ -3,6 +3,7 @@
 import argparse
 from collections import OrderedDict
 import math
+import multiprocessing
 import sys
 import h5py
 import kmertools
@@ -72,6 +73,7 @@ parser.add_argument("-f", "--minfrac", type=float, default=0.01, help="minimum f
 parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
 parser.add_argument("-v", "--verbose", action='store_true', help="verbose output")
+parser.add_argument("-p", "--threads", type=int, default=1, help="parallelism")
 parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
 parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
 args = parser.parse_args()
@@ -164,6 +166,12 @@ class PanGenome(kmertools.KmerSet):
         # Excludes will contain kmers removed from consideration because they were in a found strain
         excludes = None
         winners = []
+        if args.threads > 1:
+            print "Loading reference kmers"
+            for s in self.strainNames:
+                self.loadStrain(s)
+
+
 
         for i in xrange(args.iterations):
 
@@ -175,7 +183,18 @@ class PanGenome(kmertools.KmerSet):
                     tabout(r.header(human=False), outFile)
 
             # Score all strains and sort results by score
-            results = map(lambda s: self.scoreStrain(s, sample, excludes, i), self.strainNames)
+            if args.threads > 1:
+
+                def scoreStrain(s):
+                    strain = self.loadStrain(s)
+                    return strain.scoreSample(sample, excludes)
+
+                p = multiprocessing.Pool(args.threads)
+                results = p.map(scoreStrain, self.strainNames)
+                p.close()
+            else:
+                results = map(lambda s: self.scoreStrain(s, sample, excludes, i), self.strainNames)
+
             results.sort(lambda a, b: cmp(b.score(), a.score()))
 
             winner = results[0]
@@ -193,7 +212,10 @@ class PanGenome(kmertools.KmerSet):
             winners.append(winningStrain)
 
             # Exclude kmers from winning strain from sample (and from each strain next iteration)
-            excludes = winningStrain.kmers
+            if args.threads > 1:
+                excludes = np.unique(np.concatenate((excludes, bestKmers)))
+            else:
+                excludes = winningStrain.kmers
             sample.exclude(excludes)
 
         return winners
@@ -283,7 +305,9 @@ class Strain(kmertools.KmerSet):
         genomeCoverage = float(sampleCount) / float(self.counts.sum())
 
         # converse of covered: what fraction of pan genome sample kmers are accounted for by this sample?
-        accounted = float(kmers.size) / float(sample.kmers.size)
+        #accounted = float(kmers.size) / float(sample.kmers.size)
+        # Changed to include all kmers with counts, not just distinct kmers. --bruce, 16 Apr 18
+        accounted = float(sampleCount) / float(sample.counts.sum())
         # Lander-Waterman estimate of percentage covered if randomly distributed across genome
         estCovered = 1.0 - math.exp(-genomeCoverage)
         # measure of evenness of coverage

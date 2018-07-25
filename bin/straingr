@@ -33,6 +33,8 @@ parser.add_argument("--mingap", type=int, default=2000,
                     help="minimum contiguous uncovered (Gap) region to flag")
 parser.add_argument("--minfrac", type=float, default=0.1,
                     help="minimum fraction of evidence to confirm presence (with minconfirm)")
+parser.add_argument("--gaps", "-g",
+                    help="print gaps (large uncoverged regions)", action="store_true")
 parser.add_argument("--log", "-l",
                     help="log file")
 parser.add_argument("reference",
@@ -67,6 +69,18 @@ class Reference:
                 return (scaffold.name, coord + 1 - offset)
             offset += length
 
+    def scaffoldToGenomeCoord(self, scaffoldName, coord):
+        """
+        Turn a 1-based scaffold coordinate into a 0-based genome-wide coordinate
+        :param scaffoldName: scaffold name
+        :param coord: 1-based scaffold coordinate
+        :return: genomeCoord
+        """
+        offset = 0
+        for scaffold, length in zip(self.scaffolds, self.lengths):
+            if scaffold.name == scaffoldName:
+                return offset + coord - 1
+            offset += length
 
 class Sample:
     """
@@ -144,6 +158,11 @@ class Sample:
 
         self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
         self.summaryStats.log("TOTAL")
+        if args.gaps:
+            for g in self.gaps:
+                print >>logfile, "Gap:", g, \
+                    self.reference.scaffoldToGenomeCoord(g.id, g.start), \
+                    self.reference.scaffoldToGenomeCoord(g.id, g.stop)
 
         # If tabular output has been requested, create a tab-separated values output file with entries
         # for each scaffold and total.

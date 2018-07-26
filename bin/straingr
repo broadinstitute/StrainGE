@@ -840,8 +840,9 @@ for bamfile in args.bam:
                 # create comparison output file and print header
                 compareFile = open(os.path.join(os.path.dirname(bamfile), baseline.strainName()) + ".compare.tsv", 'w')
                 compare.tabular(compareFile, "sample", True)
+                compareFile.flush()
             # write tabular output
             compare.tabular(compareFile, sampleName)
             if args.details:
-                with open(os.path.join(os.path.dirname(bamfile), sample.strainName()) + ".compare.details.tsv", 'w') as compareDetails:
+                with open(os.path.join(os.path.dirname(bamfile), baseline.strainName() + '-' + sample.strainName()) + ".compare.details.tsv", 'w') as compareDetails:
                     baseline.compareDetails(sample, compareDetails)

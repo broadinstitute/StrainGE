@@ -189,21 +189,20 @@ class Sample:
         Calculate the Poisson CDF and find where it reaches the cutoff. For higher coverages, use Gaussian instead.
         Default cutoff is one part in 10M, so not likely to occur in a typical bacterial genome.
         """
-        if mean > 10:
-            # for higher coverage, use gaussian distribution
-            gi = norm.ppf(cutoff, loc=mean, scale=math.sqrt(mean))
-            return int(math.ceil(gi))
-        else:
+        if mean < 50:
             # for lower coverage, use poisson
             i = 0
             ifact = 1.0
             expmean = math.exp(-mean)
             cdf = 0.0
             while cdf < cutoff:
-                cdf += expmean * math.pow(mean, i) / ifact
+                cdf += expmean * math.pow(mean, float(i)) / ifact
                 i += 1
                 ifact *= i
             return i - 1
+        else:
+            return int(math.ceil(mean * 1.5 + 15.0))
+
 
     def gapCutoff(self, coverage):
         """

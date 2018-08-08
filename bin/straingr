@@ -289,10 +289,22 @@ class Sample:
         :return: string representation of alleles
         """
         if mask:
-            return ','.join([Pileup.ALLELES[a] for a in xrange(Pileup.N_ALLELES) if mask & Pileup.ALLELE_MASKS[a]])
+            return ','.join([Alleles.ALLELES[a] for a in xrange(Alleles.N_ALLELES) if mask & Alleles.ALLELE_MASKS[a]])
         else:
             return ''
 
+class Alleles:
+    # bases and their indicies (plus I for insertion, D for deletion)
+    ALLELES = "ACGTID"
+    A = 0
+    C = 1
+    G = 2
+    T = 3
+    I = 4
+    D = 5
+    N_ALLELES = len(ALLELES)
+    # we note presence of alleles by setting a bit corresponding to the allele index above
+    ALLELE_MASKS = 1 << np.arange(N_ALLELES, dtype=np.int32)
 
 class ScaffoldPileups:
     """
@@ -300,6 +312,8 @@ class ScaffoldPileups:
     Detail information is contained in Pileup objects for each locus; summary information is in numpy arrays (coverage,
     strong, weak, ...) with one element per locus.
     """
+
+
     def __init__(self, name, sequence):
         self.name = name
         self.sequence = sequence
@@ -307,10 +321,22 @@ class ScaffoldPileups:
 
         # large memory requirement done this way (object per locus). could be refactored by having multidimensional
         # array with allele evidence for the whole scaffold.
-        self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
-        # pileup stats
+        #self.pileups = np.array([Pileup(base) for base in sequence], dtype=np.dtype(object))
         self.refmask = np.zeros(self.length, dtype=np.uint8)
+        for i, base in enumerate(sequence):
+            refindex = Alleles.ALLELES.find(base)
+            # allele bitmask corresponding to reference base
+            self.refmask[i] = (1 << refindex) if refindex >= 0 else 0
+
+        # pileup stats
+        # second dimension is count, qualsum
+        self.alleles = np.zeros((self.length, 2, Alleles.N_ALLELES), dtype=np.int32)
+        # good alignments at this position
         self.coverage = np.zeros(self.length, dtype=np.uint32)
+        # alignments covering this position but rejected for some reason (bad pairing, poor quality, etc)
+        self.bad = np.zeros(self.length, dtype=np.uint32)
+        # otherwise good alignments with low mapping quality (probably because this is a repeat)
+        self.lowmq = np.zeros(self.length, dtype=np.uint32)
         # allele calls: strong and weak are both byte arrays with one bit set for each present allele (A,C,G,T + ins + del)
         self.strong = np.zeros(self.length, dtype=np.uint8)
         self.weak = np.zeros(self.length, dtype=np.uint8)
@@ -319,6 +345,8 @@ class ScaffoldPileups:
         self.summaryStats = None
         # list of Region objects for uncovered regions
         self.gaps = []
+
+        # initialize refindex
 
     def makePileups(self, bam):
         """
@@ -332,17 +360,158 @@ class ScaffoldPileups:
 
         for column in bam.pileup(self.name):
             refpos = column.reference_pos
-            self.pileups[refpos].add_reads(column.pileups)
+            self.add_reads(refpos, column.pileups)
 
         for i in xrange(self.length):
-            p = self.pileups[i]
-            self.coverage[i] = p.depth()
-            self.refmask[i] = p.refmask
+            self.coverage[i] = self.depth(i)
 
         self.meancoverage = float(self.coverage.sum()) / float(self.length)
 
         print >>logfile, "coverage=%.2f" %self.meancoverage
         logfile.flush()
+
+
+    def add_reads(self, loc, pileup_reads):
+        """Add a bunch of pysam.PileupRead objects to this pileup"""
+        for read in pileup_reads:
+            self.add_read(loc, read)
+
+    def add_read(self, loc, read):
+        """Add a pysam.PileupRead object to this pileup"""
+        alignment = read.alignment
+
+        # if this is a paired read, make sure the pairs are properly aligned
+        if alignment.is_paired and not alignment.is_proper_pair:
+            self.bad[loc] += 1
+            return
+
+        # restrict ourselves to full-length alignments (not clipped)
+        if alignment.query_alignment_length != alignment.query_length:
+            # alignment is clipped
+            self.bad[loc] += 1
+            return
+
+        # check that inferred insert size is at least read length
+        if alignment.is_paired:
+            tlen = alignment.template_length
+            if abs(tlen) < alignment.query_length:
+                self.bad[loc] += 1
+                return
+
+        # get base quality (note this is next base if deletion, but we won't use that)
+        pos = read.query_position_or_next
+        qual = alignment.query_qualities[pos]
+        if qual < args.minqual:
+            self.bad[loc] += 1
+            return
+
+        # check for decent mapping quality
+        mq = alignment.mapping_quality
+        # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
+        if mq < args.minmq:
+            self.lowmq[loc] += 1
+            return
+
+        if read.indel:
+            if read.is_del:
+                # deletion
+                baseIndex = Alleles.D
+                # if the base isn't there, base qual doesn't make sense, so just use mq
+                qual = mq
+            else:
+                # then it must be an insertion
+                baseIndex = Alleles.I
+        else:
+            # base call must be real base (e.g., not N)
+            base = alignment.query_sequence[pos]
+            baseIndex = Alleles.ALLELES.find(base)
+            if baseIndex < 0:
+                self.bad[loc] += 1
+                return
+
+        # We're good! Update the pileup stats...
+        q = min(qual, mq)
+        self.alleles[loc, 0, baseIndex] += 1
+        self.alleles[loc, 1, baseIndex] += q
+
+    def callAllelesLoc(self, loc):
+        """
+        Calls alleles present at this locus.
+        "strong" contains the bits of alleles with sufficient evidnece for a confident call
+        "weak" contains those with any evidence at all
+        "confirmed" is set if there is strong evidence for reference base
+        """
+        minconfirm = args.minconfirm
+        minfrac = args.minfrac
+
+        quals = self.alleles[loc, 1]
+        qualsum = float(quals.sum())
+        # qualfraction is array containing fraction of evidence for each allele
+        qualfraction = quals / qualsum
+
+        # Any alleles which have any evidence at all
+        evidence = quals > 0
+        # boolean * mask will give array of 0 where boolean is false, else allele, then sum() sets them all!
+        self.weak[loc] = (evidence * Alleles.ALLELE_MASKS).sum()
+
+        # Alleles with sufficient evidence to confirm (minimum qual sum and minimum qual fraction)
+        confirmed = np.logical_and(quals > minconfirm, qualfraction > minfrac)
+        self.strong[loc] = (confirmed * Alleles.ALLELE_MASKS).sum()
+
+        if args.verbose and self.strong and self.refmask != self.strong:
+            print self.refmask[loc], self.alleles[loc, 0], self.alleles[loc, 1], \
+                qualfraction, self.weak[loc], self.strong[loc]
+
+    def depth(self, loc):
+        """
+        :return: Count of all good reads (int)
+        """
+        return self.alleles[loc, 0].sum()
+
+    def qual_total(self, loc):
+        """
+        :return: Sum of all quality evidence (int)
+        """
+        return self.alleles[loc, 1].sum()
+
+    def total_depth(self, loc):
+        """
+        :return: Count of all reads, including those rejected for some reason (int)
+        """
+        return self.depth(loc) + self.bad[loc]
+
+    def covered(self, loc):
+        """
+        :return: Does this pileup have enough data to consider this locus covered? (boolean)
+        """
+        return self.qual_total(loc) >= args.minconfirm
+
+    def poormq(self, loc):
+        """
+        :return: Poor mapping quality at this position? (boolean)
+        """
+        # heuristic: more low mapping quality than "good" coverage
+        return self.lowmq[loc] > self.depth(loc)
+
+    def ref_qual(self, loc):
+        """
+        :return: sum of quality evidence for reference base (int)
+        """
+        return self.alleles[loc, 1, self.refindex]
+
+    def ref_fraction(self, loc):
+        """
+        :return: Fraction of evidence which supports reference base (float)
+        """
+        return float(self.ref_qual(loc)) / float(self.qual_total(loc))
+
+    def confirmed(self, loc):
+        """
+        :return: Does this pileup confirm the reference? (boolean)
+        """
+        rq = self.ref_qual(loc)
+        return rq >= args.minconfirm and (rq == self.qual_total(loc) or self.ref_fraction(loc) > args.consensus)
+
 
     def callAlleles(self, highCutoff):
         """
@@ -361,10 +530,7 @@ class ScaffoldPileups:
 
         for i in xrange(self.length):
             if self.coverage[i] and not self.highCoverage[i]:
-                p = self.pileups[i]
-                p.callAlleles()
-                self.strong[i] = p.strong
-                self.weak[i] = p.weak
+                self.callAllelesLoc(i)
 
 
     def findGaps(self, mingap):
@@ -378,9 +544,8 @@ class ScaffoldPileups:
         """
         lastCovered = -1
         for i in xrange(self.length):
-            p = self.pileups[i]
             # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
-            if p.strong or p.poormq():
+            if self.strong[i] or self.poormq(i):
                 if lastCovered >= 0 and i - lastCovered > mingap:
                     self.gaps.append(Region(self.name, lastCovered+1, i-1))
                 lastCovered = i
@@ -394,189 +559,6 @@ class ScaffoldPileups:
         """
         self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
         self.summaryStats.log()
-
-
-class Pileup:
-    """
-    Class to process pileup information; that is,
-    all the alignment information corresponding
-    to a given reference coordinate.
-    """
-
-    # bases and their indicies (plus I for insertion, D for deletion)
-    ALLELES = "ACGTID"
-    A = 0
-    C = 1
-    G = 2
-    T = 3
-    I = 4
-    D = 5
-    N_ALLELES = len(ALLELES)
-    # we note presence of alleles by setting a bit corresponding to the allele index above
-    ALLELE_MASKS = 1 << np.arange(N_ALLELES, dtype=np.int32)
-
-
-    def __init__(self, refbase):
-        """
-        :param scaffold: reference sequence
-        :param pos: coordinate in reference (0-based)
-        :param pileup_reads: pileup objects from pysam
-        """
-
-        # first dimension is count, qualsum
-        self.alleles = np.zeros((2, Pileup.N_ALLELES), dtype=np.int32)
-        # index into allele array for reference base
-        refindex = Pileup.ALLELES.find(refbase)
-        # allele bitmask corresponding to reference base
-        self.refmask = (1 << refindex) if refindex >= 0 else 0
-        # alignments covering this position but rejected for some reason (bad pairing, poor quality, etc)
-        self.bad = 0
-        # otherwise good alignments with low mapping quality (probably because this is a repeat)
-        self.lowmq = 0
-        # bitmask for recording strong evidence of alleles
-        self.strong = 0
-        # bitmask for recording weak (any) evidence of alleles
-        self.weak = 0
-
-    def add_reads(self, pileup_reads):
-        """Add a bunch of pysam.PileupRead objects to this pileup"""
-        for read in pileup_reads:
-            self.add_read(read)
-
-    def add_read(self, read):
-        """Add a pysam.PileupRead object to this pileup"""
-        alignment = read.alignment
-
-        # if this is a paired read, make sure the pairs are properly aligned
-        if alignment.is_paired and not alignment.is_proper_pair:
-            self.bad += 1
-            return
-
-        # restrict ourselves to full-length alignments (not clipped)
-        if alignment.query_alignment_length != alignment.query_length:
-            # alignment is clipped
-            self.bad += 1
-            return
-
-        # check that inferred insert size is at least read length
-        if alignment.is_paired:
-            tlen = alignment.template_length
-            if abs(tlen) < alignment.query_length:
-                self.bad += 1
-                return
-
-        # get base quality (note this is next base if deletion, but we won't use that)
-        pos = read.query_position_or_next
-        qual = alignment.query_qualities[pos]
-        if qual < args.minqual:
-            self.bad += 1
-            return
-
-        # check for decent mapping quality
-        mq = alignment.mapping_quality
-        # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
-        if mq < args.minmq:
-            self.lowmq += 1
-            return
-
-        if read.indel:
-            if read.is_del:
-                # deletion
-                baseIndex = Pileup.D
-                # if the base isn't there, base qual doesn't make sense, so just use mq
-                qual = mq
-            else:
-                # then it must be an insertion
-                baseIndex = Pileup.I
-        else:
-            # base call must be real base (e.g., not N)
-            base = alignment.query_sequence[pos]
-            baseIndex = Pileup.ALLELES.find(base)
-            if baseIndex < 0:
-                self.bad += 1
-                return
-
-        # We're good! Update the pileup stats...
-        q = min(qual, mq)
-        self.alleles[0, baseIndex] += 1
-        self.alleles[1, baseIndex] += q
-
-    def callAlleles(self):
-        """
-        Calls alleles present at this locus.
-        "strong" contains the bits of alleles with sufficient evidnece for a confident call
-        "weak" contains those with any evidence at all
-        "confirmed" is set if there is strong evidence for reference base
-        """
-        minconfirm = args.minconfirm
-        minfrac = args.minfrac
-
-        quals = self.alleles[1]
-        qualsum = float(quals.sum())
-        # qualfraction is array containing fraction of evidence for each allele
-        qualfraction = quals / qualsum
-
-        # Any alleles which have any evidence at all
-        evidence = quals > 0
-        # boolean * mask will give array of 0 where boolean is false, else allele, then sum() sets them all!
-        self.weak = (evidence * Pileup.ALLELE_MASKS).sum()
-
-        # Alleles with sufficient evidence to confirm (minimum qual sum and minimum qual fraction)
-        confirmed = np.logical_and(quals > minconfirm, qualfraction > minfrac)
-        self.strong = (confirmed * Pileup.ALLELE_MASKS).sum()
-
-        if args.verbose and self.strong and self.refmask != self.strong:
-            print self.refmask, self.alleles[0], self.alleles[1], qualfraction, self.weak, self.strong
-
-    def depth(self):
-        """
-        :return: Count of all good reads (int)
-        """
-        return self.alleles[0].sum()
-
-    def qual_total(self):
-        """
-        :return: Sum of all quality evidence (int)
-        """
-        return self.alleles[1].sum()
-
-    def total_depth(self):
-        """
-        :return: Count of all reads, including those rejected for some reason (int)
-        """
-        return self.depth() + self.bad
-
-    def covered(self):
-        """
-        :return: Does this pileup have enough data to consider this locus covered? (boolean)
-        """
-        return self.qual_total() >= args.minconfirm
-
-    def poormq(self):
-        """
-        :return: Poor mapping quality at this position? (boolean)
-        """
-        # heuristic: more low mapping quality than "good" coverage
-        return self.lowmq > self.depth()
-
-    def ref_qual(self):
-        """
-        :return: sum of quality evidence for reference base (int)
-        """
-        return self.alleles[1, self.refindex]
-
-    def ref_fraction(self):
-        """
-        :return: Fraction of evidence which supports reference base (float)
-        """
-        return float(self.ref_qual()) / float(self.qual_total())
-
-    def confirmed(self):
-        """
-        :return: Does this pileup confirm the reference? (boolean)
-        """
-        rq = self.ref_qual()
-        return rq >= args.minconfirm and (rq == self.qual_total() or self.ref_fraction() > args.consensus)
 
 
 class CallStats:

@@ -127,10 +127,7 @@ class Sample:
         medianCoverage = float(np.median(self.coverage))
 
 
-        # When we look for blocks without coverage (possible large deletions from recombination events), we attempt
-        # to scale the minimum size to be significant, because at very low coverage, we expect large uncovered regions.
-        mingap = self.gapCutoff(meanCoverage)
-        print >>logfile, "Total length=%d coverage=%.2f median=%.1f mingap=%d" % (self.length, meanCoverage, medianCoverage, mingap),
+        print >>logfile, "Total length=%d coverage=%.2f median=%.1f" % (self.length, meanCoverage, medianCoverage),
 
         nonzero = self.coverage[self.coverage > 0]
         if nonzero.size > 0:
@@ -143,7 +140,7 @@ class Sample:
         # Scan through ScaffoldPileups, make calls using the thresholds set above, and compute summary stats
         for s in scaffolds:
             s.callAlleles()
-            self.gaps += s.findGaps(mingap)
+            self.gaps += s.findGaps()
             s.stats()
 
         # Now gather the essentials for the whole genome so we can compute summary stats.
@@ -178,17 +175,6 @@ class Sample:
             with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
                 self.details(outfile)
 
-    def gapCutoff(self, coverage):
-        """
-        Attempt to scale the minimum significant uncoveraged region by coverage (for low coverage)
-        :param coverage: expected coverage
-        :return: scaled minimum gap (using args.mingap as baseline)
-        """
-        lw = landerWaterman(coverage)
-        if lw > 1:
-            return int(round(args.mingap / lw))
-        else:
-            return int(round(args.mingap))
 
     def strainName(self):
         """
@@ -338,7 +324,10 @@ class ScaffoldPileups:
         for i in xrange(self.length):
             self.coverage[i] = self.depth(i)
 
-        self.meanCoverage = float(self.coverage.sum()) / float(self.length)
+        # When we look for blocks without coverage (possible large deletions from recombination events), we attempt
+        # to scale the minimum size to be significant, because at very low coverage, we expect large uncovered regions.
+        meanCoverage = float(self.coverage.sum()) / float(self.length)
+        self.mingap = self.gapCutoff(meanCoverage)
 
         # Based on coverage, set a high limit for plausible coverage of a given position based on Poisson probability;
         # because we are dealing with metagenomic samples, too improbabily high coverage is likely a result of reads
@@ -348,7 +337,7 @@ class ScaffoldPileups:
         self.highCutoff = self.poissonCutoff(max(medianCoverage, 0.5))
         self.highCoverage = self.coverage > self.highCutoff
 
-        print >>logfile, "coverage=%.2f cutoff=%d" % (self.meanCoverage, self.highCutoff)
+        print >>logfile, "coverage=%.2f median=%d cutoff=%d mingap=%d" % (meanCoverage, medianCoverage, self.highCutoff, self.mingap)
         logfile.flush()
 
     def callAlleles(self):
@@ -369,7 +358,7 @@ class ScaffoldPileups:
                 self.callAllelesLoc(i)
 
 
-    def findGaps(self, mingap):
+    def findGaps(self):
         """
         Find coverage gaps, indicating possible deleted portions in our strain vs the reference (e.g., possible
         recombination events). Gaps are defined here as insufficient evidence to call anything, taking into account
@@ -382,13 +371,25 @@ class ScaffoldPileups:
         for i in xrange(self.length):
             # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
             if self.strong[i] or self.poormq(i):
-                if lastCovered >= 0 and i - lastCovered > mingap:
+                if lastCovered >= 0 and i - lastCovered > self.mingap:
                     self.gaps.append(Region(self.name, lastCovered+1, i-1))
                 lastCovered = i
-        if self.length - lastCovered >= mingap:
+        if self.length - lastCovered >= self.mingap:
             self.gaps.append(Region(self.name, lastCovered + 1, self.length - 1))
         return self.gaps
 
+
+    def gapCutoff(self, coverage):
+        """
+        Attempt to scale the minimum significant uncoveraged region by coverage (for low coverage)
+        :param coverage: expected coverage
+        :return: scaled minimum gap (using args.mingap as baseline)
+        """
+        lw = landerWaterman(coverage)
+        if lw > 1:
+            return int(round(args.mingap / lw))
+        else:
+            return int(round(args.mingap))
 
     def poissonCutoff(self, mean, cutoff = 0.9999999):
         """

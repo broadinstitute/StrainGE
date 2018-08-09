@@ -126,16 +126,11 @@ class Sample:
         meanCoverage = float(self.coverage.sum()) / float(self.length)
         medianCoverage = float(np.median(self.coverage))
 
-        # Based on coverage, set a high limit for plausible coverage of a given position based on Poisson probability;
-        # because we are dealing with metagenomic samples, too improbabily high coverage is likely a result of reads
-        # from other organisms aligning to conserved regions, so we can't make a confident call on our target organism.
-        # Here, we use the median coverage rather than the mean since our coverage might be dominated by conserved regions.
-        highCutoff = self.poissonCutoff(max(medianCoverage, 0.5))
 
         # When we look for blocks without coverage (possible large deletions from recombination events), we attempt
         # to scale the minimum size to be significant, because at very low coverage, we expect large uncovered regions.
         mingap = self.gapCutoff(meanCoverage)
-        print >>logfile, "Total length=%d coverage=%.2f median=%.1f cutoff=%d mingap=%d" % (self.length, meanCoverage, medianCoverage, highCutoff, mingap),
+        print >>logfile, "Total length=%d coverage=%.2f median=%.1f mingap=%d" % (self.length, meanCoverage, medianCoverage, mingap),
 
         nonzero = self.coverage[self.coverage > 0]
         if nonzero.size > 0:
@@ -147,7 +142,7 @@ class Sample:
 
         # Scan through ScaffoldPileups, make calls using the thresholds set above, and compute summary stats
         for s in scaffolds:
-            s.callAlleles(highCutoff)
+            s.callAlleles()
             self.gaps += s.findGaps(mingap)
             s.stats()
 
@@ -182,27 +177,6 @@ class Sample:
             logfile.flush()
             with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
                 self.details(outfile)
-
-
-    def poissonCutoff(self, mean, cutoff = 0.9999999):
-        """
-        Calculate the Poisson CDF and find where it reaches the cutoff. For higher coverages, use Gaussian instead.
-        Default cutoff is one part in 10M, so not likely to occur in a typical bacterial genome.
-        """
-        if mean < 50:
-            # for lower coverage, use poisson
-            i = 0
-            ifact = 1.0
-            expmean = math.exp(-mean)
-            cdf = 0.0
-            while cdf < cutoff:
-                cdf += expmean * math.pow(mean, float(i)) / ifact
-                i += 1
-                ifact *= i
-            return i - 1
-        else:
-            return int(math.ceil(mean * 1.5 + 15.0))
-
 
     def gapCutoff(self, coverage):
         """
@@ -364,10 +338,76 @@ class ScaffoldPileups:
         for i in xrange(self.length):
             self.coverage[i] = self.depth(i)
 
-        self.meancoverage = float(self.coverage.sum()) / float(self.length)
+        self.meanCoverage = float(self.coverage.sum()) / float(self.length)
 
-        print >>logfile, "coverage=%.2f" %self.meancoverage
+        # Based on coverage, set a high limit for plausible coverage of a given position based on Poisson probability;
+        # because we are dealing with metagenomic samples, too improbabily high coverage is likely a result of reads
+        # from other organisms aligning to conserved regions, so we can't make a confident call on our target organism.
+        # Here, we use the median coverage rather than the mean since our coverage might be dominated by conserved regions.
+        medianCoverage = np.median(self.coverage)
+        self.highCutoff = self.poissonCutoff(max(medianCoverage, 0.5))
+        self.highCoverage = self.coverage > self.highCutoff
+
+        print >>logfile, "coverage=%.2f cutoff=%d" % (self.meanCoverage, self.highCutoff)
         logfile.flush()
+
+    def callAlleles(self):
+        """
+        Loop over loci compiling evidence for alleles present. Ignore pileups deeper than highCutoff, because those
+        probably contain alignments from other organisms (e.g., this might be a conserved region).
+
+        "strong" means there is suffiently strong evidnece to "call" the allele as present
+        "weak" means any evidence at all supporting the allele, even if not strong enought to be strong
+
+        :param highCutoff: max pileup depth
+        """
+        print >>logfile, "Calling alleles in", self.name,
+        logfile.flush()
+
+        for i in xrange(self.length):
+            if self.coverage[i] and not self.highCoverage[i]:
+                self.callAllelesLoc(i)
+
+
+    def findGaps(self, mingap):
+        """
+        Find coverage gaps, indicating possible deleted portions in our strain vs the reference (e.g., possible
+        recombination events). Gaps are defined here as insufficient evidence to call anything, taking into account
+        regions of poor mapping quality won't be called as a matter of course (but may still be "covered").
+
+        :param mingap: don't report gaps unless they consist of this many consecutive loci which can't be called
+        :return: list of Region objects corresponding to the coverage gaps, also set as self.gaps
+        """
+        lastCovered = -1
+        for i in xrange(self.length):
+            # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
+            if self.strong[i] or self.poormq(i):
+                if lastCovered >= 0 and i - lastCovered > mingap:
+                    self.gaps.append(Region(self.name, lastCovered+1, i-1))
+                lastCovered = i
+        if self.length - lastCovered >= mingap:
+            self.gaps.append(Region(self.name, lastCovered + 1, self.length - 1))
+        return self.gaps
+
+
+    def poissonCutoff(self, mean, cutoff = 0.9999999):
+        """
+        Calculate the Poisson CDF and find where it reaches the cutoff. For higher coverages, use linear instead.
+        Default cutoff is one part in 10M, so not likely to occur in a typical bacterial genome.
+        """
+        if mean < 50:
+            # for lower coverage, use poisson
+            i = 0
+            ifact = 1.0
+            expmean = math.exp(-mean)
+            cdf = 0.0
+            while cdf < cutoff:
+                cdf += expmean * math.pow(mean, float(i)) / ifact
+                i += 1
+                ifact *= i
+            return i - 1
+        else:
+            return int(math.ceil(mean * 1.5 + 15.0))
 
 
     def add_reads(self, loc, pileup_reads):
@@ -510,47 +550,6 @@ class ScaffoldPileups:
         """
         rq = self.ref_qual(loc)
         return rq >= args.minconfirm and (rq == self.qual_total(loc) or self.ref_fraction(loc) > args.consensus)
-
-
-    def callAlleles(self, highCutoff):
-        """
-        Loop over loci compiling evidence for alleles present. Ignore pileups deeper than highCutoff, because those
-        probably contain alignments from other organisms (e.g., this might be a conserved region).
-
-        "strong" means there is suffiently strong evidnece to "call" the allele as present
-        "weak" means any evidence at all supporting the allele, even if not strong enought to be strong
-
-        :param highCutoff: max pileup depth
-        """
-        print >>logfile, "Calling alleles in", self.name,
-        logfile.flush()
-
-        self.highCoverage = self.coverage > highCutoff
-
-        for i in xrange(self.length):
-            if self.coverage[i] and not self.highCoverage[i]:
-                self.callAllelesLoc(i)
-
-
-    def findGaps(self, mingap):
-        """
-        Find coverage gaps, indicating possible deleted portions in our strain vs the reference (e.g., possible
-        recombination events). Gaps are defined here as insufficient evidence to call anything, taking into account
-        regions of poor mapping quality won't be called as a matter of course (but may still be "covered").
-
-        :param mingap: don't report gaps unless they consist of this many consecutive loci which can't be called
-        :return: list of Region objects corresponding to the coverage gaps, also set as self.gaps
-        """
-        lastCovered = -1
-        for i in xrange(self.length):
-            # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
-            if self.strong[i] or self.poormq(i):
-                if lastCovered >= 0 and i - lastCovered > mingap:
-                    self.gaps.append(Region(self.name, lastCovered+1, i-1))
-                lastCovered = i
-        if self.length - lastCovered >= mingap:
-            self.gaps.append(Region(self.name, lastCovered + 1, self.length - 1))
-        return self.gaps
 
     def stats(self):
         """

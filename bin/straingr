@@ -386,10 +386,7 @@ class ScaffoldPileups:
         :return: scaled minimum gap (using args.mingap as baseline)
         """
         lw = landerWaterman(coverage)
-        if lw > 1:
-            return int(round(args.mingap / lw))
-        else:
-            return int(round(args.mingap))
+        return args.mingap / lw if lw > 0 else args.mingap
 
     def poissonCutoff(self, mean, cutoff = 0.9999999):
         """
@@ -447,9 +444,14 @@ class ScaffoldPileups:
 
         # check for decent mapping quality
         mq = alignment.mapping_quality
+
         # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
         if mq < args.minmq:
             self.lowmq[loc] += 1
+            # experimental: process other mappings
+            xa = self.get_xa(alignment)
+            if xa and args.verbose:
+                print mq, nm, xa
             return
 
         if read.indel:
@@ -502,6 +504,20 @@ class ScaffoldPileups:
             print self.refmask[loc], self.alleles[loc, 0], self.alleles[loc, 1], \
                 qualfraction, self.weak[loc], self.strong[loc]
 
+
+    def get_xa(self, read):
+        alns = []
+        if read.has_tag("XA"):
+            xa = read.get_tag("XA")
+            nm = int(read.get_tag("NM"))
+            for aln in xa.split(';'):
+                if aln:
+                    scaffold, pos, cigar, anm = aln.split(',')
+                    anm = int(anm)
+                    if anm <= nm:
+                        alns.append((scaffold, int(pos), cigar, anm))
+        return alns
+
     def depth(self, loc):
         """
         :return: Count of all good reads (int)
@@ -531,7 +547,7 @@ class ScaffoldPileups:
         :return: Poor mapping quality at this position? (boolean)
         """
         # heuristic: more low mapping quality than "good" coverage
-        return self.lowmq[loc] > self.depth(loc)
+        return self.lowmq[loc] > 1 and self.lowmq[loc] > self.depth(loc)
 
     def ref_qual(self, loc):
         """
@@ -777,7 +793,7 @@ class Region:
         return Region(self.id, min(self.start, other.start), max(self.end, other.end))
 
     def __repr__(self):
-        return "<%s %d-%d>" % (self.id, self.start, self.stop)
+        return "<%s:%d-%d %d>" % (self.id, self.start, self.stop, self.stop+1-self.start)
 
 def landerWaterman(coverage):
     """

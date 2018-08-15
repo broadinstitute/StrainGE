@@ -329,7 +329,9 @@ class ScaffoldPileups:
             refpos = column.reference_pos
             otherLowMq = self.add_reads(refpos, column.pileups)
             for otherName, otherCoord in otherLowMq:
-                otherScaffoldPileups[otherName].lowmq[otherCoord-1] += 1
+                otherPileups = otherScaffoldPileups[otherName]
+                if otherCoord <= otherPileups.lowmq.size:
+                    otherScaffoldPileups[otherName].lowmq[otherCoord-1] += 1
 
         for i in xrange(self.length):
             self.coverage[i] = self.depth(i)

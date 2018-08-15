@@ -54,6 +54,8 @@ class Reference:
         self.scaffolds = [scaffold for scaffold in kmertools.openSeqFile(fasta)]
         self.lengths = [len(s) for s in self.scaffolds]
         self.length = sum(self.lengths)
+        self.byname = {scaffold.name: scaffold for scaffold in self.scaffolds}
+
         print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
 
 
@@ -82,6 +84,10 @@ class Reference:
                 return offset + coord - 1
             offset += length
 
+    def getSeq(self, name, coord, length=1):
+        return self.byname[name].seq[coord-1:coord+length-1]
+
+
 class Sample:
     """
     Collects and holds information about alignments of sample reads (from a supplied BAM file) against a reference.
@@ -92,6 +98,7 @@ class Sample:
         self.bamfile = bamfile
 
         # These are filled out after allele calling. Most are numpy arrays with one element for each genomic position.
+        self.scaffolds = None
         self.refmask = None
         self.coverage = None
         self.highCoverage = None
@@ -115,14 +122,15 @@ class Sample:
         print >>logfile, "Processing", bam
 
         # Create ScaffoldPileups objects for each scaffold, and scan the bam to fill them out.
-        scaffolds = [ScaffoldPileups(scaffold.name, scaffold.seq.upper()) for scaffold in reference.scaffolds]
+        self.scaffolds = [ScaffoldPileups(scaffold.name, scaffold.seq.upper()) for scaffold in reference.scaffolds]
+        scaffoldsByName = {s.name: s for s in self.scaffolds}
         with pysam.AlignmentFile(bamfile, "rb") as bam:
-            for s in scaffolds:
-                s.makePileups(bam)
+            for s in self.scaffolds:
+                s.makePileups(bam, scaffoldsByName)
 
         # Pull together essential stats for the whole genome so we can set thresholds
-        self.refmask = np.concatenate([s.refmask for s in scaffolds])
-        self.coverage = np.concatenate([s.coverage for s in scaffolds])
+        self.refmask = np.concatenate([s.refmask for s in self.scaffolds])
+        self.coverage = np.concatenate([s.coverage for s in self.scaffolds])
         meanCoverage = float(self.coverage.sum()) / float(self.length)
         medianCoverage = float(np.median(self.coverage))
 
@@ -138,15 +146,15 @@ class Sample:
         logfile.flush()
 
         # Scan through ScaffoldPileups, make calls using the thresholds set above, and compute summary stats
-        for s in scaffolds:
+        for s in self.scaffolds:
             s.callAlleles()
             self.gaps += s.findGaps()
             s.stats()
 
         # Now gather the essentials for the whole genome so we can compute summary stats.
-        self.highCoverage = np.concatenate([s.highCoverage for s in scaffolds])
-        self.strong = np.concatenate([s.strong for s in scaffolds])
-        self.weak = np.concatenate([s.weak for s in scaffolds])
+        self.highCoverage = np.concatenate([s.highCoverage for s in self.scaffolds])
+        self.strong = np.concatenate([s.strong for s in self.scaffolds])
+        self.weak = np.concatenate([s.weak for s in self.scaffolds])
 
         self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
         self.summaryStats.log("TOTAL")
@@ -164,7 +172,7 @@ class Sample:
             logfile.flush()
             with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
-                for s in scaffolds:
+                for s in self.scaffolds:
                     s.summaryStats.tabular(outfile, s.name)
                 self.summaryStats.tabular(outfile, "TOTAL")
 
@@ -307,7 +315,7 @@ class ScaffoldPileups:
 
         # initialize refindex
 
-    def makePileups(self, bam):
+    def makePileups(self, bam, otherScaffoldPileups):
         """
         Loop over loci and add the info from each covering read. Also sets count of "good" coverage and refmask, which
         is the bitmask corresponding to the reference allele for each comparison later.
@@ -319,7 +327,9 @@ class ScaffoldPileups:
 
         for column in bam.pileup(self.name):
             refpos = column.reference_pos
-            self.add_reads(refpos, column.pileups)
+            otherLowMq = self.add_reads(refpos, column.pileups)
+            for otherName, otherCoord in otherLowMq:
+                otherScaffoldPileups[otherName].lowmq[otherCoord-1] += 1
 
         for i in xrange(self.length):
             self.coverage[i] = self.depth(i)
@@ -410,8 +420,12 @@ class ScaffoldPileups:
 
     def add_reads(self, loc, pileup_reads):
         """Add a bunch of pysam.PileupRead objects to this pileup"""
+        otherLowMq = []
         for read in pileup_reads:
-            self.add_read(loc, read)
+            others = self.add_read(loc, read)
+            if others:
+                otherLowMq += others
+        return otherLowMq
 
     def add_read(self, loc, read):
         """Add a pysam.PileupRead object to this pileup"""
@@ -449,10 +463,7 @@ class ScaffoldPileups:
         if mq < args.minmq:
             self.lowmq[loc] += 1
             # experimental: process other mappings
-            xa = self.get_xa(alignment)
-            if xa and args.verbose:
-                print mq, nm, xa
-            return
+            return self.get_xa(alignment, loc)
 
         if read.indel:
             if read.is_del:
@@ -500,22 +511,25 @@ class ScaffoldPileups:
         confirmed = np.logical_and(quals > minconfirm, qualfraction > minfrac)
         self.strong[loc] = (confirmed * Alleles.ALLELE_MASKS).sum()
 
-        if args.verbose and self.strong and self.refmask != self.strong:
+        if args.verbose and self.strong[loc] and self.refmask[loc] != self.strong[loc]:
             print self.refmask[loc], self.alleles[loc, 0], self.alleles[loc, 1], \
                 qualfraction, self.weak[loc], self.strong[loc]
 
 
-    def get_xa(self, read):
+    def get_xa(self, read, loc):
         alns = []
         if read.has_tag("XA"):
             xa = read.get_tag("XA")
             nm = int(read.get_tag("NM"))
+            offset = read.reference_end - 1 - loc if read.is_reverse else loc - read.reference_start
             for aln in xa.split(';'):
                 if aln:
                     scaffold, pos, cigar, anm = aln.split(',')
                     anm = int(anm)
                     if anm <= nm:
-                        alns.append((scaffold, int(pos), cigar, anm))
+                        pos = int(pos)
+                        coord = -pos + read.query_length - 1 - offset if pos < 0 else pos + offset
+                        alns.append((scaffold, coord))
         return alns
 
     def depth(self, loc):

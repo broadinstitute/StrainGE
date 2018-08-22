@@ -472,7 +472,7 @@ class ScaffoldPileups:
                 # deletion
                 baseIndex = Alleles.D
                 # if the base isn't there, base qual doesn't make sense, so just use mq
-                qual = mq
+                #qual = mq
             else:
                 # then it must be an insertion
                 baseIndex = Alleles.I
@@ -485,14 +485,14 @@ class ScaffoldPileups:
                 return
 
         # We're good! Update the pileup stats...
-        q = min(qual, mq)
+        #q = min(qual, mq)
         self.alleles[loc, 0, baseIndex] += 1
-        self.alleles[loc, 1, baseIndex] += q
+        self.alleles[loc, 1, baseIndex] += qual
 
     def callAllelesLoc(self, loc):
         """
         Calls alleles present at this locus.
-        "strong" contains the bits of alleles with sufficient evidnece for a confident call
+        "strong" contains the bits of alleles with sufficient evidence for a confident call
         "weak" contains those with any evidence at all
         "confirmed" is set if there is strong evidence for reference base
         """

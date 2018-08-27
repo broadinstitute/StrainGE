@@ -62,12 +62,14 @@ def assembly_name(ass):
     org = org.replace("Escherichia", "E")
     org = org.replace("Shigella", "S")
     org = org.replace("Enterococcus", "En")
+    org = org.replace("Staphylococcus", "S")
     strain = strain.replace("strain=", "")
     name = org
     if strain and name.find(strain) < 0:
         name += "_" + strain
     if isolate and name.find(isolate) < 0:
         name += "_" + isolate
+    name = name.replace("subsp_", "")
     name = name.replace(".", "")
     name = name.replace("/", "-")
     name = name.replace("(", "")
@@ -76,6 +78,8 @@ def assembly_name(ass):
     name = name.replace(";", "-")
     name = name.replace(":", "-")
     name = name.replace(" ", "_")
+    name = name.replace("__", "_")
+    name = name.replace("")
     name = name.replace("K-12_K-12", "K-12")
     if name in assembly_names:
         name += "_" + ass['# assembly_accession'].split('.')[0]

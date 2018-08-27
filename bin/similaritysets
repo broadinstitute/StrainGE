@@ -32,6 +32,9 @@ def simScore(genome):
     
 sets = []
 
+def sorter(a, b):
+    return cmp(b[1], a[1]) or cmp(a[0], b[0])
+
 for s in setIndex.values():
     if s not in sets:
         sets.append(s)
@@ -39,6 +42,6 @@ for s in setIndex.values():
             print " ".join(s)
         else:
             slist = [(g, simScore(g)) for g in s]
-            slist.sort(lambda a, b: cmp(b[1], a[1]))
+            slist.sort(sorter)
             print " ".join([g[0] for g in slist])
 print >>sys.stderr, len(sets), 'sets containing', sum([len(s) for s in sets]), 'genomes'

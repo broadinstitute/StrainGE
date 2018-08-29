@@ -2,9 +2,19 @@
 
 import sys
 import csv
+import argparse
 
-reader = csv.reader(open(sys.argv[1], 'r'), delimiter="\t")
-limit = float(sys.argv[2])
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--threshold", "-t", default=0.95, type=float, help="Clustering threshold (kmersimilarity)")
+parser.add_argument("--fudge", "-f", default=0, type=float, help="Similarity score output file (default stdout)")
+parser.add_argument("simfile", help="kmersimilarity output file")
+args = parser.parse_args()
+
+threshold = args.threshold
+fudge = args.fudge
+
+reader = csv.reader(open(args.simfile, 'r'), delimiter="\t")
 
 setIndex = {}
 sims = []
@@ -15,7 +25,7 @@ for line in reader:
         setIndex[strain1] = {strain1}
     if strain2 not in setIndex:
         setIndex[strain2] = {strain2}
-    if sim < limit:
+    if sim < threshold:
         continue
     sims.append((strain1, strain2, sim))
     # merge sets
@@ -33,7 +43,11 @@ def simScore(genome):
 sets = []
 
 def sorter(a, b):
-    return cmp(b[1], a[1]) or cmp(a[0], b[0])
+    diff = b[1] - a[1]
+    if abs(diff) <= fudge:
+        return cmp(len(a[0]), len(b[0])) or cmp(a[0], b[0])
+    else:
+        return cmp(b[1], a[1])
 
 for s in setIndex.values():
     if s not in sets:
@@ -43,5 +57,7 @@ for s in setIndex.values():
         else:
             slist = [(g, simScore(g)) for g in s]
             slist.sort(sorter)
+            #print slist
+            #print
             print " ".join([g[0] for g in slist])
 print >>sys.stderr, len(sets), 'sets containing', sum([len(s) for s in sets]), 'genomes'

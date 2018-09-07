@@ -101,6 +101,13 @@ class Sample(kmertools.KmerSet):
 
         print self.distinctKmers, "distinct kmers,", self.totalKmers, "total kmers in sample"
 
+globalPan = None
+globalSample = None
+globalExcludes = None
+def scorePanStrain(s):
+    strain = globalPan.loadStrain(s)
+    return strain.scoreSample(globalSample, globalExcludes)
+
 
 class PanGenome(kmertools.KmerSet):
     def __init__(self, hdf5file):
@@ -185,13 +192,12 @@ class PanGenome(kmertools.KmerSet):
 
             # Score all strains and sort results by score
             if args.threads > 1:
-
-                def scoreStrain(s):
-                    strain = self.loadStrain(s)
-                    return strain.scoreSample(sample, excludes)
-
+                global globalPan, globalSample, globalExcludes
+                globalPan = self
+                globalSample = sample
+                globalExcludes = excludes
                 p = multiprocessing.Pool(args.threads)
-                results = p.map(scoreStrain, self.strainNames)
+                results = p.map(scorePanStrain, self.strainNames)
                 p.close()
             else:
                 results = map(lambda s: self.scoreStrain(s, sample, excludes, i), self.strainNames)
@@ -213,10 +219,7 @@ class PanGenome(kmertools.KmerSet):
             winners.append(winningStrain)
 
             # Exclude kmers from winning strain from sample (and from each strain next iteration)
-            if args.threads > 1:
-                excludes = np.unique(np.concatenate((excludes, bestKmers)))
-            else:
-                excludes = winningStrain.kmers
+            excludes = winningStrain.kmers
             sample.exclude(excludes)
 
         return winners
@@ -314,6 +317,9 @@ class Strain(kmertools.KmerSet):
         # measure of evenness of coverage
         evenness = covered / estCovered
 
+        # original panstrain simple scoring metric
+        score = covered * accounted * min(evenness, 1.0 / evenness)
+
         # Weight each of my kmers by inverse of times it occurs in pan genome relative to this genome
         strainWeights = self.counts * (1.0 / strainPanCounts)
         strainTotalWeight = strainWeights.sum()
@@ -331,9 +337,7 @@ class Strain(kmertools.KmerSet):
         # chunk of this genome.
         specificity = weightedCoverage / genomeCoverage
 
-        # original panstrain simple scoring metric
-        score = covered * accounted * min(evenness, 1.0 / evenness)
-        # add in specificity component (best match should be close to 1.0, higher or lower is worse)
+        # add specificity component to weighted score (best match should be close to 1.0, higher or lower is worse)
         weightedScore = score * min(specificity, 1.0 / specificity)
 
         # populate result metrics and return

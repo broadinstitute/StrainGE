@@ -102,6 +102,8 @@ def kmerSetFromNpz(filePath, k):
     data = np.load(filePath)
     if "fingerprint" in data:
         kset.fingerprint = data["fingerprint"]
+    if "fingerprint_counts" in data:
+        kset.fingerprint = data["fingerprint_counts"]
     if "kmers" in data:
         kset.kmers = data["kmers"]
     if "counts" in data:
@@ -116,6 +118,8 @@ def kmerSetFromHdf5(filePath):
         kset = KmerSet(h5.attrs['k'])
         if "fingerprint" in h5:
             kset.fingerprint = np.array(h5["fingerprint"])
+        if "fingerprint_counts" in h5:
+            kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
             kset.kmers = np.array(h5["kmers"])
         if "counts" in h5:
@@ -194,6 +198,7 @@ class KmerSet(object):
         self.kmers = None
         self.counts = None
         self.fingerprint = None
+        self.fingerprint_counts = None
         # stats from kmerizing, if appropriate
         self.nSeqs = 0
         self.nBases = 0
@@ -320,13 +325,17 @@ class KmerSet(object):
         order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
         self.fingerprint = self.kmers[order]
         self.fingerprint.sort()
+        self.fingerprint_counts = kmerizer.intersect_counts(self.kmers, self.counts, self.fingerprint)
         return self.fingerprint
 
     def fingerprintAsKmerSet(self):
         assert self.fingerprint is not None
         kset = KmerSet(k=self.k)
         kset.kmers = self.fingerprint
-        kset.counts = np.ones_like(kset.kmers, dtype=np.uint64)
+        if self.fingerprint_counts is not None:
+            kset.counts = self.fingerprint_counts
+        else:
+            kset.counts = np.ones_like(kset.kmers, dtype=np.uint64)
         return kset
 
     def freqFilter(self, minFreq = 1, maxFreq = None):
@@ -408,6 +417,8 @@ class KmerSet(object):
         kwargs = {'kmers': self.kmers, 'counts': self.counts}
         if self.fingerprint is not None:
             kwargs['fingerprint'] = self.fingerprint
+            if self.fingerprint_counts is not None:
+                kwargs['fingerprint_counts'] = self.fingerprint_counts
         if compress:
             func = np.savez_compressed
         else:
@@ -419,6 +430,8 @@ class KmerSet(object):
         h5.attrs["k"] = self.k;
         if self.fingerprint is not None:
             h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
+        if self.fingerprint_counts is not None:
+            h5.create_dataset("fingerprint_counts", data=self.fingerprint_counts, compression=compress)
         if self.kmers is not None:
             h5.create_dataset("kmers", data=self.kmers, compression=compress)
         if self.counts is not None:
@@ -445,12 +458,16 @@ class KmerSet(object):
             self.nKmers = self.counts.sum()
         if 'fingerprint' in npData.files:
             self.fingerprint = npData['fingerprint']
+        if 'fingerprint_counts' in npData.files:
+            self.fingerprint_counts = npData['fingerprint_counts']
 
     def load_hdf5(self, h5):
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         self.k = KmerSet(h5.attrs['k'])
         if "fingerprint" in h5:
             self.fingerprint = np.array(h5["fingerprint"])
+        if "fingerprint_counts" in h5:
+            self.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
             self.kmers = np.array(h5["kmers"])
         if "counts" in h5:

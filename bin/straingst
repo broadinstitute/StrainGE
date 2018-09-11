@@ -163,6 +163,8 @@ class PanGenome(kmertools.KmerSet):
         samplePanKmers = sample.counts.sum()
         samplePanKcov = float(samplePanKmers) / float(sample.kmers.size)
         samplePanPct = samplePanKmers * 100.0 / sample.totalKmers
+        if args.fingerprint:
+            samplePanPct /= 0.002 # really minHash fraction
         print "%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct)
 
         if outFile:
@@ -373,7 +375,6 @@ class Result:
             return 0
         s = self["score"]
         return s if s >= args.score and self["even"] >= args.evenness else 0
-
 
     def header(self, human=False):
         """

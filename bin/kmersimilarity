@@ -2,6 +2,7 @@
 import sys
 import argparse
 import csv
+import math
 import multiprocessing
 from itertools import combinations
 import kmertools
@@ -34,6 +35,10 @@ def _compare_seqs(pair):
         print e    
     return
 
+def ani(j):
+    k = kmertools.DEFAULT_K
+    return 1 + math.log(2 * j / (1.0 + j)) / k
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
@@ -42,6 +47,7 @@ parser.add_argument("--sample", help="Compare similarity of this vs the other st
 parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize", "reference"], default="jaccard")
 parser.add_argument("--fraction", action="store_true", help="Output numerator and denomintor in fraction instead of calculating score")
+parser.add_argument("-a", "--ani", action="store_true", help="Report similarity by approximate ANI rather than kmer similiarity index")
 parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
 parser.add_argument("--lowmem", action='store_true', help="Load kmers on the fly for low memory (MUCH slower!)")
 parser.add_argument('strains', nargs='+',
@@ -119,7 +125,10 @@ csvwriter = csv.writer(output, delimiter="\t", lineterminator="\n")
 
 if args.fraction:
     for name1, name2, (numerator, denominator) in scores:
-        csvwriter.writerow((name1, name2, "%d" % numerator, "%d" % denominator, "%.5f" % (float(numerator) / denominator)))
+        score = float(numerator) / denominator
+        csvwriter.writerow((name1, name2, "%d" % numerator, "%d" % denominator, "%.5f" % score, "%.5f" % ani(score)))
 else:
     for name1, name2, score in scores:
-        csvwriter.writerow((name1, name2, "%.5f" % score))
+        if args.ani:
+            score = ani(score)
+        csvwriter.writerow((name1, name2, "%.5f" % score, "%.5f" % ani(score)))

@@ -276,6 +276,9 @@ class KmerSet(object):
         """Create new KmerSet by merging this with another"""
         newSet = KmerSet(self.k)
         newSet.kmers, newSet.counts = kmerizer.merge_counts(self.kmers, self.counts, other.kmers, other.counts)
+        if self.fingerprint is not None and self.fingerprint_counts is not None:
+            newSet.fingerprint, newSet.fingerprint_counts = kmerizer.merge_counts(self.fingerprint, self.fingerprint_counts,
+                                                                                  other.fingerprint, other.fingerprint_counts)
         return newSet
 
     def intersect(self, kmers):

@@ -101,6 +101,7 @@ class Sample:
         self.scaffolds = None
         self.refmask = None
         self.coverage = None
+        self.lowmq = None
         self.highCoverage = None
         self.strong = None
         self.weak = None
@@ -152,11 +153,12 @@ class Sample:
             s.stats()
 
         # Now gather the essentials for the whole genome so we can compute summary stats.
+        self.lowmq = np.concatenate([s.lowmq for s in self.scaffolds])
         self.highCoverage = np.concatenate([s.highCoverage for s in self.scaffolds])
         self.strong = np.concatenate([s.strong for s in self.scaffolds])
         self.weak = np.concatenate([s.weak for s in self.scaffolds])
 
-        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
+        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.lowmq, self.highCoverage, self.gaps)
         self.summaryStats.log("TOTAL")
         if args.gaps:
             for g in self.gaps:
@@ -303,10 +305,12 @@ class ScaffoldPileups:
         # alignments covering this position but rejected for some reason (bad pairing, poor quality, etc)
         self.bad = np.zeros(self.length, dtype=np.uint32)
         # otherwise good alignments with low mapping quality (probably because this is a repeat)
+        self.lowmqCount = np.zeros(self.length, dtype=np.uint32)
         self.lowmq = np.zeros(self.length, dtype=np.uint32)
         # allele calls: strong and weak are both byte arrays with one bit set for each present allele (A,C,G,T + ins + del)
         self.strong = np.zeros(self.length, dtype=np.uint8)
         self.weak = np.zeros(self.length, dtype=np.uint8)
+
         # allele call arrays computed here
         self.highCoverage = None
         self.summaryStats = None
@@ -381,8 +385,10 @@ class ScaffoldPileups:
         """
         lastCovered = -1
         for i in xrange(self.length):
+            # heuristic: more low mapping quality than "good" coverage
+            self.lowmq[i] = self.lowmqCount[i] > 1 and self.lowmqCount[i] > self.depth(i)
             # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
-            if self.strong[i] or self.poormq(i):
+            if self.strong[i] or self.lowmq[i]:
                 if lastCovered >= 0 and i - lastCovered > self.mingap:
                     self.gaps.append(Region(self.name, lastCovered+1, i-1))
                 lastCovered = i
@@ -463,7 +469,7 @@ class ScaffoldPileups:
 
         # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
         if mq < args.minmq:
-            self.lowmq[loc] += 1
+            self.lowmqCount[loc] += 1
             # experimental: process other mappings
             return self.get_xa(alignment, loc)
 
@@ -558,13 +564,6 @@ class ScaffoldPileups:
         """
         return self.qual_total(loc) >= args.minconfirm
 
-    def poormq(self, loc):
-        """
-        :return: Poor mapping quality at this position? (boolean)
-        """
-        # heuristic: more low mapping quality than "good" coverage
-        return self.lowmq[loc] > 1 and self.lowmq[loc] > self.depth(loc)
-
     def ref_qual(self, loc):
         """
         :return: sum of quality evidence for reference base (int)
@@ -588,7 +587,7 @@ class ScaffoldPileups:
         """
         Populate and report call statistics for this scaffold.
         """
-        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.highCoverage, self.gaps)
+        self.summaryStats = CallStats(self.length, self.refmask, self.coverage, self.strong, self.lowmq, self.highCoverage, self.gaps)
         self.summaryStats.log()
 
 
@@ -600,9 +599,10 @@ class CallStats:
     # these are al the fields and formats in the order we want to show them
     FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("covered", "%d"), ("coveredPct", "%.2f"), ("evenness", "%.2f"),
               ("confirmed", "%d"), ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
-              ("multiPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"), ("gapLength", "%d"))
+              ("multiPct", "%.2f"), ("lowmq", "%d"), ("lowmqPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"),
+              ("gapCount", "%d"), ("gapLength", "%d"))
 
-    def __init__(self, length, refmask, coverage, strong, high, gaps):
+    def __init__(self, length, refmask, coverage, strong, lowmq, high, gaps):
         # locaitons where we have strong evidence of reference base
         confirmed = (strong & refmask)
         # locations where we have strong evidence of something other than reference (not mutually exclusive!)
@@ -628,6 +628,9 @@ class CallStats:
         # multi count
         self.multi = np.count_nonzero(multi)
         self.multiPct = pct(self.multi, self.snps)
+        # low mapping quality
+        self.lowmq = np.count_nonzero(lowmq)
+        self.lowmqPct = pct(self.lowmq, length)
         # count of locations not called because coverage too high
         self.high = np.count_nonzero(high)
         self.highPct = pct(self.high, length)
@@ -637,8 +640,8 @@ class CallStats:
 
         # values correspond to order of FIELDS above
         self.values = (self.length, self.coverage, self.median, self.covered, self.coveredPct, self.evenness, self.confirmed,
-                       self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.high, self.highPct,
-                       self.gapCount, self.gapLength)
+                       self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.lowmq, self.lowmqPct,
+                       self.high, self.highPct, self.gapCount, self.gapLength)
 
     def log(self, name=None):
         if name:

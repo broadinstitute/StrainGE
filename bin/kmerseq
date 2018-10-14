@@ -5,29 +5,7 @@ import argparse
 import matplotlib as mp
 mp.use("Agg")
 import kmertools
-import numpy as np
 
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument('sequences', nargs='+',
-                    help='Input sequence files (fasta or fastq by default; optionally compressed with gz or bz2)')
-parser.add_argument("-k", "--K", help="Kmer size (default 23)", type=int, default=23)
-parser.add_argument("-o", "--output", help="Output file (hdf5 or npz)")
-parser.add_argument("-f", "--fingerprint", help="Compute and save minhash fingerprint (sketch)",
-                    action="store_true")
-parser.add_argument("--fraction", type=float, default=0.002, help="Fraction of kmers to include in fingerprint (default: 0.002)")
-parser.add_argument("-c", "--compress", help="No longer used", action="store_true")
-parser.add_argument("--npz", help="Store output in npz format (default hdf5)", action="store_true")
-parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
-                    action="store_true")
-parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
-parser.add_argument("-e", "--entropy", action="store_true", help="Calculate Shannon entropy (in bases)")
-parser.add_argument("-l", "--limit", help="Only process about this many kmers (can have suffix of M or G)")
-parser.add_argument("-p", "--prune", help="Prune singletons after accumulating this many (can have suffix of M or G)")
-parser.add_argument("--histogram", help="Histogram output file (count of kmers by frequency)")
-parser.add_argument("--kmerset", help="Input is kmerset in hdf5 or npz format", action="store_true")
-args = parser.parse_args()
 
 def parseMegaGiga(str, mult = 1):
     """Parse argument of the kind 100M --> 100,000,000"""
@@ -41,6 +19,27 @@ def parseMegaGiga(str, mult = 1):
     else:
         return int(str) * mult
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument('sequences', nargs='+',
+                    help='Input sequence files (fasta or fastq by default; optionally compressed with gz or bz2)')
+parser.add_argument("-k", "--K", help="Kmer size (default {})".format(kmertools.DEFAULT_K),
+                    type=int, default=kmertools.DEFAULT_K)
+parser.add_argument("-o", "--output", help="Output file (hdf5 or npz)")
+parser.add_argument("-f", "--fingerprint", help="Compute and save minhash fingerprint (sketch)",
+                    action="store_true")
+parser.add_argument("--fingerprint_fraction", "--ff", type=float, default=kmertools.DEFAULT_FINGERPRINT_FRACTION,
+                    help="Fraction of kmers to include in fingerprint (default {})".format(kmertools.DEFAULT_FINGERPRINT_FRACTION))
+parser.add_argument("-c", "--compress", help="No longer used", action="store_true")
+parser.add_argument("-F", "--filter", help="Filter output kmers based on kmer spectrum (to prune sequencing errors)",
+                    action="store_true")
+parser.add_argument("-s", "--spectrum", help="File to ouput kmer spectrum graph (.png best)")
+parser.add_argument("-e", "--entropy", action="store_true", help="Calculate Shannon entropy (in bases)")
+parser.add_argument("-l", "--limit", help="Only process about this many kmers (can have suffix of M or G)")
+parser.add_argument("-p", "--prune", help="Prune singletons after accumulating this many (can have suffix of M or G)")
+parser.add_argument("--histogram", help="Histogram output file (count of kmers by frequency)")
+parser.add_argument("--kmerset", help="Input is kmerset in hdf5 or npz format", action="store_true")
+args = parser.parse_args()
 
 if args.kmerset:
     assert len(args.sequences) == 1, "Sorry, you can only specify one kmerset file at a time!!"
@@ -73,9 +72,9 @@ if args.filter:
     kset.printStats()
 
 if args.fingerprint:
-    kset.minHash(args.fraction)
+    kset.minHash(args.fingerprint_fraction)
 
 if args.output:
     print 'Writing output to', args.output
-    kset.save(args.output, compress=True, npz=args.npz)
+    kset.save(args.output, compress=True)
 

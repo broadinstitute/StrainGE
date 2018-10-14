@@ -164,7 +164,7 @@ class PanGenome(kmertools.KmerSet):
         samplePanKcov = float(samplePanKmers) / float(sample.kmers.size)
         samplePanPct = samplePanKmers * 100.0 / sample.totalKmers
         if args.fingerprint:
-            samplePanPct /= 0.002 # really minHash fraction
+            samplePanPct /= sample.fingerprint_fraction # really minHash fraction
         print "%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct)
 
         if outFile:

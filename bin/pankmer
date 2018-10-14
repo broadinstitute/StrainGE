@@ -13,6 +13,7 @@ parser.add_argument('strains', nargs='+', help='kmerized strain hdf5 or npz file
 args = parser.parse_args()
 
 panKmerSet = None
+fingerprint_fraction = None
 
 with h5py.File(args.output, 'w') as h5:
     for s in args.strains:
@@ -23,6 +24,9 @@ with h5py.File(args.output, 'w') as h5:
 
         if args.fingerprint:
             kset = kset.fingerprintAsKmerSet()
+            if fingerprint_fraction:
+                assert kset.fingerprint_fraction == fingerprint_fraction, "Fingerprint fraction much be consistent"
+            fingerprint_fraction = kset.fingerprint_fraction
 
         strainGroup = h5.create_group(name)
 
@@ -33,6 +37,8 @@ with h5py.File(args.output, 'w') as h5:
         else:
             panKmerSet = panKmerSet.mergeKmerSet(kset)
 
+    if fingerprint_fraction:
+        panKerSet.fingerprint_fraction = fingerprint_fraction
     panKmerSet.save_hdf5(h5, compress="gzip")
 
 

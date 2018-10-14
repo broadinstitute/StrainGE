@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import kmerizer
 
 DEFAULT_K = 23
+DEFAULT_FINGERPRINT_FRACTION = 0.002
 
 A = 0
 C = 1
@@ -59,56 +60,28 @@ def openSeqFile(fileName):
         fileType = "fasta"
     return SeqIO.parse(file, fileType)
 
-def loadNpz(fileName, thing):
-    """
-    :param fileName: A numpy npz file
-    :param thing: A file element of the npz file to return
-    :return: the the thing array
-    """
-    data = np.load(fileName)
-    return data[thing]
 
 def loadHdf5(filePath, thing):
     with h5py.File(filePath, 'r') as h5:
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         return np.array(h5[thing])
 
+
 def loadKmers(fileName):
-    if fileName.endswith(".npz"):
-        return loadNpz(fileName, "kmers")
-    else:
-        return loadHdf5(fileName, "kmers")
+    return loadHdf5(fileName, "kmers")
+
 
 def loadCounts(fileName):
-    if fileName.endswith(".npz"):
-        return loadNpz(fileName, "counts")
-    else:
-        return loadHdf5(fileName, "counts")
+    return loadHdf5(fileName, "counts")
+
 
 def loadFingerprint(fileName):
-    if fileName.endswith(".npz"):
-        return loadNpz(fileName, "fingerprint")
-    else:
-        return loadHdf5(fileName, "fingerprint")
+    return loadHdf5(fileName, "fingerprint")
+
 
 def nameFromPath(filePath):
     return os.path.splitext(os.path.basename(filePath))[0]
 
-
-def kmerSetFromNpz(filePath, k):
-    if not filePath.endswith(".npz"):
-        filePath += ".npz"
-    kset = KmerSet(k)
-    data = np.load(filePath)
-    if "fingerprint" in data:
-        kset.fingerprint = data["fingerprint"]
-    if "fingerprint_counts" in data:
-        kset.fingerprint = data["fingerprint_counts"]
-    if "kmers" in data:
-        kset.kmers = data["kmers"]
-    if "counts" in data:
-        kset.counts = data["counts"]
-    return kset
 
 def kmerSetFromHdf5(filePath):
     if not filePath.endswith(".hdf5"):
@@ -118,6 +91,10 @@ def kmerSetFromHdf5(filePath):
         kset = KmerSet(h5.attrs['k'])
         if "fingerprint" in h5:
             kset.fingerprint = np.array(h5["fingerprint"])
+            if "fingerprint_fraction" in h5.attrs:
+                self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
+            else:
+                self.fingerprint_fraction = DEFAULT_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
@@ -127,12 +104,8 @@ def kmerSetFromHdf5(filePath):
     return kset
 
 
-
 def kmerSetFromFile(filePath, k = DEFAULT_K):
-    if filePath.endswith(".npz"):
-        return kmerSetFromNpz(filePath, k)
-    else:
-        return kmerSetFromHdf5(filePath)
+    return kmerSetFromHdf5(filePath)
 
 
 def similarityScore(kmers1, kmers2, scoring="jaccard"):
@@ -199,6 +172,7 @@ class KmerSet(object):
         self.counts = None
         self.fingerprint = None
         self.fingerprint_counts = None
+        self.fingerprint_fraction = None
         # stats from kmerizing, if appropriate
         self.nSeqs = 0
         self.nBases = 0
@@ -323,18 +297,20 @@ class KmerSet(object):
         print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
             'Distinct:', self.kmers.size, 'Singletons:', self.singletons
 
-    def minHash(self, frac = 0.002):
+    def minHash(self, frac = DEFAULT_FINGERPRINT_FRACTION):
         nkmers = int(round(self.kmers.size * frac))
         order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
         self.fingerprint = self.kmers[order]
         self.fingerprint.sort()
         self.fingerprint_counts = kmerizer.intersect_counts(self.kmers, self.counts, self.fingerprint)
+        self.fingerprint_fraction = frac
         return self.fingerprint
 
     def fingerprintAsKmerSet(self):
         assert self.fingerprint is not None
         kset = KmerSet(k=self.k)
         kset.kmers = self.fingerprint
+        kset.fingerprint_fraction = self.fingerprint_fraction
         if self.fingerprint_counts is not None:
             kset.counts = self.fingerprint_counts
         else:
@@ -416,22 +392,11 @@ class KmerSet(object):
         probs = self.counts / total
         return -(probs * np.log2(probs)).sum() / 2.0
 
-    def save_npz(self, fileName, compress = False):
-        kwargs = {'kmers': self.kmers, 'counts': self.counts}
-        if self.fingerprint is not None:
-            kwargs['fingerprint'] = self.fingerprint
-            if self.fingerprint_counts is not None:
-                kwargs['fingerprint_counts'] = self.fingerprint_counts
-        if compress:
-            func = np.savez_compressed
-        else:
-            func = np.savez
-        func(fileName, **kwargs)
-
     def save_hdf5(self, h5, compress = None):
         h5.attrs["type"] = np.string_("KmerSet")
-        h5.attrs["k"] = self.k;
+        h5.attrs["k"] = self.k
         if self.fingerprint is not None:
+            h5.attrs["fingerprint_fraction"] = self.fingerprint_fraction
             h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
         if self.fingerprint_counts is not None:
             h5.create_dataset("fingerprint_counts", data=self.fingerprint_counts, compression=compress)
@@ -440,11 +405,8 @@ class KmerSet(object):
         if self.counts is not None:
             h5.create_dataset("counts", data=self.counts, compression=compress)
 
-    def save(self, fileName, compress = None, npz = False):
+    def save(self, fileName, compress = None):
         """Save in HDF5 file format"""
-        if npz:
-            self.save_npz(fileName, compress)
-            return
         if compress is True:
             compress = "gzip"
         if not fileName.endswith(".hdf5"):
@@ -452,23 +414,15 @@ class KmerSet(object):
         with h5py.File(fileName, 'w') as h5:
             self.save_hdf5(h5, compress)
 
-    def load_npz(self, fileName):
-        npData = np.load(fileName)
-        if 'kmers' in npData.files:
-            self.kmers = npData['kmers']
-        if 'counts' in npData.files:
-            self.counts = npData['counts']
-            self.nKmers = self.counts.sum()
-        if 'fingerprint' in npData.files:
-            self.fingerprint = npData['fingerprint']
-        if 'fingerprint_counts' in npData.files:
-            self.fingerprint_counts = npData['fingerprint_counts']
-
     def load_hdf5(self, h5):
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         self.k = KmerSet(h5.attrs['k'])
         if "fingerprint" in h5:
             self.fingerprint = np.array(h5["fingerprint"])
+            if "fingerprint_fraction" in h5.attrs:
+                self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
+            else:
+                self.fingerprint_fraction = DEFAULT_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             self.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
@@ -477,9 +431,6 @@ class KmerSet(object):
             self.counts = np.array(h5["counts"])
 
     def load(self, fileName):
-        if fileName.endswith(".npz"):
-            self.load_npz(fileName)
-            return
         with h5py.File(fileName, 'r') as h5:
             self.load_hdf5(h5)
 

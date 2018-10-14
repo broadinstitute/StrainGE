@@ -6,12 +6,11 @@ import argparse
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--threshold", "-t", default=0.95, type=float, help="Clustering threshold (kmersimilarity)")
+parser.add_argument("--ani", "-a", default=0.999, type=float, help="Clustering threshold (ani)")
 parser.add_argument("--fudge", "-f", default=0, type=float, help="Similarity score output file (default stdout)")
 parser.add_argument("simfile", help="kmersimilarity output file")
 args = parser.parse_args()
 
-threshold = args.threshold
 fudge = args.fudge
 
 reader = csv.reader(open(args.simfile, 'r'), delimiter="\t")
@@ -19,15 +18,16 @@ reader = csv.reader(open(args.simfile, 'r'), delimiter="\t")
 setIndex = {}
 sims = []
 for line in reader:
-    (strain1, strain2, sim) = line
+    (strain1, strain2, sim, ani) = line
     sim = float(sim)
+    ani = float(ani)
     if strain1 not in setIndex:
         setIndex[strain1] = {strain1}
     if strain2 not in setIndex:
         setIndex[strain2] = {strain2}
-    if sim < threshold:
+    if ani < args.ani:
         continue
-    sims.append((strain1, strain2, sim))
+    sims.append((strain1, strain2, ani))
     # merge sets
     set1 = setIndex[strain1]
     set2 = setIndex[strain2]

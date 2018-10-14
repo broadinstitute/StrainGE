@@ -44,10 +44,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--fingerprint", help="use minhash fingerprint instead of full kmer set to build graph",
                     action="store_true")
 parser.add_argument("--sample", help="Compare similarity of this vs the other strains instead of all vs all")
-parser.add_argument("--similarity", help="Similarity score output file (default stdout)")
+parser.add_argument("--output", "-o", help="Similarity score output file (default stdout)")
 parser.add_argument("--simscore", help="similarity scoring method", choices=["jaccard", "minsize", "maxsize", "reference"], default="jaccard")
 parser.add_argument("--fraction", action="store_true", help="Output numerator and denomintor in fraction instead of calculating score")
-parser.add_argument("-a", "--ani", action="store_true", help="Report similarity by approximate ANI rather than kmer similiarity index")
 parser.add_argument("-t", "--threads", type=int, help="Number of threads to use for pairwise similarity", default=1)
 parser.add_argument("--lowmem", action='store_true', help="Load kmers on the fly for low memory (MUCH slower!)")
 parser.add_argument('strains', nargs='+',
@@ -117,8 +116,8 @@ else:
     scores.sort(lambda a, b: cmp(b[2], a[2]))
 
 print >>sys.stderr, 'Writing output'
-if args.similarity:
-    output = open(args.similarity, 'w')
+if args.output:
+    output = open(args.output, 'w')
 else:
     output = sys.stdout
 csvwriter = csv.writer(output, delimiter="\t", lineterminator="\n")
@@ -129,6 +128,4 @@ if args.fraction:
         csvwriter.writerow((name1, name2, "%d" % numerator, "%d" % denominator, "%.5f" % score, "%.5f" % ani(score)))
 else:
     for name1, name2, score in scores:
-        if args.ani:
-            score = ani(score)
         csvwriter.writerow((name1, name2, "%.5f" % score, "%.5f" % ani(score)))

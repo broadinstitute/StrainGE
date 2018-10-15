@@ -253,6 +253,7 @@ class KmerSet(object):
         if self.fingerprint is not None and self.fingerprint_counts is not None:
             newSet.fingerprint, newSet.fingerprint_counts = kmerizer.merge_counts(self.fingerprint, self.fingerprint_counts,
                                                                                   other.fingerprint, other.fingerprint_counts)
+            newSet.fingerprint_fraction = self.fingerprint_fraction
         return newSet
 
     def intersect(self, kmers):

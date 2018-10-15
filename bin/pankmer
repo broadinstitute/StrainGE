@@ -38,7 +38,7 @@ with h5py.File(args.output, 'w') as h5:
             panKmerSet = panKmerSet.mergeKmerSet(kset)
 
     if fingerprint_fraction:
-        panKerSet.fingerprint_fraction = fingerprint_fraction
+        panKmerSet.fingerprint_fraction = fingerprint_fraction
     panKmerSet.save_hdf5(h5, compress="gzip")
 
 

@@ -92,9 +92,9 @@ def kmerSetFromHdf5(filePath):
         if "fingerprint" in h5:
             kset.fingerprint = np.array(h5["fingerprint"])
             if "fingerprint_fraction" in h5.attrs:
-                self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
+                kset.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
             else:
-                self.fingerprint_fraction = DEFAULT_FINGERPRINT_FRACTION
+                kset.fingerprint_fraction = DEFAULT_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:

@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import kmerizer
 
 DEFAULT_K = 23
-DEFAULT_FINGERPRINT_FRACTION = 0.002
+DEFAULT_FINGERPRINT_FRACTION = 0.01
+OLD_FINGERPRINT_FRACTION = 0.002
 
 A = 0
 C = 1
@@ -94,7 +95,7 @@ def kmerSetFromHdf5(filePath):
             if "fingerprint_fraction" in h5.attrs:
                 kset.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
             else:
-                kset.fingerprint_fraction = DEFAULT_FINGERPRINT_FRACTION
+                kset.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
@@ -423,7 +424,7 @@ class KmerSet(object):
             if "fingerprint_fraction" in h5.attrs:
                 self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
             else:
-                self.fingerprint_fraction = DEFAULT_FINGERPRINT_FRACTION
+                self.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             self.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:

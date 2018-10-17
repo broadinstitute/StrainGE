@@ -69,8 +69,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-o", "--output", help="output text file (default: standard out)")
 parser.add_argument("-i", "--iterations", type=int, default=5, help="max strains to look for (default: 5)")
 parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
-parser.add_argument("--fingerprint", action='store_true', help="Using fingerprint")
-parser.add_argument("-f", "--minfrac", type=float, default=0.01, help="minimum fraction of original kmers in strain")
+parser.add_argument("-f", "--fingerprint", action='store_true', help="Using fingerprint rather than whole kmer set")
+parser.add_argument("-F", "--minfrac", type=float, default=0.01, help="minimum fraction of original kmers in strain")
 parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
 parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
 parser.add_argument("-v", "--verbose", action='store_true', help="verbose output")
@@ -164,7 +164,7 @@ class PanGenome(kmertools.KmerSet):
         samplePanKcov = float(samplePanKmers) / float(sample.kmers.size)
         samplePanPct = samplePanKmers * 100.0 / sample.totalKmers
         if args.fingerprint:
-            samplePanPct /= sample.fingerprint_fraction # really minHash fraction
+            samplePanPct /= self.fingerprint_fraction # really minHash fraction
         print "%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct)
 
         if outFile:

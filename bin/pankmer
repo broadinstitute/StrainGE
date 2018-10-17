@@ -23,10 +23,10 @@ with h5py.File(args.output, 'w') as h5:
         kset = kmertools.kmerSetFromFile(s)
 
         if args.fingerprint:
-            kset = kset.fingerprintAsKmerSet()
             if fingerprint_fraction:
                 assert kset.fingerprint_fraction == fingerprint_fraction, "Fingerprint fraction much be consistent"
             fingerprint_fraction = kset.fingerprint_fraction
+            kset = kset.fingerprintAsKmerSet()
 
         strainGroup = h5.create_group(name)
 

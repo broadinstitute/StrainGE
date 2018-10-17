@@ -90,11 +90,11 @@ def kmerSetFromHdf5(filePath):
     with h5py.File(filePath, 'r') as h5:
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         kset = KmerSet(h5.attrs['k'])
+        if "fingerprint_fraction" in h5.attrs:
+            kset.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
         if "fingerprint" in h5:
             kset.fingerprint = np.array(h5["fingerprint"])
-            if "fingerprint_fraction" in h5.attrs:
-                kset.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
-            else:
+            if not kset.fingerprint_fraction:
                 kset.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
@@ -398,10 +398,11 @@ class KmerSet(object):
         h5.attrs["type"] = np.string_("KmerSet")
         h5.attrs["k"] = self.k
         if self.fingerprint is not None:
-            h5.attrs["fingerprint_fraction"] = self.fingerprint_fraction
             h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
         if self.fingerprint_counts is not None:
             h5.create_dataset("fingerprint_counts", data=self.fingerprint_counts, compression=compress)
+        if self.fingerprint_fraction is not None:
+            h5.attrs["fingerprint_fraction"] = self.fingerprint_fraction
         if self.kmers is not None:
             h5.create_dataset("kmers", data=self.kmers, compression=compress)
         if self.counts is not None:
@@ -419,11 +420,11 @@ class KmerSet(object):
     def load_hdf5(self, h5):
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         self.k = KmerSet(h5.attrs['k'])
+        if "fingerprint_fraction" in h5.attrs:
+            self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
         if "fingerprint" in h5:
             self.fingerprint = np.array(h5["fingerprint"])
-            if "fingerprint_fraction" in h5.attrs:
-                self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
-            else:
+            if not self.fingerprint_fraction:
                 self.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
         if "fingerprint_counts" in h5:
             self.fingerprint_counts = np.array(h5["fingerprint_counts"])

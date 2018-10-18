@@ -37,7 +37,7 @@ def _compare_seqs(pair):
 
 def ani(j):
     k = kmertools.DEFAULT_K
-    return 1 + math.log(2 * j / (1.0 + j)) / k
+    return 1 + math.log(2 * j / (1.0 + j)) / k if j else 0
 
 
 parser = argparse.ArgumentParser()

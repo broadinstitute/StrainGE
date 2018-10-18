@@ -8,6 +8,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--ani", "-a", default=0.999, type=float, help="Clustering threshold (ani)")
 parser.add_argument("--fudge", "-f", default=0, type=float, help="Similarity score output file (default stdout)")
+parser.add_argument("--chain", "-c", default=0, action='store_true', help="Chain similiarity links")
 parser.add_argument("simfile", help="kmersimilarity output file")
 args = parser.parse_args()
 
@@ -28,13 +29,17 @@ for line in reader:
     if ani < args.ani:
         continue
     sims.append((strain1, strain2, ani))
-    # merge sets
     set1 = setIndex[strain1]
     set2 = setIndex[strain2]
-    if set1 != set2:
-        set1 |= set2
-        for s in set2:
-            setIndex[s] = set1
+    if args.chain:
+        # merge sets
+        if set1 != set2:
+            set1 |= set2
+            for s in set2:
+                setIndex[s] = set1
+    else:
+        set1.add(strain2)
+        set2.add(strain1)
 
 def simScore(genome):
     gsims = [sim[2] for sim in sims if sim[0] == genome or sim[1] == genome]
@@ -49,15 +54,38 @@ def sorter(a, b):
     else:
         return cmp(b[1], a[1])
 
-for s in setIndex.values():
-    if s not in sets:
-        sets.append(s)
-        if len(s) == 1:
-            print " ".join(s)
+if args.chain:
+    for s in setIndex.values():
+        if s not in sets:
+            sets.append(s)
+            if len(s) == 1:
+                print " ".join(s)
+            else:
+                slist = [(g, simScore(g)) for g in s]
+                slist.sort(sorter)
+                #print slist
+                #print
+                print " ".join([g[0] for g in slist])
+else:
+    while len(setIndex) > 0:
+        strains = setIndex.keys()
+        strains.sort(lambda a, b: cmp(len(setIndex[b]), len(setIndex[a])) or cmp(len(a), len(b)))
+        top = strains[0]
+        topSet = setIndex[top]
+        sets.append(topSet)
+        if len(topSet) == 1:
+            print " ".join(topSet)
         else:
-            slist = [(g, simScore(g)) for g in s]
+            slist = [(g, simScore(g)) for g in topSet]
             slist.sort(sorter)
-            #print slist
-            #print
             print " ".join([g[0] for g in slist])
+        for s in topSet:
+            if s in setIndex:
+                del setIndex[s]
+            for ss in setIndex.values():
+                if ss != topSet and s in ss:
+                    ss.remove(s)
+
+
+
 print >>sys.stderr, len(sets), 'sets containing', sum([len(s) for s in sets]), 'genomes'

@@ -31,7 +31,7 @@ def rsync_assembly(ass):
     dirname = assembly_dir(ass)
     if os.path.exists(dirname):
         return
-    command = ["rsync", "-av", uri, "."]
+    command = ["rsync", "-av", uri, "ncbi"]
     print "Running", ' '.join(command)
     call(command)
     return dirname
@@ -39,7 +39,8 @@ def rsync_assembly(ass):
 def link_assembly(ass):
     """Create a link to assembly using descriptive strain name"""
     dirname = assembly_dir(ass)
-    source = os.path.join(dirname, dirname + "_genomic.fna.gz")
+    source = os.path.join("ncbi", dirname, dirname + "_genomic.fna.gz")
+    print 'Source:', source, 'Ass:', ass
     if os.path.exists(source):
         dest = os.path.join("assemblies", assembly_name(ass) + ".fasta.gz")
         if not os.path.exists("assemblies"):
@@ -79,7 +80,6 @@ def assembly_name(ass):
     name = name.replace(":", "-")
     name = name.replace(" ", "_")
     name = name.replace("__", "_")
-    name = name.replace("")
     name = name.replace("K-12_K-12", "K-12")
     if name in assembly_names:
         name += "_" + ass['# assembly_accession'].split('.')[0]
@@ -99,4 +99,4 @@ print len(keepers), "keepers"
 #exit(0)
 for keeper in keepers:
     rsync_assembly(keeper)
-    link_assembly(keeper)
+    #link_assembly(keeper)

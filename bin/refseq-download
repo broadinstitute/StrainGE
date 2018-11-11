@@ -93,8 +93,8 @@ def assembly_name(ass):
 
 assemblies = load_assemblies()
 print len(assemblies), "assemblies"
-
-keepers = [assembly for assembly in assemblies if assembly_filter(assembly, sys.argv[1:])]
+keywords = [k.lower() for k in sys.argv[1:]]
+keepers = [assembly for assembly in assemblies if assembly_filter(assembly, keywords)]
 print len(keepers), "keepers"
 #exit(0)
 for keeper in keepers:

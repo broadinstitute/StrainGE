@@ -335,10 +335,11 @@ class ScaffoldPileups:
             for otherName, otherCoord in otherLowMq:
                 otherPileups = otherScaffoldPileups[otherName]
                 if otherCoord <= otherPileups.lowmq.size:
-                    otherScaffoldPileups[otherName].lowmq[otherCoord-1] += 1
+                    otherScaffoldPileups[otherName].lowmqCount[otherCoord-1] += 1
 
         for i in xrange(self.length):
-            self.coverage[i] = self.depth(i)
+            self.coverage[i] = self.total_depth(i)
+
 
         # When we look for blocks without coverage (possible large deletions from recombination events), we attempt
         # to scale the minimum size to be significant, because at very low coverage, we expect large uncovered regions.
@@ -556,7 +557,7 @@ class ScaffoldPileups:
         """
         :return: Count of all reads, including those rejected for some reason (int)
         """
-        return self.depth(loc) + self.bad[loc]
+        return self.depth(loc) + self.lowmqCount[loc]
 
     def covered(self, loc):
         """
@@ -597,7 +598,7 @@ class CallStats:
     """
 
     # these are al the fields and formats in the order we want to show them
-    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("covered", "%d"), ("coveredPct", "%.2f"), ("evenness", "%.2f"),
+    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("callable", "%d"), ("callablePct", "%.2f"), ("evenness", "%.2f"),
               ("confirmed", "%d"), ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
               ("multiPct", "%.2f"), ("lowmq", "%d"), ("lowmqPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"),
               ("gapCount", "%d"), ("gapLength", "%d"))
@@ -610,21 +611,21 @@ class CallStats:
         # locations where we have strong evidnece for multiple bases (x&(x-1) turns off only highest bit in x :))
         multi = (strong & (strong - 1)) > 0
         self.length = length
-        # covered if we have any strong call
-        self.covered = np.count_nonzero(strong)
-        self.coveredPct = pct(self.covered, length)
-        # exclude high coverage areas when computing mean coverage
-        self.coverage = float(coverage[high==0].sum()) / float(length)
-        self.median = int(round(np.median(coverage)))
-        # evenness is measure of expected "covered" vs coverage (low if coverage concentrated in small portion)
+        # callable if we have any strong call
+        self.callable = np.count_nonzero(strong)
+        self.callablePct = pct(self.callable, length)
+        # exclude high coverage areas when computing mean coverage, but include lowmq depth
+        self.coverage = float(coverage[high==0].sum() + lowmq.sum()) / float(length)
+        self.median = int(round(np.median(coverage + lowmq)))
+        # evenness is measure of expected "callable" vs coverage (low if coverage concentrated in small portion)
         lw = landerWaterman(self.coverage)
-        self.evenness = self.coveredPct / (100.0 * lw * lw) if lw > 0 else 0
+        self.evenness = self.callablePct / (100.0 * lw * lw) if lw > 0 else 0
         # confirmed count
         self.confirmed = np.count_nonzero(confirmed)
-        self.confirmedPct = pct(self.confirmed, self.covered)
+        self.confirmedPct = pct(self.confirmed, self.callable)
         # snp count
         self.snps = np.count_nonzero(snps)
-        self.snpPct = pct(self.snps, self.covered)
+        self.snpPct = pct(self.snps, self.callable)
         # multi count
         self.multi = np.count_nonzero(multi)
         self.multiPct = pct(self.multi, self.snps)
@@ -634,12 +635,12 @@ class CallStats:
         # count of locations not called because coverage too high
         self.high = np.count_nonzero(high)
         self.highPct = pct(self.high, length)
-        # count of gaps (uncovered reginos) and their cumulative length
+        # count of gaps (uncallable reginos) and their cumulative length
         self.gapCount = len(gaps)
         self.gapLength = sum([g.length for g in gaps])
 
         # values correspond to order of FIELDS above
-        self.values = (self.length, self.coverage, self.median, self.covered, self.coveredPct, self.evenness, self.confirmed,
+        self.values = (self.length, self.coverage, self.median, self.callable, self.callablePct, self.evenness, self.confirmed,
                        self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.lowmq, self.lowmqPct,
                        self.high, self.highPct, self.gapCount, self.gapLength)
 

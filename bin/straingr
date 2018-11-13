@@ -509,7 +509,7 @@ class ScaffoldPileups:
         quals = self.alleles[loc, 1]
         qualsum = float(quals.sum())
         # qualfraction is array containing fraction of evidence for each allele
-        qualfraction = quals / qualsum
+        qualfraction = quals / qualsum if qualsum > 0.0 else 0.0
 
         # Any alleles which have any evidence at all
         evidence = quals > 0

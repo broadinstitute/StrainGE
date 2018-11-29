@@ -445,7 +445,8 @@ class ScaffoldPileups:
                 others = self.get_xa(alignment, loc)
                 for otherName, otherCoord, rc in others:
                     otherPileups = otherScaffoldPileups[otherName]
-                    otherPileups.add_read(otherCoord - 1, read, True)
+                    otherPileups.lowmqCount[otherCoord - 1] += 1
+                    #otherPileups.add_read(otherCoord - 1, read, True)
 
 
     def add_read(self, loc, read, rc=False):
@@ -485,8 +486,8 @@ class ScaffoldPileups:
         # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
         if mq < args.minmq:
             self.lowmqCount[loc] += 1
-            if self.sequence[loc] != alignment.query_sequence[pos]:
-                print self.name, loc, self.sequence[loc], alignment.query_sequence[pos], rc
+            #if self.sequence[loc] != alignment.query_sequence[pos]:
+            #    print self.name, loc, self.sequence[aloc], alignment.query_sequence[pos], rc
             return
 
         if read.indel:

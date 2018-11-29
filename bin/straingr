@@ -128,6 +128,8 @@ class Sample:
         with pysam.AlignmentFile(bamfile, "rb") as bam:
             for s in self.scaffolds:
                 s.makePileups(bam, scaffoldsByName)
+            for s in self.scaffolds:
+                s.finalizePileups()
 
         # Pull together essential stats for the whole genome so we can set thresholds
         self.refmask = np.concatenate([s.refmask for s in self.scaffolds])
@@ -307,6 +309,7 @@ class ScaffoldPileups:
         # otherwise good alignments with low mapping quality (probably because this is a repeat)
         self.lowmqCount = np.zeros(self.length, dtype=np.uint32)
         self.lowmq = np.zeros(self.length, dtype=np.uint32)
+        self.mqSum = np.zeros(self.length, dtype=np.uint32)
         # allele calls: strong and weak are both byte arrays with one bit set for each present allele (A,C,G,T + ins + del)
         self.strong = np.zeros(self.length, dtype=np.uint8)
         self.weak = np.zeros(self.length, dtype=np.uint8)
@@ -326,16 +329,16 @@ class ScaffoldPileups:
 
         :param bam: open bam file (pysam object).
         """
-        print >>logfile, "Generating pileups for", self.name, "length=%d" % self.length,
+        print >>logfile, "Generating pileups for", self.name, "length=%d" % self.length
         logfile.flush()
 
         for column in bam.pileup(self.name):
             refpos = column.reference_pos
-            otherLowMq = self.add_reads(refpos, column.pileups)
-            for otherName, otherCoord in otherLowMq:
-                otherPileups = otherScaffoldPileups[otherName]
-                if otherCoord <= otherPileups.lowmq.size:
-                    otherScaffoldPileups[otherName].lowmqCount[otherCoord-1] += 1
+            self.add_reads(refpos, column.pileups, otherScaffoldPileups)
+
+    def finalizePileups(self):
+        print >>logfile, "Finalizing pileups for", self.name, "length=%d" % self.length,
+        logfile.flush()
 
         for i in xrange(self.length):
             self.coverage[i] = self.total_depth(i)
@@ -427,17 +430,27 @@ class ScaffoldPileups:
             return int(math.ceil(mean * 1.5 + 15.0))
 
 
-    def add_reads(self, loc, pileup_reads):
+    def add_reads(self, loc, pileup_reads, otherScaffoldPileups):
         """Add a bunch of pysam.PileupRead objects to this pileup"""
         otherLowMq = []
         for read in pileup_reads:
-            others = self.add_read(loc, read)
-            if others:
-                otherLowMq += others
-        return otherLowMq
+            # add this read to the pileup for this column
+            self.add_read(loc, read)
 
-    def add_read(self, loc, read):
+            # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
+            alignment = read.alignment
+            mq = alignment.mapping_quality
+            if mq < args.minmq:
+                # experimental: process other mappings
+                others = self.get_xa(alignment, loc)
+                for otherName, otherCoord, rc in others:
+                    otherPileups = otherScaffoldPileups[otherName]
+                    otherPileups.add_read(otherCoord - 1, read, True)
+
+
+    def add_read(self, loc, read, rc=False):
         """Add a pysam.PileupRead object to this pileup"""
+
         alignment = read.alignment
 
         # if this is a paired read, make sure the pairs are properly aligned
@@ -467,12 +480,14 @@ class ScaffoldPileups:
 
         # check for decent mapping quality
         mq = alignment.mapping_quality
+        self.mqSum[loc] += mq
 
         # we keep track of otherwise good reads with low mapping quality; that probably means this is a repeat
         if mq < args.minmq:
             self.lowmqCount[loc] += 1
-            # experimental: process other mappings
-            return self.get_xa(alignment, loc)
+            if self.sequence[loc] != alignment.query_sequence[pos]:
+                print self.name, loc, self.sequence[loc], alignment.query_sequence[pos], rc
+            return
 
         if read.indel:
             if read.is_del:
@@ -495,6 +510,7 @@ class ScaffoldPileups:
         #q = min(qual, mq)
         self.alleles[loc, 0, baseIndex] += 1
         self.alleles[loc, 1, baseIndex] += qual
+
 
     def callAllelesLoc(self, loc):
         """
@@ -537,8 +553,9 @@ class ScaffoldPileups:
                     anm = int(anm)
                     if anm <= nm:
                         pos = int(pos)
-                        coord = -pos + read.query_length - 1 - offset if pos < 0 else pos + offset
-                        alns.append((scaffold, coord))
+                        rc = pos < 0
+                        coord = -pos + read.query_length - 1 - offset if rc else pos + offset
+                        alns.append((scaffold, coord, rc))
         return alns
 
     def depth(self, loc):

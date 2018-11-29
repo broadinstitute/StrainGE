@@ -445,7 +445,8 @@ class ScaffoldPileups:
                 others = self.get_xa(alignment, loc)
                 for otherName, otherCoord, rc in others:
                     otherPileups = otherScaffoldPileups[otherName]
-                    otherPileups.lowmqCount[otherCoord - 1] += 1
+                    if otherCoord - 1 < otherPileups.length:
+                        otherPileups.lowmqCount[otherCoord - 1] += 1
                     #otherPileups.add_read(otherCoord - 1, read, True)
 
 
@@ -696,46 +697,48 @@ class CompareStats:
         # takes CallStats from strainA, strainB
         self.strainA = strainA
         self.strainB = strainB
+        self.compareStrains(strainA, strainB)
 
-        # gather values, a la CallStats
+    def compareStrains(self, strainA, strainB):
+        print >>logfile, "Comparing", strainA.bamfile, "versus",
+        logfile.flush()
+        self.scaffoldValues = [self.compare(a, b) for a, b in zip(strainA.scaffolds, strainB.scaffolds)]
         self.values = self.compare(strainA, strainB)
         self.values += self.compareGaps()
 
-    def compare(self, strainA, strainB):
+    def compare(self, A, B):
         """
-        :param strainA: CallStats object for strainA
-        :param strainB: CallStats object for strainB
+        :param A: CallStats object for strainA
+        :param B: CallStats object for strainB
         :return: list of computed values
         """
-        print >>logfile, "Comparing", strainA.bamfile, "versus",
-        logfile.flush()
 
         # locations where both have a call in common
-        common, commonCount, commonPct = self.compareThing(np.ones_like(strainA.refmask), np.logical_and(strainA.strong, strainB.strong), "common")
+        common, commonCount, commonPct = self.compareThing(np.ones_like(A.refmask), np.logical_and(A.strong, B.strong), "common")
 
         # common locations where A & B disagree
-        disagree, disagreeCount, disagreePct = self.compareThing(common, strainA.strong != strainB.strong, "disagree")
+        disagree, disagreeCount, disagreePct = self.compareThing(common, A.strong != B.strong, "disagree")
 
         # common locations where either has a variant from reference
-        variants, variantCount, variantPct = self.compareThing(common, ((strainA.strong | strainB.strong) & ~strainA.refmask) > 0, "variant")
+        variants, variantCount, variantPct = self.compareThing(common, ((A.strong | B.strong) & ~A.refmask) > 0, "variant")
 
         # variant locations where both have a shared variant
-        commonVariants, commonVariantCount, commonVariantPct = self.compareThing(variants, (strainA.strong & strainB.strong) > 0, "commonvariant")
+        commonVariants, commonVariantCount, commonVariantPct = self.compareThing(variants, (A.strong & B.strong) > 0, "commonvariant")
 
         # variant locations where both agree
-        variantAgree, variantAgreeCount, variantAgreePct = self.compareThing(variants, strainA.strong == strainB.strong, "variantAgree")
+        variantAgree, variantAgreeCount, variantAgreePct = self.compareThing(variants, A.strong == B.strong, "variantAgree")
 
         # variant in A but not B
-        AnotB, AnotBcount, AnotBpct = self.compareThing(variants, (strainA.strong & ~strainB.strong & ~strainA.refmask) > 0, "AnotB")
+        AnotB, AnotBcount, AnotBpct = self.compareThing(variants, (A.strong & ~B.strong & ~A.refmask) > 0, "AnotB")
 
         # variant in A but not B weakly
-        AnotBweak, AnotBweakCount, AnotBweakPct = self.compareThing(variants, (strainA.strong & ~strainB.weak & ~strainA.refmask) > 0, "AnotBweak")
+        AnotBweak, AnotBweakCount, AnotBweakPct = self.compareThing(variants, (A.strong & ~B.weak & ~A.refmask) > 0, "AnotBweak")
 
         # variant in B not A
-        BnotA, BnotAcount, BnotApct = self.compareThing(variants, (strainB.strong & ~strainA.strong & ~strainA.refmask) > 0, "BnotA")
+        BnotA, BnotAcount, BnotApct = self.compareThing(variants, (B.strong & ~A.strong & ~A.refmask) > 0, "BnotA")
 
         # variant in B not A weakly
-        BnotAweak, BnotAweakCount, BnotAweakPct = self.compareThing(variants, (strainB.strong & ~strainA.weak & ~strainA.refmask) > 0, "BnotAweak")
+        BnotAweak, BnotAweakCount, BnotAweakPct = self.compareThing(variants, (B.strong & ~A.weak & ~A.refmask) > 0, "BnotAweak")
 
         return [commonCount, commonPct, disagreeCount, disagreePct, variantCount, variantPct,
                 commonVariantCount, commonVariantPct,
@@ -791,6 +794,8 @@ class CompareStats:
         if header:
             print >>out, "\t".join(["name"] + [field for field, fmt in CompareStats.FIELDS])
         else:
+            for s, sv in zip(self.strainA.scaffolds,self.scaffoldValues):
+                print >> out, "\t".join([s.name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, sv)])
             print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, self.values)])
 
 

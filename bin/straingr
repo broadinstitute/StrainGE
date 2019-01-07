@@ -645,7 +645,7 @@ class CallStats:
     """
 
     # these are al the fields and formats in the order we want to show them
-    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("callable", "%d"), ("callablePct", "%.2f"), ("evenness", "%.2f"),
+    FIELDS = (("length", "%d"), ("coverage", "%.2f"), ("median", "%d"), ("callable", "%d"), ("callablePct", "%.2f"),
               ("confirmed", "%d"), ("confirmedPct", "%.2f"), ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
               ("multiPct", "%.2f"), ("lowmq", "%d"), ("lowmqPct", "%.2f"), ("high", "%d"), ("highPct", "%.2f"),
               ("gapCount", "%d"), ("gapLength", "%d"))
@@ -664,9 +664,6 @@ class CallStats:
         # exclude high coverage areas when computing mean coverage, but include lowmq depth
         self.coverage = float(coverage[high==0].sum() + lowmq.sum()) / float(length)
         self.median = int(round(np.median(coverage + lowmq)))
-        # evenness is measure of expected "callable" vs coverage (low if coverage concentrated in small portion)
-        lw = landerWaterman(self.coverage)
-        self.evenness = self.callablePct / (100.0 * lw * lw) if lw > 0 else 0
         # confirmed count
         self.confirmed = np.count_nonzero(confirmed)
         self.confirmedPct = pct(self.confirmed, self.callable)
@@ -687,7 +684,7 @@ class CallStats:
         self.gapLength = sum([g.length for g in gaps])
 
         # values correspond to order of FIELDS above
-        self.values = (self.length, self.coverage, self.median, self.callable, self.callablePct, self.evenness, self.confirmed,
+        self.values = (self.length, self.coverage, self.median, self.callable, self.callablePct, self.confirmed,
                        self.confirmedPct, self.snps, self.snpPct, self.multi, self.multiPct, self.lowmq, self.lowmqPct,
                        self.high, self.highPct, self.gapCount, self.gapLength)
 
@@ -714,7 +711,8 @@ class CompareStats:
     """
 
     # list of fields and formats, a la CallStats
-    FIELDS = [("common", "%d"), ("commonPct", "%.2f"), ("disagree", "%d"), ("disagreePct", "%.2f"), ("variants", "%d"), \
+    FIELDS = [("common", "%d"), ("commonPct", "%.2f"), ("single", "%d"),("singlePct", "%.2f"), \
+              ("singleAgree", "%d"), ("singleAgreePct", "%.2f"), ("variants", "%d"), \
               ("variantPct", "%.2f"), ("commonVariant", "%d"), ("commonVariantPct", "%.2f"), ("variantAgree", "%d"),
               ("variantAgreePct", "%.2f"), ("AnotB", "%d"), ("AnotBpct", "%.2f"), \
               ("AnotBweak", "%d"), ("AnotBweakPct", "%.2f"), ("BnotA", "%d"), ("BnotApct", "%.2f"), \
@@ -741,11 +739,19 @@ class CompareStats:
         :return: list of computed values
         """
 
-        # locations where both have a call in common
+        # common locations where both have a call
         common, commonCount, commonPct = self.compareThing(np.ones_like(A.refmask), np.logical_and(A.strong, B.strong), "common")
 
+        # locations where both have only a single allele called
+        singleA = (A.strong & (A.strong - 1)) == 0
+        singleB = (B.strong & (B.strong - 1)) == 0
+        singles, singleCount, singlePct = self.compareThing(common, singleA & singleB, "single")
+
+        # locations where both have only a single allele called
+        singleAgree, singleAgreeCount, singleAgreePct = self.compareThing(singles, A.strong == B.strong, "singleAgree")
+
         # common locations where A & B disagree
-        disagree, disagreeCount, disagreePct = self.compareThing(common, A.strong != B.strong, "disagree")
+        #disagree, disagreeCount, disagreePct = self.compareThing(common, A.strong != B.strong, "disagree")
 
         # common locations where either has a variant from reference
         variants, variantCount, variantPct = self.compareThing(common, ((A.strong | B.strong) & ~A.refmask) > 0, "variant")
@@ -768,7 +774,7 @@ class CompareStats:
         # variant in B not A weakly
         BnotAweak, BnotAweakCount, BnotAweakPct = self.compareThing(variants, (B.strong & ~A.weak & ~A.refmask) > 0, "BnotAweak")
 
-        return [commonCount, commonPct, disagreeCount, disagreePct, variantCount, variantPct,
+        return [commonCount, commonPct, singleCount, singlePct, singleAgreeCount, singleAgreePct, variantCount, variantPct,
                 commonVariantCount, commonVariantPct,
                 variantAgreeCount, variantAgreePct, AnotBcount, AnotBpct, AnotBweakCount, AnotBweakPct,
                 BnotAcount, BnotApct, BnotAweakCount, BnotAweakPct]

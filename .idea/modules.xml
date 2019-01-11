@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/StrainGE.iml" filepath="$PROJECT_DIR$/.idea/StrainGE.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/StrainGR.iml" filepath="$PROJECT_DIR$/.idea/StrainGR.iml" />
     </modules>
   </component>
 </project>

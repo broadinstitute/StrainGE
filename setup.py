@@ -132,10 +132,9 @@ setup(
     ],
 
     # CLI endpoints
-    # entry_points={
-    #     'console_scripts': [
-    #         'strainge=strainge.cli.main:main',
-    #         'straingr=strainge.cli.straingr:main'
-    #     ]
-    # }
+    entry_points={
+        'console_scripts': [
+            'strainge=strainge.cli.main:strainge_cli',
+        ]
+    }
 )

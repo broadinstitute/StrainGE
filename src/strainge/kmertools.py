@@ -3,8 +3,8 @@
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
 #
-#  * Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
+#  * Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 #
 #  * Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
@@ -16,25 +16,31 @@
 #
 #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-#  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-#  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-#  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
 #
 
 import os
-import gzip
 import bz2
+import gzip
+import logging
+
 import h5py
 import pysam
-from Bio import SeqIO
 import numpy as np
+from Bio import SeqIO
 import matplotlib.pyplot as plt
-import kmerizer
+
+from strainge import kmerizer
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_K = 23
 DEFAULT_FINGERPRINT_FRACTION = 0.01
@@ -48,14 +54,12 @@ T = 3
 BASES = "ACGT"
 
 
-def kmerString(k, kmer):
+def kmer_string(k, kmer):
     seq = ''.join([BASES[(kmer >> (2 * k)) & 3] for k in range(k - 1, -1, -1)])
-    #seqrc = Seq.reverse_complement(seq)
-    #return ("%x" % kmer, seq, seqrc)
     return seq
 
 
-def openSeqFile(fileName):
+def open_seq_file(file_name):
     """
     Open a sequence file with SeqIO; can be fasta or fastq with optional gz or bz2 compression.
     Assumes fasta unless ".fastq" or ".fq" in the file name.
@@ -63,69 +67,67 @@ def openSeqFile(fileName):
     :return: SeqIO.parse object
     """
 
-    components = fileName.split('.')
+    components = file_name.split('.')
 
     if "bam" in components:
-        file = pysam.AlignmentFile(fileName, "rb", check_header=False, check_sq=False)
+        file = pysam.AlignmentFile(file_name, "rb", check_header=False,
+                                   check_sq=False)
 
         # generator for sequences in bam
-        def bamSequences():
+        def bam_sequences():
             for read in file.fetch(until_eof=True):
                 if not read.is_qcfail:
                     yield read
 
-        return bamSequences()
+        return bam_sequences()
 
     if "bz2" in components:
-        file = bz2.BZ2File(fileName, 'r')
+        file = bz2.open(file_name, 'rt')
     elif "gz" in components:
-        file = gzip.GzipFile(fileName, 'r')
-        SeqIO.parse(file, "fastq")
+        file = gzip.open(file_name, 'rt')
     else:
-        file = open(fileName, 'r')
+        file = open(file_name, 'r')
+
     if "fastq" in components or "fq" in components:
-        fileType = "fastq"
+        file_type = "fastq"
     else:
-        fileType = "fasta"
-    return SeqIO.parse(file, fileType)
+        file_type = "fasta"
+    return SeqIO.parse(file, file_type)
 
 
-def loadHdf5(filePath, thing):
-    with h5py.File(filePath, 'r') as h5:
-        assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
+def load_hdf5(file_path, thing):
+    with h5py.File(file_path, 'r') as h5:
+        if h5.attrs['type'] != "KmerSet":
+            raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
+                             " '{}'".format(h5.attrs['type']))
+
         return np.array(h5[thing])
 
 
-def loadKmers(fileName):
-    return loadHdf5(fileName, "kmers")
+def load_kmers(file_name):
+    return load_hdf5(file_name, "kmers")
 
 
-def loadCounts(fileName):
-    return loadHdf5(fileName, "counts")
+def load_counts(file_name):
+    return load_hdf5(file_name, "counts")
 
 
-def loadFingerprint(fileName):
-    return loadHdf5(fileName, "fingerprint")
+def load_fingerprint(file_name):
+    return load_hdf5(file_name, "fingerprint")
 
 
-def nameFromPath(filePath):
-    return os.path.splitext(os.path.basename(filePath))[0]
+def name_from_path(file_path):
+    return os.path.splitext(os.path.basename(file_path))[0]
 
 
-def kmerSetFromHdf5(filePath):
-    if not filePath.endswith(".hdf5"):
-        filePath += ".hdf5"
-    with h5py.File(filePath, 'r') as h5:
+def kmerset_from_hdf5(file_path):
+    if not file_path.endswith(".hdf5"):
+        file_path += ".hdf5"
+    with h5py.File(file_path, 'r') as h5:
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         kset = KmerSet(h5.attrs['k'])
-        if "fingerprint_fraction" in h5.attrs:
-            kset.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
         if "fingerprint" in h5:
             kset.fingerprint = np.array(h5["fingerprint"])
-            if not kset.fingerprint_fraction:
-                kset.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
-        if "fingerprint_counts" in h5:
-            kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
             kset.kmers = np.array(h5["kmers"])
         if "counts" in h5:
@@ -133,42 +135,38 @@ def kmerSetFromHdf5(filePath):
     return kset
 
 
-def kmerSetFromFile(filePath, k = DEFAULT_K):
-    return kmerSetFromHdf5(filePath)
+def kmerset_from_file(file_path, k=DEFAULT_K):
+    return kmerset_from_hdf5(file_path)
 
 
-def similarityScore(kmers1, kmers2, scoring="jaccard"):
+def similarity_score(kmers1, kmers2, scoring="jaccard"):
     """Compute Jaccard similarity index"""
     # count of kmers in common
-    if kmers1.size == 0 or kmers2.size == 0:
-        return 0
     intersection = float(kmerizer.count_common(kmers1, kmers2))
-    if intersection == 0:
-        return 0
     if scoring == "jaccard":
         # Use Jaccard similarity index
-        denom = kmers1.size + kmers2.size - intersection
-        if denom == 0:
-            return 0
-        score = intersection / denom
+        score = intersection / (kmers1.size + kmers2.size - intersection)
     elif scoring == "minsize":
         # Use intersection / min_size (proper subset scores 1.0)
         score = intersection / min(kmers1.size, kmers2.size)
     elif scoring == "meansize":
         # Use mean size in denominator (used in Mash)
-        score = intersection / ((kmers1.size + kmers2.size) / 2.0)
+        score = intersection / ((kmers1.size + kmers2.size) / 2)
     elif scoring == "maxsize":
         # Use intersection / max_size (proper subset scores min/max)
         score = intersection / max(kmers1.size, kmers2.size)
     elif scoring == "reference":
-        # Use intersection / size of reference (useful for comparing reads to assembled references)
+        # Use intersection / size of reference (useful for comparing reads to
+        # assembled references)
         score = intersection / kmers2.size
     else:
-        assert scoring in ("jaccard", "minsize", "maxsize", "meansize", "reference"), "unknown scoring method"
+        assert scoring in (
+            "jaccard", "minsize", "maxsize", "meansize", "reference"), \
+            "unknown scoring method"
     return score
 
 
-def similarityNumeratorDenominator(kmers1, kmers2, scoring="jaccard"):
+def similarity_numerator_denominator(kmers1, kmers2, scoring="jaccard"):
     """Compute Jaccard similarity index"""
     # count of kmers in common
     intersection = float(kmerizer.count_common(kmers1, kmers2))
@@ -182,11 +180,38 @@ def similarityNumeratorDenominator(kmers1, kmers2, scoring="jaccard"):
         # Use intersection / max_size (proper subset scores min/max)
         denom = max(kmers1.size, kmers2.size)
     elif scoring == "reference":
-        # Use intersection / size of reference (useful for comparing reads to assembled references)
+        # Use intersection / size of reference (useful for comparing reads to
+        # assembled references)
         denom = kmers2.size
     else:
-        assert scoring in ("jaccard", "minsize", "maxsize"), "unknown scoring method"
+        assert scoring in ("jaccard", "minsize", "maxsize"), \
+            "unknown scoring method"
     return intersection, denom
+
+
+def build_kmer_count_matrix(kmersets):
+    """Build a big matrix with kmer counts from a list of kmersets.
+
+    Each column will represent a single k-mer set and each row a k-mer. This
+    will effectively merge all kmersets to a single matrix.
+
+    Parameters
+    ----------
+    kmersets : List[KmerSet]
+        List of `KmerSet` objects to build the matrix from.
+
+    Returns
+    -------
+    Tuple[List[kmer_t], array]
+        This function returns a tuple with two elements: the first element is
+        a list of k-mers, i.e. the labels for the rows of the matrix, and the
+        second element is the matrix itself.
+    """
+
+    # Defer to our C++ extension
+    return kmerizer.build_kmer_count_matrix([
+        (kmerset.kmers, kmerset.counts) for kmerset in kmersets
+    ])
 
 
 class KmerSet(object):
@@ -194,96 +219,98 @@ class KmerSet(object):
     Holds array of kmers and their associated counts & stats.
     """
 
-    def __init__(self, k = DEFAULT_K):
+    def __init__(self, k=DEFAULT_K):
         self.k = k
         # data arrays
         self.kmers = None
         self.counts = None
         self.fingerprint = None
-        self.fingerprint_counts = None
-        self.fingerprint_fraction = None
+        self.singletons = None
+
         # stats from kmerizing, if appropriate
-        self.nSeqs = 0
-        self.nBases = 0
-        self.nKmers = 0
+        self.n_seqs = 0
+        self.n_bases = 0
+        self.n_kmers = 0
 
     def __eq__(self, other):
-        return self.k == other.k and np.array_equal(self.fingerprint, other.fingerprint) \
-               and np.array_equal(self.kmers, other.kmers) and np.array_equal(self.counts, other.counts)
+        return (self.k == other.k
+                and np.array_equal(self.fingerprint, other.fingerprint)
+                and np.array_equal(self.kmers, other.kmers)
+                and np.array_equal(self.counts, other.counts))
 
+    def kmerize_file(self, file_name, batch_size=100000000, verbose=True,
+                     limit=0, prune=0):
+        seq_file = open_seq_file(file_name)
+        batch = np.empty(batch_size, dtype=np.uint64)
 
-    def kmerizeFile(self, fileName, batchSize = 100000000, verbose = True, limit=0, prune=0):
-        seqFile = openSeqFile(fileName)
-        batch = np.empty(batchSize, dtype=np.uint64)
-
-        nSeqs = 0
-        nBases = 0
-        nKmers = 0
-        nBatch = 0 # kmers in this batch
+        n_seqs = 0
+        n_bases = 0
+        n_kmers = 0
+        n_batch = 0  # kmers in this batch
         pruned = False
 
-        for seq in seqFile:
-            nSeqs += 1
-            seqLength = len(seq.seq)
-            nBases += seqLength
-            if nKmers + seqLength > batchSize:
-                self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
-                if limit and self.nKmers > limit:
+        for seq in seq_file:
+            n_seqs += 1
+            seq_length = len(seq.seq)
+            n_bases += seq_length
+            if n_kmers + seq_length > batch_size:
+                self.process_batch(batch, n_seqs, n_bases, n_kmers, verbose)
+                if limit and self.n_kmers > limit:
                     break
                 if prune and self.singletons > prune:
-                    self.pruneSingletons(verbose)
+                    self.prune_singletons(verbose)
                     pruned = True
-                nSeqs = 0
-                nBases = 0
-                nKmers = 0
-            nKmers += kmerizer.kmerize_into_array(self.k, str(seq.seq), batch, nKmers)
-            if limit and self.nKmers + nKmers >= limit:
+                n_seqs = 0
+                n_bases = 0
+                n_kmers = 0
+            n_kmers += kmerizer.kmerize_into_array(self.k, str(seq.seq), batch,
+                                                   n_kmers)
+            if limit and self.n_kmers + n_kmers >= limit:
                 break
-        seqFile.close()
-        self.processBatch(batch, nSeqs, nBases, nKmers, verbose)
-        if pruned:
-            self.pruneSingletons(verbose)
 
-    def kmerizeSeq(self, seq):
+        seq_file.close()
+        self.process_batch(batch, n_seqs, n_bases, n_kmers, verbose)
+        if pruned:
+            self.prune_singletons(verbose)
+
+    def kmerize_seq(self, seq):
         kmers = kmerizer.kmerize(self.k, seq)
-        self.nSeqs += 1
-        self.nBases += len(seq)
-        self.nKmers = kmers.size
+        self.n_seqs += 1
+        self.n_bases += len(seq)
+        self.n_kmers = kmers.size
         self.kmers, self.counts = np.unique(kmers, return_counts=True)
 
-    def processBatch(self, batch, nseqs, nbases, nkmers, verbose):
-        self.nSeqs += nseqs
-        self.nBases += nbases
-        self.nKmers += nkmers
+    def process_batch(self, batch, nseqs, nbases, nkmers, verbose):
+        self.n_seqs += nseqs
+        self.n_bases += nbases
+        self.n_kmers += nkmers
 
-        newKmers, newCounts = np.unique(batch[:nkmers], return_counts=True)
+        new_kmers, new_counts = np.unique(batch[:nkmers], return_counts=True)
 
         if self.kmers is None:
-            self.kmers = newKmers
-            self.counts = newCounts
+            self.kmers = new_kmers
+            self.counts = new_counts
         else:
-            self.kmers, self.counts = kmerizer.merge_counts(self.kmers, self.counts, newKmers, newCounts)
+            self.kmers, self.counts = kmerizer.merge_counts(
+                self.kmers, self.counts, new_kmers, new_counts)
 
         self.singletons = np.count_nonzero(self.counts == 1)
         if verbose:
-            self.printStats()
+            self.print_stats()
 
-    def pruneSingletons(self, verbose=False):
+    def prune_singletons(self, verbose=False):
         keepers = self.counts > 1
         self.kmers = self.kmers[keepers]
         self.counts = self.counts[keepers]
-        if verbose:
-            print('Pruned singletons:', self.kmers.size, 'distinct kmers remain')
+        logger.debug("Pruned singletons: %d distinct k-mers remain",
+                     self.kmers.size)
 
-    def mergeKmerSet(self, other):
+    def merge_kmerset(self, other):
         """Create new KmerSet by merging this with another"""
-        newSet = KmerSet(self.k)
-        newSet.kmers, newSet.counts = kmerizer.merge_counts(self.kmers, self.counts, other.kmers, other.counts)
-        if self.fingerprint is not None and self.fingerprint_counts is not None:
-            newSet.fingerprint, newSet.fingerprint_counts = kmerizer.merge_counts(self.fingerprint, self.fingerprint_counts,
-                                                                                  other.fingerprint, other.fingerprint_counts)
-            newSet.fingerprint_fraction = self.fingerprint_fraction
-        return newSet
+        new_set = KmerSet(self.k)
+        new_set.kmers, new_set.counts = kmerizer.merge_counts(
+            self.kmers, self.counts, other.kmers, other.counts)
+        return new_set
 
     def intersect(self, kmers):
         """
@@ -291,9 +318,11 @@ class KmerSet(object):
         :param kmers: kmers to keep
         :return: reduced version of self
         """
-        intersection = kmerizer.intersect(self.kmers, kmers)
-        self.counts = kmerizer.intersect_counts(self.kmers, self.counts, intersection)
-        self.kmers = intersection
+
+        ix = kmerizer.intersect_ix(self.kmers, kmers)
+        self.counts = self.counts[ix]
+        self.kmers = self.kmers[ix]
+
         return self
 
     def exclude(self, kmers):
@@ -302,117 +331,109 @@ class KmerSet(object):
         :param kmers: kmers to exclude
         :return: reduced version of self
         """
-        excluded = kmerizer.diff(self.kmers, kmers)
-        self.counts = kmerizer.intersect_counts(self.kmers, self.counts, excluded)
-        self.kmers = excluded
+        new_kmers = kmerizer.diff(self.kmers, kmers)
+
+        ix = kmerizer.intersect_ix(self.kmers, new_kmers)
+        self.counts = self.counts[ix]
+        self.kmers = new_kmers
+
         return self
 
-    def mutualIntersect(self, other):
+    def mutual_intersect(self, other):
         """
-        Compute intersection of two kmer sets and reduce both to their common kmers. BOTH sets are modified!
+        Compute intersection of two kmer sets and reduce both to their common
+        kmers. BOTH sets are modified!
+
         :param other: other KmerSet
         :return: reduced self
         """
-        intersection = kmerizer.intersect(self.kmers, other.kmers)
-        counts = kmerizer.intersect_counts(self.kmers, self.counts, intersection)
-        self.kmers = intersection
-        self.counts = counts
+        ix = kmerizer.intersect_ix(self.kmers, other.kmers)
+        self.kmers = self.kmers[ix]
+        self.counts = self.counts[ix]
 
-        otherCounts = kmerizer.intersect_counts(other.kmers, other.counts, intersection)
-        other.kmers = intersection
-        other.counts = otherCounts
+        ix = kmerizer.intersect_ix(other.kmers, self.kmers)
+        other.kmers = other.kmers[ix]
+        other.counts = other.counts[ix]
+
         return self
 
-    def printStats(self):
-        print('Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
-            'Distinct:', self.kmers.size, 'Singletons:', self.singletons)
+    def print_stats(self):
+        print('Seqs:', self.n_seqs, 'Bases:', self.n_bases, 'Kmers:',
+              self.n_kmers, 'Distinct:', self.kmers.size,
+              'Singletons:', self.singletons)
 
-    def minHash(self, frac = DEFAULT_FINGERPRINT_FRACTION):
+    def min_hash(self, frac=0.002):
         nkmers = int(round(self.kmers.size * frac))
         order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
         self.fingerprint = self.kmers[order]
         self.fingerprint.sort()
-        self.fingerprint_counts = kmerizer.intersect_counts(self.kmers, self.counts, self.fingerprint)
-        self.fingerprint_fraction = frac
         return self.fingerprint
 
-    def fingerprintAsKmerSet(self):
-        assert self.fingerprint is not None
-        kset = KmerSet(k=self.k)
-        kset.kmers = self.fingerprint
-        kset.fingerprint_fraction = self.fingerprint_fraction
-        if self.fingerprint_counts is not None:
-            kset.counts = self.fingerprint_counts
-        else:
-            kset.counts = np.ones_like(kset.kmers, dtype=np.uint64)
-        return kset
-
-    def freqFilter(self, minFreq = 1, maxFreq = None):
-        condition = (self.counts >= minFreq)
-        if maxFreq:
-            condition &= (self.counts <= maxFreq)
+    def freq_filter(self, min_freq=1, max_freq=None):
+        condition = (self.counts >= min_freq)
+        if max_freq:
+            condition &= (self.counts <= max_freq)
         self.kmers = self.kmers[condition]
         self.counts = self.counts[condition]
 
     def spectrum(self):
         return np.unique(self.counts, return_counts=True)
 
-    def spectrumMinMax(self, delta = .5, maxCopyNumber = 20):
+    def spectrum_min_max(self, delta=.5, max_copy_number=20):
         freq, counts = self.spectrum()
-        minIndex = 0
-        maxIndex = 0
-        haveMin = False
-        haveMax = False
-        lastFreq = 0
+        min_index = 0
+        max_index = 0
+        have_min = False
+        have_max = False
+        last_freq = 0
         for i in range(freq.size):
             count = counts[i]
-            zero = freq[i] > lastFreq + 1
-            if haveMax and (zero or freq[i] > freq[maxIndex] * maxCopyNumber):
+            zero = freq[i] > last_freq + 1
+            if have_max and (
+                    zero or freq[i] > freq[max_index] * max_copy_number):
                 break
-            if haveMin:
-                if count > counts[maxIndex]:
-                    maxIndex = i
-                if count < counts[maxIndex] * (1 - delta):
-                    haveMax = True
-            elif count > 1000 and count > counts[minIndex] * (1 + delta):
-                haveMin = True
-            elif zero or count < counts[minIndex]:
-                minIndex = i
-                maxIndex = i
-            elif counts[i] < counts[minIndex]:
-                minIndex = maxIndex = i
-            lastFreq = freq[i]
-            #print i, freq[i], zero, count, haveMin, freq[minIndex], haveMax, freq[maxIndex]
-        if minIndex and maxIndex and counts[maxIndex] > counts[minIndex] * (1 + delta):
-            return (freq[minIndex], freq[maxIndex], freq[i-1])
+            if have_min:
+                if count > counts[max_index]:
+                    max_index = i
+                if count < counts[max_index] * (1 - delta):
+                    have_max = True
+            elif count > 1000 and count > counts[min_index] * (1 + delta):
+                have_min = True
+            elif zero or count < counts[min_index]:
+                min_index = i
+                max_index = i
+            elif counts[i] < counts[min_index]:
+                min_index = max_index = i
+            last_freq = freq[i]
+        if min_index and max_index and counts[max_index] > counts[
+            min_index] * (1 + delta):
+            return (freq[min_index], freq[max_index], freq[i - 1])
         return None
 
-    def spectrumFilter(self, maxCopyNumber = 20):
-        thresholds = self.spectrumMinMax()
+    def spectrum_filter(self, max_copy_number=20):
+        thresholds = self.spectrum_min_max()
         if thresholds:
-            self.freqFilter(thresholds[0], thresholds[2])
+            self.freq_filter(thresholds[0], thresholds[2])
         return thresholds
 
-
-    def plotSpectrum(self, fileName = None, maxFreq = None):
+    def plot_spectrum(self, file_name=None, max_freq=None):
         # to get kmer profile, count the counts!
         spectrum = self.spectrum()
         plt.semilogy(spectrum[0], spectrum[1])
         plt.grid = True
-        if maxFreq:
-            plt.xlim(0, maxFreq)
+        if max_freq:
+            plt.xlim(0, max_freq)
         plt.xlabel("Kmer Frequency")
         plt.ylabel("Number of Kmers")
-        if fileName:
-            plt.savefig(fileName)
+        if file_name:
+            plt.savefig(file_name)
         else:
             plt.show()
 
-    def writeHistogram(self, fileName):
+    def write_histogram(self, file_obj):
         spectrum = self.spectrum()
-        with open(fileName, 'w') as hist:
-            for i in range(spectrum[0].size):
-                print("%d\t%d" % (spectrum[0][i], spectrum[1][i]), file=hist)
+        for i in range(spectrum[0].size):
+            print("%d\t%d" % (spectrum[0][i], spectrum[1][i]), file=file_obj)
 
     def entropy(self):
         """Calculate Shannon entropy in bases"""
@@ -420,56 +441,44 @@ class KmerSet(object):
             return 0.0
         total = float(self.counts.sum())
         probs = self.counts / total
-        return -(probs * np.log2(probs)).sum() / 2.0
+        return (-(probs * np.log2(probs)).sum()) / 2
 
-    def save_hdf5(self, h5, compress = None):
-        h5.attrs["type"] = np.string_("KmerSet")
+    def save_hdf5(self, h5, compress=None):
+        h5.attrs["type"] = "KmerSet"
         h5.attrs["k"] = self.k
+        h5.attrs["nSeqs"] = self.n_seqs
         if self.fingerprint is not None:
-            h5.create_dataset("fingerprint", data=self.fingerprint, compression=compress)
-        if self.fingerprint_counts is not None:
-            h5.create_dataset("fingerprint_counts", data=self.fingerprint_counts, compression=compress)
-        if self.fingerprint_fraction is not None:
-            h5.attrs["fingerprint_fraction"] = self.fingerprint_fraction
+            h5.create_dataset("fingerprint", data=self.fingerprint,
+                              compression=compress)
         if self.kmers is not None:
             h5.create_dataset("kmers", data=self.kmers, compression=compress)
         if self.counts is not None:
             h5.create_dataset("counts", data=self.counts, compression=compress)
 
-    def save(self, fileName, compress = None):
+    def save(self, file_name, compress=None):
         """Save in HDF5 file format"""
         if compress is True:
             compress = "gzip"
-        if not fileName.endswith(".hdf5"):
-            fileName += ".hdf5"
-        with h5py.File(fileName, 'w') as h5:
+        if not file_name.endswith(".hdf5"):
+            file_name += ".hdf5"
+        with h5py.File(file_name, 'w') as h5:
             self.save_hdf5(h5, compress)
 
     def load_hdf5(self, h5):
-        assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
-        self.k = KmerSet(h5.attrs['k'])
-        if "fingerprint_fraction" in h5.attrs:
-            self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
+        if h5.attrs['type'] != "KmerSet":
+            raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
+                             " '{}'".format(h5.attrs['type']))
+        self.k = int(h5.attrs['k'])
+        if 'nSeqs' in h5.attrs:
+            self.n_seqs = int(h5.attrs['nSeqs'])
+
         if "fingerprint" in h5:
             self.fingerprint = np.array(h5["fingerprint"])
-            if not self.fingerprint_fraction:
-                self.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
-        if "fingerprint_counts" in h5:
-            self.fingerprint_counts = np.array(h5["fingerprint_counts"])
         if "kmers" in h5:
             self.kmers = np.array(h5["kmers"])
         if "counts" in h5:
             self.counts = np.array(h5["counts"])
 
-    def load(self, fileName):
-        with h5py.File(fileName, 'r') as h5:
+    def load(self, file_name):
+        with h5py.File(file_name, 'r') as h5:
             self.load_hdf5(h5)
-
-
-
-
-
-
-
-
-

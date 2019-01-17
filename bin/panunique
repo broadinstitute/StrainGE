@@ -55,7 +55,7 @@ def panUnique(files):
     """ Find kmers unique across pan-genome """
     mergedSet = None
     for f in files:
-        print 'Merging', f
+        print('Merging', f)
         kset = kmertools.kmerSetFromFile(f, args.K)
         if not mergedSet:
             mergedSet = kset
@@ -80,31 +80,31 @@ def formatResult(result):
 strainUnique = {}
 
 if args.input:
-    print 'Loading', args.input
+    print('Loading', args.input)
     with h5py.File(args.input, 'r') as h5:
         for strain in h5:
             strainUnique[strain] = np.array(h5[strain])
 else:
-    print "Finding singletons"
+    print("Finding singletons")
     singletons = panUnique(args.strains)
-    print len(singletons)
+    print(len(singletons))
 
     for strain in args.strains:
         name = kmertools.nameFromPath(strain)
         unique = uniqueInStrain(strain, singletons)
         if output:
-            print name, len(unique)
+            print(name, len(unique))
             if len(unique) > 0:
                 output.create_dataset(name, data=unique, compression="gzip")
                 strainUnique[name] = unique
 
 if args.sample:
-    print "Loading sample", args.sample
+    print("Loading sample", args.sample)
     sample = kmertools.kmerSetFromFile(args.sample)
     results = []
 
-    print "Finding unique in strains"
-    for strain, unique in strainUnique.iteritems():
+    print("Finding unique in strains")
+    for strain, unique in strainUnique.items():
         nunique = len(unique)
         if nunique == 0:
             continue
@@ -121,13 +121,13 @@ if args.sample:
 
         result = (strain, nunique, nucounts, covered, coverRate, coverage)
         results.append(result)
-        print "\t".join([str(r) for r in result])
+        print("\t".join([str(r) for r in result]))
 
     if args.sampleout:
         results.sort(lambda a, b: cmp(b[3], a[3]))
         with open(args.sampleout, 'w') as sampleout:
             for result in sorted(results, key = lambda x: x[-1]):
-                print >>sampleout, "\t".join([str(r) for r in result])
+                print("\t".join([str(r) for r in result]), file=sampleout)
 
 
 

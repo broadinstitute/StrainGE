@@ -40,6 +40,7 @@ import kmertools
 import kmerizer
 import numpy as np
 import pydot
+from functools import reduce
 
 treeNodeCount = 0
 
@@ -119,14 +120,14 @@ class KmerTreeNode:
 
     def saveText(self, outfile):
         header = ["%", self.name] + [child.name for child in self.children]
-        print >>outfile, "\t".join(header)
+        print("\t".join(header), file=outfile)
 
         if self.counts is None:
-            for i in xrange(self.kmers.size):
-                    print >> outfile, kmertools.kmerString(args.K, int(self.kmers[i]))
+            for i in range(self.kmers.size):
+                    print(kmertools.kmerString(args.K, int(self.kmers[i])), file=outfile)
         else:
-            for i in xrange(self.kmers.size):
-                print >> outfile, "%s\t%d" % (kmertools.kmerString(args.K, int(self.kmers[i])), self.counts[i])
+            for i in range(self.kmers.size):
+                print("%s\t%d" % (kmertools.kmerString(args.K, int(self.kmers[i])), self.counts[i]), file=outfile)
         for child in self.children:
             child.saveText(outfile)
 
@@ -205,11 +206,11 @@ def buildTree(tree, scores, simscore="jaccard"):
     pairScores = similarityScores(tree, scores, simscore)
     closePair, score = pairScores[0]
     if score == 0:
-        print >>sys.stderr, "Warning! Zero score detected. No shared k-mers left."
+        print("Warning! Zero score detected. No shared k-mers left.", file=sys.stderr)
     newNode = newTreeNode(list(closePair), similarity=score)
     newTree = [x for x in tree if x not in closePair]
     newTree.append(newNode)
-    print "%.5f" % score,
+    print("%.5f" % score, end=' ')
     return newTree
 
 
@@ -279,7 +280,7 @@ def countTree(tree):
             setCounts(child, allKmers, allCounts)
         return
 
-    print 'Setting node kmer counts'
+    print('Setting node kmer counts')
     kmerList = gatherKmers(tree)
     allKmers = np.concatenate(kmerList)
     distinctKmers = np.unique(allKmers, return_counts=True)
@@ -295,7 +296,7 @@ def treeFromNWK(nwkFile, nodes):
     nodesByName = {node.name: node for node in nodes}
 
     def makeTree(node):
-        if type(node) == str:
+        if isinstance(node, str):
             return nodesByName[node]
         else:
             children = [makeTree(child) for child in node]
@@ -309,7 +310,7 @@ def treeFromHdf5(h5node):
     children = []
     kmers = None
     counts = None
-    for key, value in h5node.items():
+    for key, value in list(h5node.items()):
         if key == "kmers":
             kmers = np.array(value)
         elif key == "counts":
@@ -367,7 +368,7 @@ parser.add_argument('genomes', nargs='*',
 args = parser.parse_args()
 
 if args.input:
-    print 'Generating kmer tree from', args.input
+    print('Generating kmer tree from', args.input)
     #tree = treeFromNWK(args.input, nodes)
     with h5py.File(args.input, 'r') as h5:
         tree = treeFromHdf5(h5)
@@ -375,16 +376,16 @@ else:
     scores = {}
     nodes = [loadLeafNode(arg, args.fingerprint) for arg in args.genomes]
     nleaves = len(nodes)
-    print 'Loaded', nleaves, 'genomes'
+    print('Loaded', nleaves, 'genomes')
     while len(nodes) > 1:
         nodes = buildTree(nodes, scores, args.simscore)
-        print len(nodes)
+        print(len(nodes))
         sys.stdout.flush()
     tree = nodes[0]
     countTree(tree)
 
 if args.dedupe:
-    print 'Deduping tree'
+    print('Deduping tree')
     dedupeTree(tree)
 
 # moved to treepath
@@ -401,7 +402,7 @@ if args.output:
     fileName = args.output
     if not fileName.endswith(".hdf5"):
         fileName += ".hdf5"
-    print 'Saving tree to', fileName
+    print('Saving tree to', fileName)
     with h5py.File(fileName, 'w') as h5:
         tree.saveHdf5(h5, compress = True)
 
@@ -416,4 +417,4 @@ if args.dot:
 
 if args.nwk:
     with open(args.nwk, 'w') as nwk:
-        print >>nwk, tree.nwk() + ';'
+        print(tree.nwk() + ';', file=nwk)

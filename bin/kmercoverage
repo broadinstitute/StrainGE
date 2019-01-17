@@ -46,10 +46,10 @@ parser.add_argument('strains', nargs='+',
                     help='kmerized strain hdf5 or npz files')
 args = parser.parse_args()
 
-print "Loading sample", args.sample
+print("Loading sample", args.sample)
 sample = kmertools.kmerSetFromFile(args.sample)
 
-print "Scoring strains"
+print("Scoring strains")
 results = []
 
 for s in args.strains:
@@ -82,7 +82,7 @@ for s in args.strains:
     medianCov = int(round(np.median(c)))
     result = (name, covered, coverage, medianCov)
     results.append(result)
-    print name, "covered: %.3f coverage: %.2f median: %d score: %.2f" % (covered, coverage, medianCov, covered * coverage)
+    print(name, "covered: %.3f coverage: %.2f median: %d score: %.2f" % (covered, coverage, medianCov, covered * coverage))
 
 results.sort(lambda a, b: cmp(b[1]*b[2], a[1]*a[2]))
 
@@ -91,9 +91,9 @@ if args.output:
 else:
     output = sys.stdout
 
-print "name\tcovered\tcoverage\tmedian\tscore"
+print("name\tcovered\tcoverage\tmedian\tscore")
 for r in results:
-    print >>output, "%s\t%.3f\t%.2f\t%d\t%.2f" % (r[0], r[1], r[2], r[3], r[1] * r[2])
+    print("%s\t%.3f\t%.2f\t%d\t%.2f" % (r[0], r[1], r[2], r[3], r[1] * r[2]), file=output)
 
 
 

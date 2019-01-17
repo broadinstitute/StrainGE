@@ -83,37 +83,37 @@ def sorter(a, b):
         return cmp(b[1], a[1])
 
 if args.chain:
-    for s in setIndex.values():
+    for s in list(setIndex.values()):
         if s not in sets:
             sets.append(s)
             if len(s) == 1:
-                print " ".join(s)
+                print(" ".join(s))
             else:
                 slist = [(g, simScore(g)) for g in s]
                 slist.sort(sorter)
                 #print slist
                 #print
-                print " ".join([g[0] for g in slist])
+                print(" ".join([g[0] for g in slist]))
 else:
     while len(setIndex) > 0:
-        strains = setIndex.keys()
+        strains = list(setIndex.keys())
         strains.sort(lambda a, b: cmp(len(setIndex[b]), len(setIndex[a])) or cmp(len(a), len(b)))
         top = strains[0]
         topSet = setIndex[top]
         sets.append(topSet)
         if len(topSet) == 1:
-            print " ".join(topSet)
+            print(" ".join(topSet))
         else:
             slist = [(g, simScore(g)) for g in topSet]
             slist.sort(sorter)
-            print " ".join([g[0] for g in slist])
+            print(" ".join([g[0] for g in slist]))
         for s in topSet:
             if s in setIndex:
                 del setIndex[s]
-            for ss in setIndex.values():
+            for ss in list(setIndex.values()):
                 if ss != topSet and s in ss:
                     ss.remove(s)
 
 
 
-print >>sys.stderr, len(sets), 'sets containing', sum([len(s) for s in sets]), 'genomes'
+print(len(sets), 'sets containing', sum([len(s) for s in sets]), 'genomes', file=sys.stderr)

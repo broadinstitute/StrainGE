@@ -47,7 +47,7 @@ fingerprint_fraction = None
 with h5py.File(args.output, 'w') as h5:
     for s in args.strains:
         name = kmertools.nameFromPath(s)
-        print name
+        print(name)
 
         kset = kmertools.kmerSetFromFile(s)
 

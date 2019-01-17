@@ -54,7 +54,7 @@ def run_kmerseq(fasta, database=None, k=23, fraction=0.002, force=False):
             (root, ext) = os.path.splitext(fasta)
             out = "{}.hdf5".format(fasta)
         if not force and os.path.isfile(out):
-            print >>sys.stderr, "{} already exists, not overwriting".format(out)
+            print("{} already exists, not overwriting".format(out), file=sys.stderr)
             return out
         kmerseq = [os.path.join(bin_folder, "kmerseq"), "-k", str(k), "-o", out, "-f", "--fraction", "{:f}".format(fraction), fasta]
         with open("{}.log".format(root), 'wb') as w:
@@ -63,9 +63,9 @@ def run_kmerseq(fasta, database=None, k=23, fraction=0.002, force=False):
     except (KeyboardInterrupt, SystemExit) as e:
         raise e
     except IOError:
-        print >>sys.stderr, "Cannot open file to kmerize {}".format(fasta)
+        print("Cannot open file to kmerize {}".format(fasta), file=sys.stderr)
     except Exception as e:
-        print >>sys.stderr, "Exception kmerizing {}:".format(fasta), e
+        print("Exception kmerizing {}:".format(fasta), e, file=sys.stderr)
 
 
 def __kmerseq(cmd):
@@ -83,7 +83,7 @@ def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, thre
         if threads > 1:
             p = multiprocessing.Pool(threads)
             cmds = [(fasta, database, k, fraction, force) for fasta in fastas]
-            print >>sys.stderr, "Generating kmerized files. Please wait..."
+            print("Generating kmerized files. Please wait...", file=sys.stderr)
             map_async = p.map_async(__kmerseq, cmds)
             results = map_async.get()
             for (fasta, kmerfile) in results:
@@ -93,7 +93,7 @@ def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, thre
         else:
             for fasta in fastas:
                 try:
-                    print >>sys.stderr, "Generating kmerized file for {}".format(fasta)
+                    print("Generating kmerized file for {}".format(fasta), file=sys.stderr)
                     kmerfile = run_kmerseq(fasta, database=database, k=k, fraction=fraction, force=force)
                     if not kmerfile:
                         continue
@@ -101,11 +101,11 @@ def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, thre
                 except (KeyboardInterrupt, SystemExit) as e:
                     raise e
                 except Exception as e:
-                    print >>sys.stderr, "Exception kmerizing {}:".format(fasta), e
+                    print("Exception kmerizing {}:".format(fasta), e, file=sys.stderr)
 
         return kmerfiles
     except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr, "Interrupting..."
+        print("Interrupting...", file=sys.stderr)
         if threads > 1 and p:
             try:
                 p.terminate()
@@ -113,7 +113,7 @@ def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, thre
                 pass
         sys.exit(1)
     except Exception as e:
-        print >>sys.stderr, "Exception while kmerizing files:", e
+        print("Exception while kmerizing files:", e, file=sys.stderr)
         if threads > 1 and p:
             try:
                 p.terminate()
@@ -124,7 +124,7 @@ def kmerize_files(fastas, database=None, k=23, fraction=0.002, force=False, thre
 def __get_scaffold_count(fasta):
     """Get the number of scaffolds in a fasta file"""
     if not fasta:
-        print >>sys.stderr, "Cannot find fasta file {}".format(fasta)
+        print("Cannot find fasta file {}".format(fasta), file=sys.stderr)
         raise IOError
     n = 0
     with open(fasta, 'rU') as f:
@@ -142,7 +142,7 @@ def _cluster_kmersim(kmersim, kmerfiles, cutoff=0.95):
     keep = set([os.path.splitext(file)[0] for file in kmerfiles])
     root = os.path.split(kmersim)[0]
     with open(kmersim, 'rb') as f:
-        print >>sys.stderr, "Clustering kmer similarity results..."
+        print("Clustering kmer similarity results...", file=sys.stderr)
         i = 0
         for _i, line in enumerate(f):
             # if _i % 100000 == 0:
@@ -195,7 +195,7 @@ def _cluster_kmersim(kmersim, kmerfiles, cutoff=0.95):
             keep.add(sort[0])
             w.write("\n".join(sort[1:])+"\n")
         
-    print >>sys.stderr, "After clustering, {:d} genomes remain".format(len(keep))
+    print("After clustering, {:d} genomes remain".format(len(keep)), file=sys.stderr)
 
     with open(os.path.join(root, "included.txt"), 'wb') as w:
         w.write("\n".join(["{}.hdf5".format(name) for name in keep]))
@@ -213,7 +213,7 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
         root = os.path.split(kmerfiles[0])[0]
         out = os.path.join(root, "kmersim.txt")
         if not force and os.path.isfile(out):
-            print >>sys.stderr, "kmersimilarity results already exist"
+            print("kmersimilarity results already exist", file=sys.stderr)
             return _cluster_kmersim(out, kmerfiles)
         kmersim = [os.path.join(bin_folder, "kmersimilarity"), "--similarity", out]
         if threads > 1:
@@ -222,15 +222,15 @@ def run_kmersim(kmerfiles, fingerprint=False, threads=1, cutoff=0.95, force=Fals
             kmersim.append("--fingerprint")
         kmersim.extend(kmerfiles)
         with open(os.path.join(root, "kmersim.log"), 'wb') as w:
-            print >>sys.stderr, "Running kmer similarity..."
+            print("Running kmer similarity...", file=sys.stderr)
             subprocess.check_call(kmersim, stdout=w, stderr=w)
         return _cluster_kmersim(out, kmerfiles)
     
     except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr, "Interrupting..."
+        print("Interrupting...", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print >>sys.stderr, "Exception running kmersimilarity: ", e
+        print("Exception running kmersimilarity: ", e, file=sys.stderr)
 
 
 def _bowtie2_index_exists(name):
@@ -253,7 +253,7 @@ def run_bowtie2_build(fasta, database=None, force=False):
         else:
             bowtie2_build = ["bowtie2-build", fasta, fasta]
         if not force and _bowtie2_index_exists(fasta):
-            print >>sys.stderr, "Bowtie2 index exists already for {}".format(fasta)
+            print("Bowtie2 index exists already for {}".format(fasta), file=sys.stderr)
             return True
         (root, ext) = os.path.splitext(fasta)
         with open("{}.log".format(root), 'ab') as a:
@@ -262,7 +262,7 @@ def run_bowtie2_build(fasta, database=None, force=False):
     except (KeyboardInterrupt, SystemExit) as e:
         raise e
     except Exception as e:
-        print >>sys.stderr, "Exception building bowtie2 index for {}:".format(fasta), e
+        print("Exception building bowtie2 index for {}:".format(fasta), e, file=sys.stderr)
 
 
 def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
@@ -273,22 +273,22 @@ def run_kmertree(kmerfiles, k=23, fingerprint=False, force=False):
         root = os.path.split(kmerfiles[0])[0]
         treefile = os.path.join(root, "tree.hdf5")
         if not force and os.path.isfile(treefile):
-            print >>sys.stderr, "Warning! Found previously generated kmer tree. Not overwriting"
+            print("Warning! Found previously generated kmer tree. Not overwriting", file=sys.stderr)
             return True
         kmertree = [os.path.join(bin_folder, "kmertree"), "--dedupe", "-k", str(k), "--output", treefile, "--nwk", os.path.join(root, "tree.nwk")]
         if fingerprint:
             kmertree.append("--fingerprint")
         kmertree.extend(kmerfiles)
         with open(os.path.join(root, "kmertree.log"), 'wb') as w:
-            print >>sys.stderr, "Generating kmer tree. Please wait..."
+            print("Generating kmer tree. Please wait...", file=sys.stderr)
             subprocess.check_call(kmertree, stdout=w, stderr=w)
-        print >>sys.stderr, "Successfully built kmertree!"
+        print("Successfully built kmertree!", file=sys.stderr)
         return True
     except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr, "Interrupting..."
+        print("Interrupting...", file=sys.stderr)
         return
     except Exception as e:
-        print >>sys.stderr, "Exception building kmertree:", e
+        print("Exception building kmertree:", e, file=sys.stderr)
 
 
 def run_pankmer(kmerfiles, k=23, fingerprint=False, force=False):
@@ -299,22 +299,22 @@ def run_pankmer(kmerfiles, k=23, fingerprint=False, force=False):
         root = os.path.split(kmerfiles[0])[0]
         panfile = os.path.join(root, "pankmer.hdf5")
         if not force and os.path.isfile(panfile):
-            print >>sys.stderr, "Warning! Found previously generated pan genome kmer file. Not overwriting"
+            print("Warning! Found previously generated pan genome kmer file. Not overwriting", file=sys.stderr)
             return True
         pankmer = [os.path.join(bin_folder, "pankmer"), "--K", str(k), "--output", panfile]
         if fingerprint:
             pankmer.append("--fingerprint")
         pankmer.extend(kmerfiles)
         with open(os.path.join(root, "pankmer.log"), 'wb') as w:
-            print >>sys.stderr, "Generating pan genome kmer file. Please wait..."
+            print("Generating pan genome kmer file. Please wait...", file=sys.stderr)
             subprocess.check_call(pankmer, stdout=w, stderr=w)
-        print >>sys.stderr, "Successfully built pan genome kmer file!"
+        print("Successfully built pan genome kmer file!", file=sys.stderr)
         return True
     except (KeyboardInterrupt, SystemExit):
-        print >>sys.stderr, "Interrupting..."
+        print("Interrupting...", file=sys.stderr)
         return
     except Exception as e:
-        print >>sys.stderr, "Exception building pan genome kmer file:", e
+        print("Exception building pan genome kmer file:", e, file=sys.stderr)
 
 
 
@@ -339,17 +339,17 @@ def main():
     args = parser.parse_args()
 
     if not args:
-        print >>sys.stderr, "No reference fasta files specified"
+        print("No reference fasta files specified", file=sys.stderr)
         sys.exit(1)
 
     global bin_folder
     bin_folder = os.path.dirname(os.path.realpath(__file__))
 
     if args.K > 32:
-        print >>sys.stderr, "Cannot use kmer size above 32. Setting to 32..."
+        print("Cannot use kmer size above 32. Setting to 32...", file=sys.stderr)
         args.K = 32
     elif args.K < 1:
-        print >>sys.stderr, "Invalid kmer size of {}. Setting to default of 23...".format(args.K)
+        print("Invalid kmer size of {}. Setting to default of 23...".format(args.K), file=sys.stderr)
         args.K = 23
     
     # record kmer size
@@ -365,14 +365,14 @@ def main():
             try:
                 kmersize = int(f.readline())
                 if kmersize != args.K:
-                    print >>sys.stderr, "Overwriting previously generated files with different kmer size of {}".format(kmersize)
+                    print("Overwriting previously generated files with different kmer size of {}".format(kmersize), file=sys.stderr)
                     args.force = True
             except (KeyboardInterrupt, SystemExit):
-                print >>sys.stderr, "Interrupting..."
+                print("Interrupting...", file=sys.stderr)
                 sys.exit(1)
             except Exception as e:
-                print >>sys.stderr, "Exception determining previous kmer size:", e
-                print >>sys.stderr, "Will overwrite all previously generated files..."
+                print("Exception determining previous kmer size:", e, file=sys.stderr)
+                print("Will overwrite all previously generated files...", file=sys.stderr)
                 args.force = True
 
     with open(kmersize_file, 'wb') as w:
@@ -386,43 +386,43 @@ def main():
     if not kmerfiles:
         sys.exit(1)
     if len(kmerfiles) != len(args.fasta):
-        print >>sys.stderr, "ERROR! Only kmerized {:d} out of {:d} files".format(len(kmerfiles), len(args.fasta))
+        print("ERROR! Only kmerized {:d} out of {:d} files".format(len(kmerfiles), len(args.fasta)), file=sys.stderr)
         sys.exit(1)
 
     if args.cluster > 0:
-        keep = run_kmersim(kmerfiles.keys(), fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
+        keep = run_kmersim(list(kmerfiles.keys()), fingerprint=args.fingerprint, threads=args.threads, cutoff=args.cluster, force=args.force)
         if not keep:
             sys.exit(1)
-        for ref in kmerfiles.keys():
+        for ref in list(kmerfiles.keys()):
             if ref not in keep:
                 # remove unselected reference genomes
                 del kmerfiles[ref]
 
     if not args.no_tree:
-        if not run_kmertree(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
+        if not run_kmertree(list(kmerfiles.keys()), k=args.K, fingerprint=args.fingerprint):
             sys.exit(1)
     
-    if not run_pankmer(kmerfiles.keys(), k=args.K, fingerprint=args.fingerprint):
+    if not run_pankmer(list(kmerfiles.keys()), k=args.K, fingerprint=args.fingerprint):
         sys.exit(1)
 
     for ref in kmerfiles:
         try:
             fasta = kmerfiles[ref]
-            print >>sys.stderr, "Generating Bowtie2 index for {}".format(fasta)
+            print("Generating Bowtie2 index for {}".format(fasta), file=sys.stderr)
             if run_bowtie2_build(fasta, database=args.database, force=args.force):
                 complete += 1
 
         except (KeyboardInterrupt, SystemExit):
-            print >>sys.stderr, "Interrupting..."
+            print("Interrupting...", file=sys.stderr)
             sys.exit(1)
         except Exception as e:
-            print >>sys.stderr, "Exception building bowtie2 index for {}: {}".format(fasta, e)
+            print("Exception building bowtie2 index for {}: {}".format(fasta, e), file=sys.stderr)
 
     if complete != len(kmerfiles):
-        print >>sys.stderr, "ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta))
+        print("ERROR! Processed only {:d} of {:d} references. See log files for details.".format(complete, len(args.fasta)), file=sys.stderr)
         sys.exit(1)
     else:
-        print >>sys.stderr, "Successfully processed all {:d} references".format(complete)
+        print("Successfully processed all {:d} references".format(complete), file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -81,7 +81,7 @@ def extract(seqFile, outputDir):
         size = len(seq.seq)
         if name in names:
             name += "_" + seq.name
-        print name
+        print(name)
         path = os.path.join(outputDir, name + ".fasta")
         SeqIO.write(seq, path, "fasta")
         names.add(name)

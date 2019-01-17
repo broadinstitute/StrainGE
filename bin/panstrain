@@ -81,7 +81,7 @@ def tabout(things, file=sys.stdout):
     :param things: sequence of things
     :param file: output file
     """
-    print >>file, "\t".join([str(x) for x in things])
+    print("\t".join([str(x) for x in things]), file=file)
     file.flush()
 
 def scoreStrain(name):
@@ -169,13 +169,13 @@ resultFormats = OrderedDict([("i", "%d"),
                              ("spec", "%.2f"),
                              ("score", "%.3f")])
 
-print >>sys.stderr, "Loading sample", args.sample
+print("Loading sample", args.sample, file=sys.stderr)
 sampleName = os.path.basename(args.sample)
 if sampleName.endswith(".hdf5"):
     sampleName = sampleName[:-5]
 sample = kmertools.kmerSetFromFile(args.sample)
 sampleKmerTotal = sample.counts.sum()
-print >>sys.stderr, "%.2e total kmers in sample" % (sampleKmerTotal,)
+print("%.2e total kmers in sample" % (sampleKmerTotal,), file=sys.stderr)
 
 excludeKmers = None
 
@@ -185,22 +185,22 @@ else:
     output = sys.stdout
 
 with h5py.File(args.pan, 'r') as h5pan:
-    print >>sys.stderr, "Loading pan genome"
+    print("Loading pan genome", file=sys.stderr)
     pan = kmertools.KmerSet()
     pan.load_hdf5(h5pan)
     # Strains are groups within hdf5 file
-    strainNames = [name for name in h5pan.keys() if isinstance(h5pan[name], h5py.Group)]
-    print >>sys.stderr, len(strainNames), "strains,", pan.kmers.size, "kmers in pan genome"
+    strainNames = [name for name in list(h5pan.keys()) if isinstance(h5pan[name], h5py.Group)]
+    print(len(strainNames), "strains,", pan.kmers.size, "kmers in pan genome", file=sys.stderr)
 
     # common kmers contains all kmers of sample which are in pangenome
     panSampleKmers = kmerizer.intersect(sample.kmers, pan.kmers)
-    print >>sys.stderr, panSampleKmers.size, "pan kmers in sample",
+    print(panSampleKmers.size, "pan kmers in sample", end=' ', file=sys.stderr)
     # how often each common kmer occurs in sample
     panSampleCounts = kmerizer.intersect_counts(sample.kmers, sample.counts, panSampleKmers)
     panSampleCount = panSampleCounts.sum()
     panSampleKmerPct = 100.0 * panSampleCount / sampleKmerTotal
     panSampleKmerCov = float(panSampleCount) / panSampleKmers.size
-    print >>sys.stderr, "(%.3f%%)" % (panSampleKmerPct,)
+    print("(%.3f%%)" % (panSampleKmerPct,), file=sys.stderr)
     # how often each common kmer occurs in pangenome
     samplePanCounts = kmerizer.intersect_counts(pan.kmers, pan.counts, panSampleKmers)
     assert panSampleKmers.size == panSampleCounts.size == samplePanCounts.size, "Intersection kmers & counts differ in size"
@@ -214,7 +214,7 @@ with h5py.File(args.pan, 'r') as h5pan:
 
     if cache:
         # preload kmer sets
-        print >>sys.stderr, "Loading strains"
+        print("Loading strains", file=sys.stderr)
         for s in strainNames:
             strainKmerSet(s)
 
@@ -223,7 +223,7 @@ with h5py.File(args.pan, 'r') as h5pan:
     rFormats = [resultFormats[k] for k in rKeys]
     tabout(rKeys, output)
     for i in range(args.iterations):
-        print >>sys.stderr, "Finding strain", i + 1
+        print("Finding strain", i + 1, file=sys.stderr)
         results = []
         bestScore = 0
         bestKset = None
@@ -234,10 +234,10 @@ with h5py.File(args.pan, 'r') as h5pan:
             results = pool.map(scoreStrain, strainNames)
             pool.terminate()
         else:
-            results = map(scoreStrain, strainNames)
+            results = list(map(scoreStrain, strainNames))
 
 
-        results = list(filter(lambda r: r and r["score"] >= args.score and r["even"] >= args.evenness, results))
+        results = list([r for r in results if r and r["score"] >= args.score and r["even"] >= args.evenness])
 
         if len(results) == 0:
             break
@@ -268,9 +268,9 @@ with h5py.File(args.pan, 'r') as h5pan:
         panSampleCounts = kmerizer.intersect_counts(panSampleKmers, panSampleCounts, newKmers)
         samplePanCounts = kmerizer.intersect_counts(panSampleKmers, samplePanCounts, newKmers)
         panSampleKmers = newKmers
-        print >>sys.stderr, panSampleKmers.size, "pan kmers in sample after excluding prior strain"
+        print(panSampleKmers.size, "pan kmers in sample after excluding prior strain", file=sys.stderr)
 
-print >>sys.stderr, 'Done!'
+print('Done!', file=sys.stderr)
 
 if args.output:
     output.close()

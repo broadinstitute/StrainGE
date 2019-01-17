@@ -84,7 +84,7 @@ class Reference:
         self.length = sum(self.lengths)
         self.byname = {scaffold.name: scaffold for scaffold in self.scaffolds}
 
-        print >> logfile, "Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases"
+        print("Reference has", len(self.scaffolds), "scaffolds containing", self.length, "bases", file=logfile)
 
 
     def scaffoldCoord(self, coord):
@@ -148,7 +148,7 @@ class Sample:
 
         :param bam: BAM file containing reads for a sample aligned to the reference genome.
         """
-        print >>logfile, "Processing", bam
+        print("Processing", bam, file=logfile)
 
         # Create ScaffoldPileups objects for each scaffold, and scan the bam to fill them out.
         self.scaffolds = [ScaffoldPileups(scaffold.name, scaffold.seq.upper()) for scaffold in reference.scaffolds]
@@ -166,14 +166,14 @@ class Sample:
         medianCoverage = float(np.median(self.coverage))
 
 
-        print >>logfile, "Total length=%d coverage=%.2f median=%.1f" % (self.length, meanCoverage, medianCoverage),
+        print("Total length=%d coverage=%.2f median=%.1f" % (self.length, meanCoverage, medianCoverage), end=' ', file=logfile)
 
         nonzero = self.coverage[self.coverage > 0]
         if nonzero.size > 0:
             nonzeroCoverage = float(nonzero.sum()) / float(nonzero.size)
         else:
             nonzeroCoverage = 0
-        print >>logfile, "nonzero=%d nzcoverage=%.2f" % (nonzero.size, nonzeroCoverage)
+        print("nonzero=%d nzcoverage=%.2f" % (nonzero.size, nonzeroCoverage), file=logfile)
         logfile.flush()
 
         # Scan through ScaffoldPileups, make calls using the thresholds set above, and compute summary stats
@@ -192,15 +192,15 @@ class Sample:
         self.summaryStats.log("TOTAL")
         if args.gaps:
             for g in self.gaps:
-                print >>logfile, "Gap:", g, \
+                print("Gap:", g, \
                     self.reference.scaffoldToGenomeCoord(g.id, g.start), \
-                    self.reference.scaffoldToGenomeCoord(g.id, g.stop)
+                    self.reference.scaffoldToGenomeCoord(g.id, g.stop), file=logfile)
 
         # If tabular output has been requested, create a tab-separated values output file with entries
         # for each scaffold and total.
         if args.table:
             fileName = self.strainName() + ".stats.tsv"
-            print >>logfile, "Writing stats to", fileName
+            print("Writing stats to", fileName, file=logfile)
             logfile.flush()
             with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
                 self.summaryStats.tabular(outfile, "TOTAL", True)
@@ -210,7 +210,7 @@ class Sample:
 
         if args.details:
             fileName = self.strainName() + ".details.tsv"
-            print >>logfile, "Writing allele differences to", fileName
+            print("Writing allele differences to", fileName, file=logfile)
             logfile.flush()
             with open(os.path.join(os.path.dirname(self.bamfile), fileName), 'w') as outfile:
                 self.details(outfile)
@@ -235,15 +235,15 @@ class Sample:
 
         :param outfile: output file
         """
-        print >>outfile, "\t".join(["scaffold", "coord", "ref", "alleles"])
-        for i in xrange(self.length):
+        print("\t".join(["scaffold", "coord", "ref", "alleles"]), file=outfile)
+        for i in range(self.length):
             mask = self.strong[i]
             # if double-details, then include ref matches!
             if mask and (mask != self.refmask[i] or args.details > 1):
                 scaffold, coord = self.reference.scaffoldCoord(i)
                 ref = self.maskString(self.refmask[i])
                 alleles = self.strongWeakString(self.strong[i], self.weak[i])
-                print >>outfile, "\t".join([scaffold, str(coord), ref, alleles])
+                print("\t".join([scaffold, str(coord), ref, alleles]), file=outfile)
 
     def compareDetails(self, other, outfile):
         """
@@ -255,8 +255,8 @@ class Sample:
         :param other: other strain
         :param outfile: output file
         """
-        print >>outfile, "\t".join(["scaffold", "coord", "ref", self.strainName(), other.strainName()])
-        for i in xrange(self.length):
+        print("\t".join(["scaffold", "coord", "ref", self.strainName(), other.strainName()]), file=outfile)
+        for i in range(self.length):
             mask = self.strong[i]
             otherMask = other.strong[i]
             if mask and otherMask and (mask != otherMask or args.details > 1):
@@ -264,7 +264,7 @@ class Sample:
                 ref = self.maskString(self.refmask[i])
                 alleles = self.strongWeakString(self.strong[i], self.weak[i])
                 otherAlleles = self.strongWeakString(other.strong[i], other.weak[i])
-                print >>outfile, "\t".join([scaffold, str(coord), ref, alleles, otherAlleles])
+                print("\t".join([scaffold, str(coord), ref, alleles, otherAlleles]), file=outfile)
 
     def strongWeakString(self, strong, weak):
         """
@@ -288,7 +288,7 @@ class Sample:
         :return: string representation of alleles
         """
         if mask:
-            return ','.join([Alleles.ALLELES[a] for a in xrange(Alleles.N_ALLELES) if mask & Alleles.ALLELE_MASKS[a]])
+            return ','.join([Alleles.ALLELES[a] for a in range(Alleles.N_ALLELES) if mask & Alleles.ALLELE_MASKS[a]])
         else:
             return ''
 
@@ -357,7 +357,7 @@ class ScaffoldPileups:
 
         :param bam: open bam file (pysam object).
         """
-        print >>logfile, "Generating pileups for", self.name, "length=%d" % self.length
+        print("Generating pileups for", self.name, "length=%d" % self.length, file=logfile)
         logfile.flush()
 
         for column in bam.pileup(self.name):
@@ -365,10 +365,10 @@ class ScaffoldPileups:
             self.add_reads(refpos, column.pileups, otherScaffoldPileups)
 
     def finalizePileups(self):
-        print >>logfile, "Finalizing pileups for", self.name, "length=%d" % self.length,
+        print("Finalizing pileups for", self.name, "length=%d" % self.length, end=' ', file=logfile)
         logfile.flush()
 
-        for i in xrange(self.length):
+        for i in range(self.length):
             self.coverage[i] = self.total_depth(i)
 
 
@@ -385,7 +385,7 @@ class ScaffoldPileups:
         self.highCutoff = self.poissonCutoff(max(medianCoverage, 0.5))
         self.highCoverage = self.coverage > self.highCutoff
 
-        print >>logfile, "coverage=%.2f median=%d cutoff=%d mingap=%d" % (meanCoverage, medianCoverage, self.highCutoff, self.mingap)
+        print("coverage=%.2f median=%d cutoff=%d mingap=%d" % (meanCoverage, medianCoverage, self.highCutoff, self.mingap), file=logfile)
         logfile.flush()
 
     def callAlleles(self):
@@ -398,10 +398,10 @@ class ScaffoldPileups:
 
         :param highCutoff: max pileup depth
         """
-        print >>logfile, "Calling alleles in", self.name,
+        print("Calling alleles in", self.name, end=' ', file=logfile)
         logfile.flush()
 
-        for i in xrange(self.length):
+        for i in range(self.length):
             if self.coverage[i] and not self.highCoverage[i]:
                 self.callAllelesLoc(i)
 
@@ -416,7 +416,7 @@ class ScaffoldPileups:
         :return: list of Region objects corresponding to the coverage gaps, also set as self.gaps
         """
         lastCovered = -1
-        for i in xrange(self.length):
+        for i in range(self.length):
             # heuristic: more low mapping quality than "good" coverage
             self.lowmq[i] = self.lowmqCount[i] > 1 and self.lowmqCount[i] > self.depth(i)
             # we break at either a call or a location which has sufficient coverage at poor mapping quality (repeats)
@@ -567,8 +567,8 @@ class ScaffoldPileups:
         self.strong[loc] = (confirmed * Alleles.ALLELE_MASKS).sum()
 
         if args.verbose and self.strong[loc] and self.refmask[loc] != self.strong[loc]:
-            print self.refmask[loc], self.alleles[loc, 0], self.alleles[loc, 1], \
-                qualfraction, self.weak[loc], self.strong[loc]
+            print(self.refmask[loc], self.alleles[loc, 0], self.alleles[loc, 1], \
+                qualfraction, self.weak[loc], self.strong[loc])
 
 
     def get_xa(self, read, loc):
@@ -694,15 +694,15 @@ class CallStats:
         else:
             first = []
         s = ' '.join(first + [(field[0] + '=' + field[1]) % value for field, value in zip(CallStats.FIELDS, self.values)])
-        print >>logfile, s
+        print(s, file=logfile)
         logfile.flush()
 
     def tabular(self, out, name, header=False):
         # write out in tabular output file format (just spit out header if flag set)
         if header:
-            print >>out, "\t".join(["name"] + [field for field, fmt in CallStats.FIELDS])
+            print("\t".join(["name"] + [field for field, fmt in CallStats.FIELDS]), file=out)
         else:
-            print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CallStats.FIELDS, self.values)])
+            print("\t".join([name] + [ff[1] % value for ff, value in zip(CallStats.FIELDS, self.values)]), file=out)
 
 
 class CompareStats:
@@ -726,7 +726,7 @@ class CompareStats:
         self.compareStrains(strainA, strainB)
 
     def compareStrains(self, strainA, strainB):
-        print >>logfile, "Comparing", strainA.bamfile, "versus",
+        print("Comparing", strainA.bamfile, "versus", end=' ', file=logfile)
         logfile.flush()
         self.scaffoldValues = [self.compare(a, b) for a, b in zip(strainA.scaffolds, strainB.scaffolds)]
         self.values = self.compare(strainA, strainB)
@@ -803,9 +803,9 @@ class CompareStats:
         Bgaps = self.strainB.gaps
         Alength = sum([g.length for g in Agaps])
         Blength = sum([g.length for g in Bgaps])
-        Ashared = filter(lambda ag: any([ag.overlaps(bg) for bg in Bgaps]), Agaps)
+        Ashared = [ag for ag in Agaps if any([ag.overlaps(bg) for bg in Bgaps])]
         AsharedLength = sum([g.length for g in Ashared])
-        Bshared = filter(lambda bg: any([bg.overlaps(ag) for ag in Agaps]), Bgaps)
+        Bshared = [bg for bg in Bgaps if any([bg.overlaps(ag) for ag in Agaps])]
         BsharedLength = sum([g.length for g in Bshared])
         return [Alength, AsharedLength, pct(AsharedLength, Alength), Blength, BsharedLength, pct(BsharedLength, Blength)]
 
@@ -815,7 +815,7 @@ class CompareStats:
         :param name: string to put in front of the stats
         """
         s = ' '.join([name] + [(field[0] + '=' + field[1]) % value for field, value in zip(CompareStats.FIELDS, self.values)])
-        print >>logfile, s
+        print(s, file=logfile)
         logfile.flush()
 
     def tabular(self, out, name, header=False):
@@ -826,11 +826,11 @@ class CompareStats:
         :param header: print header instead of stats
         """
         if header:
-            print >>out, "\t".join(["name"] + [field for field, fmt in CompareStats.FIELDS])
+            print("\t".join(["name"] + [field for field, fmt in CompareStats.FIELDS]), file=out)
         else:
             for s, sv in zip(self.strainA.scaffolds,self.scaffoldValues):
-                print >> out, "\t".join([s.name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, sv)])
-            print >>out, "\t".join([name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, self.values)])
+                print("\t".join([s.name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, sv)]), file=out)
+            print("\t".join([name] + [ff[1] % value for ff, value in zip(CompareStats.FIELDS, self.values)]), file=out)
 
 
 class Region:
@@ -894,7 +894,7 @@ def pct(numerator, denominator, precision=None):
 ### Main
 ##################################
 
-print >>logfile, "Loading reference genome", args.reference
+print("Loading reference genome", args.reference, file=logfile)
 logfile.flush()
 reference = Reference(args.reference)
 baseline = None

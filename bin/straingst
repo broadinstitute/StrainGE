@@ -118,7 +118,7 @@ class Sample(kmertools.KmerSet):
         super(Sample, self).__init__()
         self.name = kmertools.nameFromPath(hdf5file)
 
-        print "Loading sample"
+        print("Loading sample")
         self.hdf5file = hdf5file
         with h5py.File(hdf5file, 'r') as h5:
             self.load_hdf5(h5)
@@ -127,7 +127,7 @@ class Sample(kmertools.KmerSet):
         self.totalKmers = self.counts.sum()
         self.distinctKmers = self.kmers.size
 
-        print self.distinctKmers, "distinct kmers,", self.totalKmers, "total kmers in sample"
+        print(self.distinctKmers, "distinct kmers,", self.totalKmers, "total kmers in sample")
 
 globalPan = None
 globalSample = None
@@ -148,13 +148,13 @@ class PanGenome(kmertools.KmerSet):
         super(PanGenome, self).__init__()
         self.hdf5file = hdf5file
 
-        print "Loading pan genome"
+        print("Loading pan genome")
         self.h5 = h5py.File(hdf5file, 'r')
         self.load_hdf5(self.h5)
 
         # Strains are groups within hdf5 file
-        self.strainNames = [name for name in self.h5.keys() if isinstance(self.h5[name], h5py.Group)]
-        print len(self.strainNames), "strains,", self.kmers.size, "kmers in pan genome"
+        self.strainNames = [name for name in list(self.h5.keys()) if isinstance(self.h5[name], h5py.Group)]
+        print(len(self.strainNames), "strains,", self.kmers.size, "kmers in pan genome")
 
         # we'll use this as a lookup for strain-specific KmerSets (filled out on first iteration)
         self.strainCache = {}
@@ -193,7 +193,7 @@ class PanGenome(kmertools.KmerSet):
         samplePanPct = samplePanKmers * 100.0 / sample.totalKmers
         if args.fingerprint:
             samplePanPct /= self.fingerprint_fraction # really minHash fraction
-        print "%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct)
+        print("%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct))
 
         if outFile:
             # Print sample-wide metrics to output file
@@ -205,13 +205,13 @@ class PanGenome(kmertools.KmerSet):
         excludes = None
         winners = []
         if args.threads > 1:
-            print "Loading reference kmers"
+            print("Loading reference kmers")
             for s in self.strainNames:
                 self.loadStrain(s)
 
 
 
-        for i in xrange(args.iterations):
+        for i in range(args.iterations):
 
             # If we're just starting, print tabular header for strain metrics
             if i == 0:
@@ -230,7 +230,7 @@ class PanGenome(kmertools.KmerSet):
                 results = p.map(scorePanStrain, self.strainNames)
                 p.close()
             else:
-                results = map(lambda s: self.scoreStrain(s, sample, excludes, i), self.strainNames)
+                results = [self.scoreStrain(s, sample, excludes, i) for s in self.strainNames]
 
             results.sort(lambda a, b: cmp(b.score(), a.score()))
 
@@ -240,7 +240,7 @@ class PanGenome(kmertools.KmerSet):
                 break
 
             # Print tabular output stats for winning strain
-            for t in xrange(args.top):
+            for t in range(args.top):
                 tabout(results[t].format(i, human=True))
                 if outFile:
                     tabout(results[t].format(i, human=False), outFile)
@@ -267,7 +267,7 @@ class PanGenome(kmertools.KmerSet):
         result = strain.scoreSample(sample, excludes)
 
         if args.verbose:
-            print result.format(iteration, True)
+            print(result.format(iteration, True))
 
         return result
 
@@ -410,7 +410,7 @@ class Result:
         :param human: True if intended for human parsing
         :return: list of table column headers
         """
-        return [self.humanReadableFormat % k if k == "strain" and human else k for k in Result.resultFormats.keys()]
+        return [self.humanReadableFormat % k if k == "strain" and human else k for k in list(Result.resultFormats.keys())]
 
     def format(self, iteration, human=False):
         """
@@ -469,7 +469,7 @@ def tabout(things, file=sys.stdout):
     :param things: sequence of things
     :param file: output file
     """
-    print >>file, "\t".join([str(x) for x in things])
+    print("\t".join([str(x) for x in things]), file=file)
     file.flush()
 
 
@@ -483,5 +483,5 @@ sample = Sample(args.sample)
 pan.scoreSample(sample, outFile)
 if outFile:
     # print line once finished to denote complete file
-    print >>outFile, "# Done."
+    print("# Done.", file=outFile)
     outFile.close()

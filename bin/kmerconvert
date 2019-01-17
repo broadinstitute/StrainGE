@@ -41,13 +41,13 @@ parser.add_argument("-c", "--compress", help="Compress output file",
 args = parser.parse_args()
 
 for npz in args.npz:
-    print "converting", npz,
+    print("converting", npz, end=' ')
     kset = kmertools.kmerSetFromNpz(npz, args.K)
     if npz.endswith(".npz"):
         hdf5 = npz[:-4] + ".hdf5"
     else:
         hdf5 = npz + ".hdf5"
-    print "to", hdf5
+    print("to", hdf5)
     kset.save(hdf5, compress=args.compress)
 
 

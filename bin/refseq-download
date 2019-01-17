@@ -30,7 +30,7 @@
 
 import os
 import sys
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import csv
 from subprocess import call
 
@@ -38,7 +38,7 @@ def load_assemblies():
     """fetch bacteria assembly_summary.txt file from NCBI refseq"""
     summary = "assembly_summary.txt"
     print("Fetching assembly file")
-    urllib.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
+    urllib.request.urlretrieve("ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/" + summary, summary)
     with open(summary, 'r') as sum:
         sum.readline()
         assemblies =[row for row in csv.DictReader(sum, delimiter='\t')]
@@ -60,7 +60,7 @@ def rsync_assembly(ass):
     if os.path.exists(dirname):
         return
     command = ["rsync", "-av", uri, "ncbi"]
-    print "Running", ' '.join(command)
+    print("Running", ' '.join(command))
     call(command)
     return dirname
 
@@ -68,13 +68,13 @@ def link_assembly(ass):
     """Create a link to assembly using descriptive strain name"""
     dirname = assembly_dir(ass)
     source = os.path.join("ncbi", dirname, dirname + "_genomic.fna.gz")
-    print 'Source:', source, 'Ass:', ass
+    print('Source:', source, 'Ass:', ass)
     if os.path.exists(source):
         dest = os.path.join("assemblies", assembly_name(ass) + ".fasta.gz")
         if not os.path.exists("assemblies"):
             os.mkdir("assemblies")
         if not os.path.exists(dest):
-            print 'Link from', source, 'to', dest
+            print('Link from', source, 'to', dest)
             os.symlink(os.path.join("..", source), dest)
 
 def assembly_dir(ass):
@@ -120,10 +120,10 @@ def assembly_name(ass):
 ###################################
 
 assemblies = load_assemblies()
-print len(assemblies), "assemblies"
+print(len(assemblies), "assemblies")
 keywords = [k.lower() for k in sys.argv[1:]]
 keepers = [assembly for assembly in assemblies if assembly_filter(assembly, keywords)]
-print len(keepers), "keepers"
+print(len(keepers), "keepers")
 #exit(0)
 for keeper in keepers:
     rsync_assembly(keeper)

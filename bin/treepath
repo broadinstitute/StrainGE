@@ -34,7 +34,7 @@ import kmertools
 import argparse
 import kmerizer
 import numpy as np
-from itertools import chain, imap
+from itertools import chain
 import random
 import pydot
 import copy
@@ -148,7 +148,7 @@ class KmerTreeNode:
     def computeScoreWeighted(self, kmers):
         """Score this node vs a set of kmers"""
         if self.counts is None:
-            print "Counts missing from node. Using unique score..."
+            print("Counts missing from node. Using unique score...")
             self.computeScoreUnique(kmers)
         weights = 1.0 / (self.counts * self.counts)
         self.denominator = weights.sum()
@@ -220,10 +220,9 @@ class KmerTreeNode:
         """Randomize kmers and score node"""
         n_kmers = kmerizer.count_common(self.kmers, kmers)
         res = []
-        for i in xrange(n): 
+        for i in range(n): 
             # randomly sample, keep order
-            sampled = np.asarray(random.sample(xrange(kmers.size), n_kmers))
-            sampled.sort()
+            sampled = sorted(np.asarray(random.sample(range(kmers.size), n_kmers)))
             randsamp = kmers[sampled]
             res.append(self.computeScoreWeighted2(randsamp))
         return (np.asarray(res))
@@ -240,7 +239,7 @@ def treeFromHdf5(h5node, parent=None):
     """Construct KmerTree from hdf5 file"""
     #assert h5node.attrs["type"] == "KmerTreeNode", "HDF5 group not a KmerTreeNode"
     if not (h5node.attrs["type"] == "KmerTreeNode" or h5node.attrs["type"] == "SampleScoreNode"):
-        print "HDF5 not a valid class", h5node.attrs["type"]
+        print("HDF5 not a valid class", h5node.attrs["type"])
         return
     name = h5node.attrs["name"]
     score = h5node.attrs.get('score')
@@ -251,7 +250,7 @@ def treeFromHdf5(h5node, parent=None):
     common = None
 
 
-    for key, value in h5node.items():
+    for key, value in list(h5node.items()):
         if key == "kmers":
             kmers = np.array(value)
         elif key == "counts":
@@ -398,12 +397,12 @@ def scorePathsInSample(tree, min_nodes=0.7, min_score = 0.1, max_gap=None, sampl
         scores[name] = (score, sorted(get_strains(path[2]), key = lambda strain: strain[1], reverse=True), path[3])
 
         if verbose:
-            print name, ':', score
-            print ' | '.join(['%.3f' % x for x in path[1]])
+            print(name, ':', score)
+            print(' | '.join(['%.3f' % x for x in path[1]]))
             if path[2].isLeaf():
-                print 'Complete!'
+                print('Complete!')
             else:
-                print scores[name][1]
+                print(scores[name][1])
 
     return scores
 
@@ -417,11 +416,11 @@ def get_p_value_on_scores(tree, min_nodes=0.7, min_score=0.1, max_gap=None):
     if verbose:
         temp = verbose # this is just too much info...
         verbose = False
-    for i in xrange(calc_random):
+    for i in range(calc_random):
         random_tree.randomize(None)
         rand_scores = scorePathsInSample(random_tree, min_nodes, min_score, max_gap)
         if rand_scores:
-            random_scores.append(max([x[0][1] for x in rand_scores.values()]))
+            random_scores.append(max([x[0][1] for x in list(rand_scores.values())]))
         else:
             random_scores.append(0)
     if temp:
@@ -492,37 +491,37 @@ def graphTree(graph, tree, parentNode):
 def process_sample(tree, samplekmers, samplecounts):
     """Score a sample to a tree"""
     
-    print "Scoring sample kmers using:", method
+    print("Scoring sample kmers using:", method)
     scoreSample(tree, sampleKmers,samplecounts, method, min_unique, calc_p)
 
 
 def process_tree(filein, tree, sampleKmers, samplecounts ,out=None, dot=None, overwrite=False):
     """"After sample scored to tree, calculate paths and output results"""
     if calc_random:
-        print "Estimating threshold for significant path..."
+        print("Estimating threshold for significant path...")
         random_score = get_p_value_on_scores(tree, min_nodes, min_score, max_gap)
-        print "For this tree, sum of node scores must be > %.3f for p < 0.01" % random_score
+        print("For this tree, sum of node scores must be > %.3f for p < 0.01" % random_score)
     else:
         random_score = None
     
-    print "Scoring paths in tree..."
+    print("Scoring paths in tree...")
     pathScores = scorePathsInSample(tree, min_nodes, min_score, max_gap, sampleKmers, samplecounts)
     
     for path in sorted(pathScores, key = lambda x: (len(pathScores[x][1]) > 1, -pathScores[x][0][0], -pathScores[x][0][1])):
         if len(pathScores[path][1]) == 1:
-            print path, "complete",
+            print(path, "complete", end=' ')
         elif complete:
             break # keep only complete
         else:
-            print path, "incomplete",
+            print(path, "incomplete", end=' ')
     
         if random_score:
             if pathScores[path][0][1] > random_score:
-                print "significant",
+                print("significant", end=' ')
             else:
-                print "p > 0.01",
+                print("p > 0.01", end=' ')
     
-        print "%.3f" % pathScores[path][0][0]
+        print("%.3f" % pathScores[path][0][0])
     
     if out:
         save_text(filein, pathScores, out, random_score, complete, overwrite=overwrite)
@@ -583,7 +582,7 @@ def is_leaf_there(node, scorelist):
         else: 
             lastsupport = get_parent(node, firstabove[0])
         if lastsupport.parent is None:
-              print node.name + " has last support of root node"
+              print(node.name + " has last support of root node")
         else:
             chilren = get_children(lastsupport, [], limit , 0)
         
@@ -638,20 +637,20 @@ def get_node(node, whichnode, correct=None):
 def clean_paths(res, tree):
     """Get consecutive path results"""    
 
-    for key in res.keys():
+    for key in list(res.keys()):
         if "node" in key:
-            if key in sum(res.values(), []):
+            if key in sum(list(res.values()), []):
                 del res[key]
             else:
                 thenode = get_node(tree, key)
                 
                 nodepath = get_path(thenode)
                 for i in nodepath[1:]:
-                    if i in res.keys():
+                    if i in list(res.keys()):
                         del res[i]
                         
     finaldict = {}
-    for key in res.keys():
+    for key in list(res.keys()):
         if "node" in key:
             finaldict[key] = dict()
             path = get_path(get_node(tree,key))[::-1]
@@ -671,9 +670,9 @@ def clean_paths(res, tree):
 def output_consecutive_paths (pathdict, filein, out):
     """Print output for consecutive path detection"""
     with open(out, 'a') as f:
-        for key, value in pathdict.items():
+        for key, value in list(pathdict.items()):
             if "node" in key:
-                for strain , score in value["strains"].items():
+                for strain , score in list(value["strains"].items()):
                     f.write('{0},{1},{2},{3}, {4}, {5}\n'.format(filein, value["path"], "no", strain, score)) 
             else:
                 f.write('{0},{1},{2},{3}, {4}, {5}\n'.format(filein,value['path'], "yes", key, value['score'])) 
@@ -716,7 +715,7 @@ def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
                 childprod = childprod * child.score
             
             if childsum == childprod == 0:
-                print "nores"
+                print("nores")
             else:
                 oe = tree.score / float(childsum - childprod)
                 if 0.8 <= oe <= 1.20 :
@@ -725,7 +724,7 @@ def strain_seeker_score(tree, sampleKmers, thresh, currentpath, finalpaths):
                 elif oe > 1.2 :
                     finalpaths["|".join(cp)] = get_children(tree, [], 2, 0)
                 else:
-                    print "Not in db"
+                    print("Not in db")
      
     return (finalpaths)
         
@@ -749,7 +748,7 @@ def output_strain_seeker (filein, pathdict, out, overwrite=False):
         w.write("Path,Complete,Strains\n")
     else:
         w = open(out, 'ab')
-    for key, value in pathdict.items():
+    for key, value in list(pathdict.items()):
         if len(value) > 1 and isinstance(value, list):
             w.write('{0},{1},{2},{3}\n'.format(filein, key, "no", ' |'.join(value)) )
         else:
@@ -816,7 +815,7 @@ dot = None
 out = None
 
 
-print "Loading tree file:", args.input
+print("Loading tree file:", args.input)
 with h5py.File(args.input, 'r') as h5:
     tree = treeFromHdf5(h5)
     assert tree != None, 'Could not load tree!'
@@ -842,13 +841,13 @@ if args.sample:
         elif args.out:
             out = args.out
         if args.detection != 'strainseeker':
-            print "Loading kmers from sample:", sample
+            print("Loading kmers from sample:", sample)
             sampleset = kmertools.kmerSetFromFile(sample)
             sampleKmers = sampleset.kmers
             samplecounts = sampleset.counts
             process_sample(tree, sampleKmers, samplecounts)
         if args.hdf5:
-            print "Saving scored tree to hdf5 file..."
+            print("Saving scored tree to hdf5 file...")
             with h5py.File(name+'_scored.hdf5', 'w') as h5:
                 tree.saveSampleHdf5(h5)
         if args.detection == 'allpaths':

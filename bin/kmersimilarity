@@ -60,8 +60,8 @@ def _compare_seqs(pair):
     except KeyboardInterrupt:
         raise e
     except Exception as e:
-        print '\nError: failed at processing %s vs %s\n' % (s1name, s2name)
-        print e    
+        print('\nError: failed at processing %s vs %s\n' % (s1name, s2name))
+        print(e)    
     return
 
 def ani(j):
@@ -90,7 +90,7 @@ else:
 
 if args.sample:
     name = kmertools.nameFromPath(args.sample)
-    print >>sys.stderr, 'Computing similarity of', name, 'vs. strains'
+    print('Computing similarity of', name, 'vs. strains', file=sys.stderr)
     kmers = loader(args.sample)
     if args.fraction:
         scores = [(name, kmertools.nameFromPath(strain), kmertools.similarityNumeratorDenominator(kmers, loader(strain), args.simscore))
@@ -99,21 +99,21 @@ if args.sample:
         scores = [(name, kmertools.nameFromPath(strain), kmertools.similarityScore(kmers, loader(strain), args.simscore))
                     for strain in args.strains]
 else:
-    print >>sys.stderr, 'Computing pairwise similarity'
+    print('Computing pairwise similarity', file=sys.stderr)
     if args.simscore == 'reference':
-        print >>sys.stderr, "'reference' similarity score meaningless in pairwise similarity scoring"
+        print("'reference' similarity score meaningless in pairwise similarity scoring", file=sys.stderr)
         sys.exit(1)
     
     if args.lowmem:
         strains = args.strains
     else:
-        print >>sys.stderr, 'Loading kmers from files'
+        print('Loading kmers from files', file=sys.stderr)
         strains = [(kmertools.nameFromPath(arg), loader(arg)) for arg in args.strains]
-    print >>sys.stderr, 'Comparing kmers to each other'
+    print('Comparing kmers to each other', file=sys.stderr)
     if args.threads > 1:        
         p = multiprocessing.Pool(args.threads)
 
-        cmds = [pair for pair in combinations(xrange(len(strains)), 2)]
+        cmds = [pair for pair in combinations(range(len(strains)), 2)]
         map_async = p.map_async(_compare_seqs, cmds)
         scores = map_async.get()
 
@@ -137,14 +137,14 @@ else:
             else:
                 scores.append((s1name, s2name, kmertools.similarityScore(s1kmers, s2kmers, args.simscore)))
 
-print >>sys.stderr, 'Sorting scores'
+print('Sorting scores', file=sys.stderr)
 if args.fraction:
     #scores.sort(lambda a, b: cmp(b[2][0]/b[2][1], a[2][0]/a[2][1]))
     scores.sort(lambda a, b: cmp(b[2][0], a[2][0]))
 else:
     scores.sort(lambda a, b: cmp(b[2], a[2]))
 
-print >>sys.stderr, 'Writing output'
+print('Writing output', file=sys.stderr)
 if args.output:
     output = open(args.output, 'w')
 else:

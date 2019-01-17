@@ -51,11 +51,11 @@ kset = kmertools.KmerSet(args.K)
 kset.load(args.strain)
 
 if args.fingerprint:
-    for i in xrange(kset.fingerprint.size):
-        print >> output, kmertools.kmerString(args.K, int(kset.fingerprint[i]))
+    for i in range(kset.fingerprint.size):
+        print(kmertools.kmerString(args.K, int(kset.fingerprint[i])), file=output)
 else:
-    for i in xrange(kset.kmers.size):
-        print >> output, "%s\t%d" % (kmertools.kmerString(args.K, int(kset.kmers[i])), kset.counts[i])
+    for i in range(kset.kmers.size):
+        print("%s\t%d" % (kmertools.kmerString(args.K, int(kset.kmers[i])), kset.counts[i]), file=output)
 
 
 

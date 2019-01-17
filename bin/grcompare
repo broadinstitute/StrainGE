@@ -92,9 +92,9 @@ def compare_vcf_files(vcfs):
     # for each pair of vcf
     comps = {}
     for (v1, v2) in itertools.combinations(sorted(snps.keys()), 2):
-        print "Comparing %s to %s" % (v1, v2)
+        print("Comparing %s to %s" % (v1, v2))
         if refs[v1] != refs[v2]:
-            print "Different references", refs[v1], refs[v2]
+            print("Different references", refs[v1], refs[v2])
             continue
         # get overlapping confirmed positions
         overlap_confirmed = get_overlapping_pos(confirmed[v1], confirmed[v2], exact=True)
@@ -111,13 +111,13 @@ def compare_vcf_files(vcfs):
         conflicts = sorted(get_overlapping_pos(snps[v1], confirmed[v2], exact=False)+get_overlapping_pos(confirmed[v1], snps[v2], exact=False))
 
         # report % overlap somehow...
-        print "Overlapping confirmed reference positions:", len(overlap_confirmed)
+        print("Overlapping confirmed reference positions:", len(overlap_confirmed))
         total = len(overlap_snps) + len(overlap_ambs) + len(overlap_nonref)
-        print "Total overlapping non-reference positions shared:", total
-        print "Exact SNPs overlapping:", len(overlap_snps)
-        print "Ambiguous calls overlapping:", len(overlap_ambs)
-        print "Non-reference positions shared:", len(overlap_nonref)
-        print "Conflicting evidence (SNP in one, REF in other):", len(conflicts)
+        print("Total overlapping non-reference positions shared:", total)
+        print("Exact SNPs overlapping:", len(overlap_snps))
+        print("Ambiguous calls overlapping:", len(overlap_ambs))
+        print("Non-reference positions shared:", len(overlap_nonref))
+        print("Conflicting evidence (SNP in one, REF in other):", len(conflicts))
         comps[(v1, v2)] = (len(overlap_confirmed), len(overlap_snps), len(overlap_ambs), len(overlap_nonref), len(conflicts))
     
     return comps
@@ -171,12 +171,12 @@ def easy_compare(s1, s2):
     
 
     total = confirmed + snps + amb + non_ref + conflicts
-    print "Total positions analyzed:", total
-    print "Reference confirmed in both", confirmed, float(confirmed)/total*100, '%'
-    print "SNP confirmed in both", snps, float(snps)/total*100, '%'
-    print "Ambiguous calls in both", ambs, float(ambs)/total*100, '%'
-    print "Other non-reference calls in both", non_refs, float(non_refs)/total*100, '%'
-    print "Conflicting evidence between samples", conflicts, float(conflicts)/total*100, '%'
+    print("Total positions analyzed:", total)
+    print("Reference confirmed in both", confirmed, float(confirmed)/total*100, '%')
+    print("SNP confirmed in both", snps, float(snps)/total*100, '%')
+    print("Ambiguous calls in both", ambs, float(ambs)/total*100, '%')
+    print("Other non-reference calls in both", non_refs, float(non_refs)/total*100, '%')
+    print("Conflicting evidence between samples", conflicts, float(conflicts)/total*100, '%')
 
     return (confirmed, snps, ambs, non_refs, conflicts)
 
@@ -260,11 +260,11 @@ def compare_pileups(pileup1, pileup2):
 def match_pileups(matching, ref1, ref2):
     results = {'unmatched1': [], 'unmatched2': []}
     matched = set()
-    for (scaffold, refpos) in matching.keys():
+    for (scaffold, refpos) in list(matching.keys()):
         comparison = None
         # only one pileup matches between references
         if len(matching[(scaffold, refpos)]) == 1:
-            scaffold2, refpos2 = matching[(scaffold, refpos)].keys()[0]
+            scaffold2, refpos2 = list(matching[(scaffold, refpos)].keys())[0]
             comparison = compare_pileups(ref1.pileups[scaffold][refpos], ref2.pileups[scaffold2][refpos2])
         
         # more than one pileup matches
@@ -337,7 +337,7 @@ parser.add_argument('-o', '--out', help='Output results to file')
 parser.add_argument("file", nargs='+', help="file from straingr tool (vcf or pkl)")
 args = parser.parse_args()
 
-print "Will output results to", args.out
+print("Will output results to", args.out)
 
 if args.verbose:
     verbose = grtools.verbose
@@ -383,7 +383,7 @@ if args.verbose:
 # else:
 vcfs = []
 for file in args.file:
-    print "Parsing", file
+    print("Parsing", file)
     vcfs.append(grtools.parse_vcf_file(file))
 
 comparisons = compare_vcf_files(vcfs)

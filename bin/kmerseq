@@ -72,16 +72,16 @@ args = parser.parse_args()
 
 if args.kmerset:
     assert len(args.sequences) == 1, "Sorry, you can only specify one kmerset file at a time!!"
-    print 'Loading', args.sequences[0]
+    print('Loading', args.sequences[0])
     kset = kmertools.kmerSetFromFile(args.sequences[0])
 else:
     kset = kmertools.KmerSet(args.K)
     for arg in args.sequences:
-        print 'Kmerizing', arg
+        print('Kmerizing', arg)
         kset.kmerizeFile(arg, limit=parseMegaGiga(args.limit), prune=parseMegaGiga(args.prune))
 
 if args.entropy:
-    print "Entropy:", round(kset.entropy(), 2)
+    print("Entropy:", round(kset.entropy(), 2))
 
 if args.histogram:
     kset.writeHistogram(args.histogram)
@@ -97,13 +97,13 @@ if args.spectrum:
 if args.filter:
     thresholds = kset.spectrumFilter()
     if thresholds:
-        print 'Keeping kmers with frequency in the range', thresholds
+        print('Keeping kmers with frequency in the range', thresholds)
     kset.printStats()
 
 if args.fingerprint:
     kset.minHash(args.fingerprint_fraction)
 
 if args.output:
-    print 'Writing output to', args.output
+    print('Writing output to', args.output)
     kset.save(args.output, compress=True)
 

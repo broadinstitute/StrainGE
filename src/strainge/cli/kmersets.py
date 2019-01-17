@@ -39,7 +39,7 @@ import multiprocessing
 import h5py
 
 from strainge.cli.registry import Subcommand
-from strainge import kmertools, utils
+from strainge import kmertools, utils, comparison
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ class KmerizeSubcommand(Subcommand):
             help="Compute and save min-hash fingerprint (sketch)."
         )
         subparser.add_argument(
-            '-s', '--sketch-fraction', type=float, default=0.002,
+            '-s', '--sketch-fraction', type=float, default=0.01,
             help="Fraction of k-mers to keep for a minhash sketch. Default: "
                  "%(default)s"
         )

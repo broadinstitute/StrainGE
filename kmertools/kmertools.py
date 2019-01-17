@@ -49,7 +49,7 @@ BASES = "ACGT"
 
 
 def kmerString(k, kmer):
-    seq = ''.join([BASES[(kmer >> (2 * k)) & 3] for k in xrange(k - 1, -1, -1)])
+    seq = ''.join([BASES[(kmer >> (2 * k)) & 3] for k in range(k - 1, -1, -1)])
     #seqrc = Seq.reverse_complement(seq)
     #return ("%x" % kmer, seq, seqrc)
     return seq
@@ -273,7 +273,7 @@ class KmerSet(object):
         self.kmers = self.kmers[keepers]
         self.counts = self.counts[keepers]
         if verbose:
-            print 'Pruned singletons:', self.kmers.size, 'distinct kmers remain'
+            print('Pruned singletons:', self.kmers.size, 'distinct kmers remain')
 
     def mergeKmerSet(self, other):
         """Create new KmerSet by merging this with another"""
@@ -324,8 +324,8 @@ class KmerSet(object):
         return self
 
     def printStats(self):
-        print 'Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
-            'Distinct:', self.kmers.size, 'Singletons:', self.singletons
+        print('Seqs:', self.nSeqs, 'Bases:', self.nBases, 'Kmers:', self.nKmers, \
+            'Distinct:', self.kmers.size, 'Singletons:', self.singletons)
 
     def minHash(self, frac = DEFAULT_FINGERPRINT_FRACTION):
         nkmers = int(round(self.kmers.size * frac))
@@ -364,7 +364,7 @@ class KmerSet(object):
         haveMin = False
         haveMax = False
         lastFreq = 0
-        for i in xrange(freq.size):
+        for i in range(freq.size):
             count = counts[i]
             zero = freq[i] > lastFreq + 1
             if haveMax and (zero or freq[i] > freq[maxIndex] * maxCopyNumber):
@@ -411,8 +411,8 @@ class KmerSet(object):
     def writeHistogram(self, fileName):
         spectrum = self.spectrum()
         with open(fileName, 'w') as hist:
-            for i in xrange(spectrum[0].size):
-                print >> hist, "%d\t%d" % (spectrum[0][i], spectrum[1][i])
+            for i in range(spectrum[0].size):
+                print("%d\t%d" % (spectrum[0][i], spectrum[1][i]), file=hist)
 
     def entropy(self):
         """Calculate Shannon entropy in bases"""

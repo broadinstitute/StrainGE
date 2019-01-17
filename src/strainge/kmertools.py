@@ -126,8 +126,16 @@ def kmerset_from_hdf5(file_path):
     with h5py.File(file_path, 'r') as h5:
         assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
         kset = KmerSet(h5.attrs['k'])
+
+        if "fingerprint_fraction" in h5.attrs:
+            kset.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
         if "fingerprint" in h5:
             kset.fingerprint = np.array(h5["fingerprint"])
+            if not kset.fingerprint_fraction:
+                kset.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
+        if "fingerprint_counts" in h5:
+            kset.fingerprint_counts = np.array(h5["fingerprint_counts"])
+
         if "kmers" in h5:
             kset.kmers = np.array(h5["kmers"])
         if "counts" in h5:
@@ -225,6 +233,9 @@ class KmerSet(object):
         self.kmers = None
         self.counts = None
         self.fingerprint = None
+        self.fingerprint_counts = None
+        self.fingerprint_fraction = None
+
         self.singletons = None
 
         # stats from kmerizing, if appropriate
@@ -405,9 +416,11 @@ class KmerSet(object):
             elif counts[i] < counts[min_index]:
                 min_index = max_index = i
             last_freq = freq[i]
-        if min_index and max_index and counts[max_index] > counts[
-            min_index] * (1 + delta):
-            return (freq[min_index], freq[max_index], freq[i - 1])
+
+        if (min_index and max_index
+                and counts[max_index] > counts[min_index] * (1 + delta)):
+            return freq[min_index], freq[max_index], freq[i - 1]
+
         return None
 
     def spectrum_filter(self, max_copy_number=20):
@@ -447,9 +460,17 @@ class KmerSet(object):
         h5.attrs["type"] = "KmerSet"
         h5.attrs["k"] = self.k
         h5.attrs["nSeqs"] = self.n_seqs
+
         if self.fingerprint is not None:
             h5.create_dataset("fingerprint", data=self.fingerprint,
                               compression=compress)
+        if self.fingerprint_counts is not None:
+            h5.create_dataset("fingerprint_counts",
+                              data=self.fingerprint_counts,
+                              compression=compress)
+        if self.fingerprint_fraction is not None:
+            h5.attrs["fingerprint_fraction"] = self.fingerprint_fraction
+
         if self.kmers is not None:
             h5.create_dataset("kmers", data=self.kmers, compression=compress)
         if self.counts is not None:
@@ -472,8 +493,15 @@ class KmerSet(object):
         if 'nSeqs' in h5.attrs:
             self.n_seqs = int(h5.attrs['nSeqs'])
 
+        if "fingerprint_fraction" in h5.attrs:
+            self.fingerprint_fraction = h5.attrs["fingerprint_fraction"]
         if "fingerprint" in h5:
             self.fingerprint = np.array(h5["fingerprint"])
+            if not self.fingerprint_fraction:
+                self.fingerprint_fraction = OLD_FINGERPRINT_FRACTION
+        if "fingerprint_counts" in h5:
+            self.fingerprint_counts = np.array(h5["fingerprint_counts"])
+
         if "kmers" in h5:
             self.kmers = np.array(h5["kmers"])
         if "counts" in h5:

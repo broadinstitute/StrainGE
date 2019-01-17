@@ -7,3 +7,4 @@ kmertools/build/lib.macosx-10.7-x86_64-2.7/kmertools.py
 kmertools/build/temp.macosx-10.7-x86_64-2.7/kmerizer.o
 seqtools/splitfastq.c
 .idea
+*.bak

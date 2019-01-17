@@ -104,6 +104,7 @@ setup(
     packages=find_packages('src'),
     package_dir={'': 'src'},
     include_package_data=True,
+
     scripts=[
         'bin/kmerseq',
         'bin/kmercoverage',
@@ -111,11 +112,10 @@ setup(
         'bin/kmerspectrum',
         'bin/kmertree',
         'bin/treepath',
-        'bin/straingr_old',
         'bin/straingst',
         'bin/pankmer',
-        'bin/refseq-download.py',
-        'bin/refseq-extract.py'
+        'bin/refseq-download',
+        'bin/refseq-extract'
     ],
 
     # Versioneer setup

@@ -506,7 +506,7 @@ class CreateDBSubcommand(Subcommand):
             help="The HDF5 filenames of the kmerized reference strains."
         )
 
-    def createdb(self, kmersets, from_file, output, fingerprint=False,
+    def __call__(self, kmersets, from_file, output, fingerprint=False,
                  **kwargs):
         if from_file:
             for line in from_file:

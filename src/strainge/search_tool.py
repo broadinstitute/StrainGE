@@ -1,12 +1,10 @@
-#!/usr/bin/env python
-
 #  Copyright (c) 2016-2019, Broad Institute, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
 #
-#  * Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
+#  * Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 #
 #  * Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
@@ -18,261 +16,96 @@
 #
 #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-#  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-#  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-#  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
 #
 
-import argparse
-from collections import OrderedDict
 import math
-import multiprocessing
-import sys
+import logging
+from collections import namedtuple
+
 import h5py
-import kmertools
-import kmerizer
 
-DOC = """Strain Genome Search Tool (StrainGST)
+from strainge import kmertools, kmerizer
 
-Finds strains from a pan genome in a given sample.
+logger = logging.getLogger(__name__)
 
-Sample metrics:
-
-    sample: sample name
-    
-    totalkmers: total kmers in sample; generally number of bases in all reads * (1 - (K - 1) / readlength)
-    
-    distinct: distinct kmers in sample 
-    
-    pkmers: total pan genome kmers in sample (including counts)
-    
-    pkcov: mean count of pan kmers in sample
-    
-    pan%: percentage of pan genome kmers in sample, i.e., pan genome abundance
-
-Strain scoring metrics:
-    
-    i: strain-finding iteration
-    
-    strain: name of strain
-    
-    gkmers: distinct kmers in strain genome
-    
-    ikmers: distinct kmers being evaluated this iteration after excluding those from prior winning strains
-    
-    skmers: distinct pan-genome kmers in sample this iteration after excluding those from prior winning strains
-    
-    cov: covered...fraction of genomic kmers in sample
-    
-    kcov: kmer coverage...for each genomic kmer present in sample, mean number of times it occurs
-    
-    gcov: genome coverage...for each genomic kmer, mean number of times it occurs
-    
-    acct: fraction of pan-genome sample kmers accounted for by this strain
-    
-    even: measure of evenness of coverage based on Lander-Waterman relation; if coverage is randomly sampled 
-          through the genome, this will be near 1.0. If coverage is concentrated in a subset of the genome, 
-          it will be lower.
-    
-    score0: simple scoring metric (old panstrain score)
-    
-    spec: specificity is a measure of how specific the sample kmers are to this strain. If they are randomly
-          sampled, this should be close to 1. A low number indicates that the sample kmers that hit this
-          strain also tend to be found in other strains. A high number indicates that more kmers specific to this
-          strain are found that would be exected from random sampling, e.g., maybe the sample only contains a
-          chunk of this genome. spec = wcov / cov
-          
-    wcov: weighted coverage; like genome coverage, but each genomic kmer is weighted by the inverse of the number
-          of times it occurs in the pan genome. 
-          
-    score: new scoring metric using kmer weighting. score = score0 * min(spec, 1/spec)
-"""
-
-parser = argparse.ArgumentParser()
-parser.add_argument("-o", "--output", help="output text file (default: standard out)")
-parser.add_argument("-i", "--iterations", type=int, default=5, help="max strains to look for (default: 5)")
-parser.add_argument("-t", "--top", type=int, default=1, help="How many best matches to print (default: 1)")
-parser.add_argument("-f", "--fingerprint", action='store_true', help="Using fingerprint rather than whole kmer set")
-parser.add_argument("-F", "--minfrac", type=float, default=0.01, help="minimum fraction of original kmers in strain")
-parser.add_argument("-s", "--score", type=float, default=0.01, help="minimum score")
-parser.add_argument("-e", "--evenness", type=float, default=0.6, help="minimum evenness")
-parser.add_argument("-v", "--verbose", action='store_true', help="verbose output")
-parser.add_argument("-p", "--threads", type=int, default=1, help="parallelism")
-parser.add_argument("pan", help="hdf5 file containing pan genome kmer set")
-parser.add_argument("sample", help="Compare similarity of this vs the other strains instead of all vs all")
-args = parser.parse_args()
 
 class Sample(kmertools.KmerSet):
     """
     Sample Kmerset
-    Initially loaded with full KmerSet from the sample hdf5 file, but it will be reduced to
-    kmers in the pan genome set.
+    Initially loaded with full KmerSet from the sample hdf5 file, but it will
+    be reduced to kmers in the pan genome set.
     """
 
     def __init__(self, hdf5file):
-        super(Sample, self).__init__()
-        self.name = kmertools.nameFromPath(hdf5file)
+        super().__init__()
+        self.name = kmertools.name_from_path(hdf5file)
 
-        print("Loading sample")
+        logger.info("Loading sample %s", hdf5file)
         self.hdf5file = hdf5file
         with h5py.File(hdf5file, 'r') as h5:
             self.load_hdf5(h5)
 
         # keep track of original totalKmers and distinctKmers
-        self.totalKmers = self.counts.sum()
-        self.distinctKmers = self.kmers.size
+        self.total_kmers = self.counts.sum()
+        self.distinct_kmers = self.kmers.size
 
-        print(self.distinctKmers, "distinct kmers,", self.totalKmers, "total kmers in sample")
-
-globalPan = None
-globalSample = None
-globalExcludes = None
-def scorePanStrain(s):
-    strain = globalPan.loadStrain(s)
-    return strain.scoreSample(globalSample, globalExcludes)
+        logger.info("%d distinct k-mers, %d total k-mers",
+                    self.distinct_kmers, self.total_kmers)
 
 
 class PanGenome(kmertools.KmerSet):
     def __init__(self, hdf5file):
         """
         PanGenome Kmerset
-        Operations on on a pan genome kmer data file (as generated by the pankmer utility). The pan genome
-        kmer file has a top level KmerSet as well as a group containing a KmerSet for each strain in the pan genome.
+        Operations on on a pan genome kmer data file (as generated by the
+        `strainge createdb` utility). The pan genome kmer file has a top
+        level KmerSet as well as a group containing a KmerSet for each strain
+         in the pan genome.
         """
 
-        super(PanGenome, self).__init__()
+        super().__init__()
         self.hdf5file = hdf5file
 
-        print("Loading pan genome")
+        logger.info("Loading pan genome %s", hdf5file)
         self.h5 = h5py.File(hdf5file, 'r')
         self.load_hdf5(self.h5)
 
         # Strains are groups within hdf5 file
-        self.strainNames = [name for name in list(self.h5.keys()) if isinstance(self.h5[name], h5py.Group)]
-        print(len(self.strainNames), "strains,", self.kmers.size, "kmers in pan genome")
+        self.strain_names = [name for name in list(self.h5.keys())
+                             if isinstance(self.h5[name], h5py.Group)]
 
-        # we'll use this as a lookup for strain-specific KmerSets (filled out on first iteration)
+        logger.info("%d strains, %d distinct k-mers in pan-genome.",
+                    len(self.strain_names), self.kmers.size)
+
+        # we'll use this as a lookup for strain-specific KmerSets (filled
+        # out on first iteration)
         self.strainCache = {}
-        # leave h5 file open, as we'll load the strain-specific KmerSets from it.
 
-    def loadStrain(self, name):
+    def load_strain(self, name):
         """
         Load a strain KmerSet. If it's already in our cache, use that, else load from hdf5 file.
         :param name: name of strain (name of group in hdf5)
-        :return: strin KmerSet
+        :return: kmertools.KmerSet
         """
 
         if name in self.strainCache:
             return self.strainCache[name]
         else:
-            strain = Strain(self, name)
+            strain = StrainKmerSet(self, name)
             self.strainCache[name] = strain
             return strain
 
-    def scoreSample(self, sample, outFile=None):
-        """
-        Find the strains in a sample
-        :param sample: Sample object to score
-        :param outFile: output file in which to store a table of metrics
-        :return: found strains
-        """
 
-        # Reduce the sample KmerSet to its intersection with the PanGenome to free up memory and speed things up.
-        s = sample.intersect(self.kmers)
-        sample.kmers = s.kmers
-        sample.counts = s.counts
-
-        # Metrics for Sample kmers in pan genome
-        samplePanKmers = sample.counts.sum()
-        samplePanKcov = float(samplePanKmers) / float(sample.kmers.size)
-        samplePanPct = samplePanKmers * 100.0 / sample.totalKmers
-        if args.fingerprint:
-            samplePanPct /= self.fingerprint_fraction # really minHash fraction
-        print("%d pan kmers in sample (%.2f%%)" % (samplePanKmers, samplePanPct))
-
-        if outFile:
-            # Print sample-wide metrics to output file
-            tabout(("sample", "totalkmers", "distinct", "pkmers", "pkcov", "pan%"), outFile)
-            tabout((sample.name, sample.totalKmers, sample.distinctKmers, sample.kmers.size,
-                    round(samplePanKcov, 3), round(samplePanPct, 3)), outFile)
-
-        # Excludes will contain kmers removed from consideration because they were in a found strain
-        excludes = None
-        winners = []
-        if args.threads > 1:
-            print("Loading reference kmers")
-            for s in self.strainNames:
-                self.loadStrain(s)
-
-
-
-        for i in range(args.iterations):
-
-            # If we're just starting, print tabular header for strain metrics
-            if i == 0:
-                r = Result()
-                tabout(r.header(human=True))
-                if outFile:
-                    tabout(r.header(human=False), outFile)
-
-            # Score all strains and sort results by score
-            if args.threads > 1:
-                global globalPan, globalSample, globalExcludes
-                globalPan = self
-                globalSample = sample
-                globalExcludes = excludes
-                p = multiprocessing.Pool(args.threads)
-                results = p.map(scorePanStrain, self.strainNames)
-                p.close()
-            else:
-                results = [self.scoreStrain(s, sample, excludes, i) for s in self.strainNames]
-
-            results.sort(lambda a, b: cmp(b.score(), a.score()))
-
-            winner = results[0]
-            # if best score isn't good enough, we're done
-            if winner.score() < args.score:
-                break
-
-            # Print tabular output stats for winning strain
-            for t in range(args.top):
-                tabout(results[t].format(i, human=True))
-                if outFile:
-                    tabout(results[t].format(i, human=False), outFile)
-
-            winningStrain = self.loadStrain(winner["strain"])
-            winners.append(winningStrain)
-
-            # Exclude kmers from winning strain from sample (and from each strain next iteration)
-            excludes = winningStrain.kmers
-            sample.exclude(excludes)
-
-        return winners
-
-    def scoreStrain(self, strainName, sample, excludes=None, iteration=0):
-        """
-        Load a strain and score it against sample, optionally excluding an array of kmers
-        :param strainName: strain name (name of group in PanGenome hdf5 file)
-        :param sample: Sample object
-        :param excludes: numpy array of kmers
-        :return:
-        """
-
-        strain = self.loadStrain(strainName)
-        result = strain.scoreSample(sample, excludes)
-
-        if args.verbose:
-            print(result.format(iteration, True))
-
-        return result
-
-
-class Strain(kmertools.KmerSet):
+class StrainKmerSet(kmertools.KmerSet):
     def __init__(self, pan, name):
         """
         Strain KmerSet object
@@ -280,208 +113,206 @@ class Strain(kmertools.KmerSet):
         :param pan: PanGenome object
         :param name: strain name
         """
-        super(Strain, self).__init__()
+        super().__init__()
         self.name = name
         self.pan = pan
         self.load_hdf5(pan.h5[name])
-        self.distinctKmers = self.kmers.size
-        self.totalKmers = self.counts.sum()
+        self.distinct_kmers = self.kmers.size
+        self.total_kmers = self.counts.sum()
 
-    def scoreSample(self, sample, excludes = None):
+
+class StrainGSTResult:
+    def __init__(self, pan_kcov, pan_pct):
+        self.pan_kcov = pan_kcov
+        self.pan_pct = pan_pct
+
+        self.strains = []
+
+
+Strain = namedtuple('Strain', [
+    'strain', 'gkmers', 'ikmers', 'skmers', 'cov', 'kcov', 'gcov',
+    'acct', 'even', 'wcov', 'spec', 'score0', 'score'
+])
+
+
+class StrainGST:
+    def __init__(self, pangenome, use_fingerprint, iterations, top,
+                 min_score, min_evenness, min_frac):
+        self.use_fingerprint = use_fingerprint
+        self.iterations = iterations
+        self.top = top
+
+        self.min_score = min_score
+        self.min_evenness = min_evenness
+        self.min_frac = min_frac
+
+        self.pangenome = pangenome
+
+    def find_close_references(self, sample):
         """
-        Score this strain within a Sample, excluding any provided kmers from consideration
-        :param sample: Sample object
-        :param excludes: numpy array of kmers to exclude (will be removed from this KmerSet!)
-        :return:
+        Find the strains in a sample
+        :param sample: Sample object to score
+        :param outFile: output file in which to store a table of metrics
+        :return: found strains
         """
 
-        # Remove excluded kmers from our set
+        # Reduce the sample KmerSet to its intersection with the PanGenome
+        # to free up memory and speed things up.
+        s = sample.intersect(self.pangenome.kmers)
+        sample.kmers = s.kmers
+        sample.counts = s.counts
+
+        # Metrics for Sample kmers in pan genome
+        sample_pan_kmers = sample.counts.sum()
+        sample_pan_kcov = sample_pan_kmers / sample.kmers.size
+        sample_pan_pct = sample_pan_kmers * 100.0 / sample.totalKmers
+
+        if self.use_fingerprint:
+            # really minHash fraction
+            sample_pan_pct /= self.pangenome.fingerprint_fraction
+
+        logger.info("Sample %s has %d k-mers in common with pan-genome "
+                    "database (%.2f%%)", sample.name, sample_pan_kmers,
+                    sample_pan_pct)
+
+        result = StrainGSTResult(sample_pan_kcov, sample_pan_pct)
+
+        # Excludes will contain kmers removed from consideration because they
+        # were in a found in a previous strain
+        excludes = None
+
+        for i in range(self.iterations):
+            iter = map(
+                lambda strain: self.score_strain(strain, sample, excludes),
+                self.pangenome.strain_names
+            )
+
+            strain_scores = list(s for s in iter if s is not None)
+            strain_scores.sort(key=lambda e: e.score)
+
+            winner = strain_scores[0]
+            # if best score isn't good enough, we're done
+            if winner.score < self.min_score:
+                break
+
+            # Collect the winning strain (and additional extra high scoring
+            # strains if requested)
+            for t in range(self.top):
+                pos = str(i) if self.top == 1 else f"{i}.{t}"
+                result.strains.append((pos, winner))
+
+            winning_strain = self.pangenome.loadStrain(winner.strain)
+
+            # Exclude kmers from winning strain from sample (and from each
+            # strain next iteration)
+            excludes = winning_strain.kmers
+            sample.exclude(excludes)
+
+        return result
+
+    def score_strain(self, strain_name, sample, excludes=None):
+        # This loads a cached version with possibly already several k-mers
+        # removed from earlier found strains
+        strain_kmerset = self.pangenome.load_strain(strain_name)
+
         if excludes is not None:
-            self.exclude(excludes)
+            strain_kmerset.exclude(excludes)
 
-        # Start to collect result metrics
-        metrics = {"strain": self.name,
-                   # Genomic distinct kmers
-                   "gkmers": self.distinctKmers,
-                   # Kmers under consideration this iteration (after excdlued kmers have been removed)
-                   "ikmers": self.kmers.size,
-                   # Sample kmers under consideration
-                   "skmers": sample.kmers.size}
-
-        # If we don't have enough kmers left, quit now
-        if self.kmers.size < args.minfrac * self.distinctKmers:
-            return Result(metrics)
+        if (strain_kmerset.kmers.size < self.min_frac *
+                strain_kmerset.distinct_kmers):
+            # Too few k-mers
+            return None
 
         # how often each strain kmer occurs in PanGenome
-        strainPanCounts = kmerizer.intersect_counts(self.pan.kmers, self.pan.counts, self.kmers)
+        ix = kmerizer.intersect_ix(self.pangenome.kmers, strain_kmerset.kmers)
+        strain_pan_counts = self.pangenome.counts[ix]
 
         # distinct kmers from sample in this strain
-        kmers = kmerizer.intersect(self.kmers, sample.kmers)
+        kmers = kmerizer.intersect(strain_kmerset.kmers, sample.kmers)
 
         # if none, quit now
         if kmers.size == 0:
-            return Result(metrics)
+            return None
 
         # how many times each occurred in this strain
-        counts = kmerizer.intersect_counts(self.kmers, self.counts, kmers)
-        # how many times each strain kmer occurred in pan genome (for weighting)
-        panCounts = kmerizer.intersect_counts(self.kmers, strainPanCounts, kmers)
+        ix = kmerizer.intersect_ix(strain_kmerset.kmers, kmers)
+        counts = strain_kmerset.counts[ix]
+
+        # how many times each strain kmer occurred in pan genome (for
+        # weighting)
+        pan_counts = strain_pan_counts[ix]
+
         # how many times did each kmers occur in sample?
-        sampleCounts = kmerizer.intersect_counts(sample.kmers, sample.counts, kmers)
-        sampleCount = sampleCounts.sum()
+        ix = kmerizer.intersect_ix(sample.kmers, kmers)
+        sample_counts = sample.counts[ix]
+
+        sample_count = sample_counts.sum()
 
         # Compute metrics
         # what fraction of the distinct strain kmers are in the sample?
-        covered = float(kmers.size) / float(self.kmers.size)
-        # for each distinct kmer, how many times did it occur in the sample relative to the strain?
-        kmerCoverage = float(sampleCount) / float(sampleCounts.size)
-        # mean genome coverage from all my kmers
-        genomeCoverage = float(sampleCount) / float(self.counts.sum())
+        covered = kmers.size / strain_kmerset.kmers.size
 
-        # converse of covered: what fraction of pan genome sample kmers are accounted for by this sample?
-        #accounted = float(kmers.size) / float(sample.kmers.size)
-        # Changed to include all kmers with counts, not just distinct kmers. --bruce, 16 Apr 18
-        accounted = float(sampleCount) / float(sample.counts.sum())
-        # Lander-Waterman estimate of percentage covered if randomly distributed across genome
-        estCovered = 1.0 - math.exp(-genomeCoverage)
+        # for each distinct kmer, how many times did it occur in the sample
+        # relative to the strain?
+        kmer_coverage = sample_count / sample_counts.size
+
+        # mean genome coverage from all my kmers
+        genome_coverage = sample_count / strain_kmerset.counts.sum()
+
+        # converse of covered: what fraction of pan genome sample kmers are
+        # accounted for by this sample?
+        accounted = sample_count / sample.counts.sum()
+
+        # Lander-Waterman estimate of percentage covered if randomly
+        # distributed across genome
+        est_covered = 1.0 - math.exp(-genome_coverage)
+
         # measure of evenness of coverage
-        evenness = covered / estCovered
+        evenness = covered / est_covered
 
         # original panstrain simple scoring metric
         score = covered * accounted * min(evenness, 1.0 / evenness)
 
-        # Weight each of my kmers by inverse of times it occurs in pan genome relative to this genome
-        strainWeights = self.counts * (1.0 / strainPanCounts)
-        strainTotalWeight = strainWeights.sum()
+        # Weight each of my kmers by inverse of times it occurs in pan genome
+        # relative to this genome
+        strain_weights = strain_kmerset.counts * (1.0 / strain_pan_counts)
+        strain_total_weight = strain_weights.sum()
 
         # Weight of each sample kmer
-        sampleWeights = counts * (1.0 / panCounts)
-        sampleTotalWeight = (sampleCounts * sampleWeights).sum()
+        sample_weights = counts * (1.0 / pan_counts)
+        sample_total_weight = (sample_counts * sample_weights).sum()
 
         # Weighted genome coverage
-        weightedCoverage = sampleTotalWeight / strainTotalWeight
-        # Specificity is a measure of how specific the sample kmers are to this strain. If they are randomly
-        # sampled, this should be close to 1. A low number indicates that the sample kmers that hit this
-        # strain also tend to be found in other strains. A high number indicates that more kmers specific to this
-        # strain are found that would be exected from random sampling, e.g., maybe the sample only contains a
-        # chunk of this genome.
-        specificity = weightedCoverage / genomeCoverage
+        weighted_coverage = sample_total_weight / strain_total_weight
 
-        # add specificity component to weighted score (best match should be close to 1.0, higher or lower is worse)
-        weightedScore = score * min(specificity, 1.0 / specificity)
+        # Specificity is a measure of how specific the sample kmers are to
+        # this strain. If they are randomly sampled, this should be close
+        # to 1. A low number indicates that the sample kmers that hit this
+        # strain also tend to be found in other strains. A high number
+        # indicates that more kmers specific to this strain are found that
+        # would be exected from random sampling, e.g., maybe the sample only
+        # contains a chunk of this genome.
+        specificity = weighted_coverage / genome_coverage
 
-        # populate result metrics and return
-        metrics["cov"] = covered
-        metrics["kcov"] = kmerCoverage
-        metrics["gcov"] = genomeCoverage
-        metrics["acct"] = accounted
-        metrics["even"] = evenness
-        metrics["wcov"] = weightedCoverage
-        metrics["spec"] = specificity
-        metrics["score0"] = score
-        metrics["score"] = weightedScore
+        # add in specificity component (best match should be close to 1.0,
+        # higher or lower is worse)
+        weighted_score = score * min(specificity, 1.0 / specificity)
 
-        return Result(metrics)
+        if weighted_score < self.min_score or evenness < self.min_evenness:
+            return None
 
-
-class Result:
-    def __init__(self, metrics=None):
-        """
-        Result object for processing result metrics
-        :param metrics: dict of scoring metrics
-        """
-        self.metrics = metrics
-        # we use this padded format for strain names in console log
-        self.humanReadableFormat = "%-32s"
-
-    def score(self):
-        """
-        Compute score from metrics, filtering by thresholds
-        :return: filtered score
-        """
-        if not self.metrics:
-            return 0
-        s = self["score"]
-        return s if s >= args.score and self["even"] >= args.evenness else 0
-
-    def header(self, human=False):
-        """
-        Print tabular header
-        :param human: True if intended for human parsing
-        :return: list of table column headers
-        """
-        return [self.humanReadableFormat % k if k == "strain" and human else k for k in list(Result.resultFormats.keys())]
-
-    def format(self, iteration, human=False):
-        """
-        Return list of formatted metrics
-        :param iteration: iteration number to be included
-        :param human: True if intended for human parsing
-        :return: list of metric strings for columns of table
-        """
-        self.metrics["i"] = iteration
-        values = [self.formatValue(key, human) for key in Result.resultFormats]
-        return values
-
-    def formatValue(self, thing, human=False):
-        """
-        Format value using resultFormats
-        :param thing: metrics name
-        :param human: True if for human reading
-        :return: formatted string of metric value
-        """
-        fmt = self.humanReadableFormat if thing == "strain" and human else Result.resultFormats[thing]
-        return fmt % (self[thing],)
-
-    def __getitem__(self, item):
-        """
-        Allow indexing a la dict, returning 0 for non-existent metrics
-        :param item: item (metric name)
-        :return: item value
-        """
-        return self.metrics.get(item, 0) if self.metrics else None
-
-    def __repr__(self):
-        return str(self.metrics)
-
-    # Format for each metric, in order we want them presented
-    resultFormats = OrderedDict([("i", "%d"),
-                                 ("strain", "%s"),
-                                 ("gkmers", "%d"),
-                                 ("ikmers", "%d"),
-                                 ("skmers", "%d"),
-                                 ("cov", "%.3f"),
-                                 ("kcov", "%.3f"),
-                                 ("gcov", "%.3f"),
-                                 ("acct", "%.3f"),
-                                 ("even", "%.3f"),
-                                 ("score0", "%.3f"),
-                                 ("spec", "%.3f"),
-                                 ("wcov", "%.3f"),
-                                 ("score", "%.3f"),
-                                 ])
-
-
-
-def tabout(things, file=sys.stdout):
-    """
-    Print tab-separated sequence of things to line in file
-    :param things: sequence of things
-    :param file: output file
-    """
-    print("\t".join([str(x) for x in things]), file=file)
-    file.flush()
-
-
-##################
-##### MAIN
-##################
-
-outFile = open(args.output, 'w') if args.output else None
-pan = PanGenome(args.pan)
-sample = Sample(args.sample)
-pan.scoreSample(sample, outFile)
-if outFile:
-    # print line once finished to denote complete file
-    print("# Done.", file=outFile)
-    outFile.close()
+        return Strain(
+            strain=strain_name,
+            gkmers=strain_kmerset.distinct_kmers,
+            ikmers=strain_kmerset.size,
+            skmers=sample.kmers.size,
+            cov=covered,
+            kcov=kmer_coverage,
+            gcov=genome_coverage,
+            acct=accounted,
+            even=evenness,
+            wcov=weighted_coverage,
+            spec=specificity,
+            score0=score,
+            score=weighted_score
+        )

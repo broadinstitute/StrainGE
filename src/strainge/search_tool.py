@@ -92,9 +92,12 @@ class PanGenome(kmertools.KmerSet):
 
     def load_strain(self, name):
         """
-        Load a strain KmerSet. If it's already in our cache, use that, else load from hdf5 file.
+        Load a strain KmerSet. If it's already in our cache, use that,
+        else load from hdf5 file.
+
         :param name: name of strain (name of group in hdf5)
-        :return: kmertools.KmerSet
+        :return: Kmerset for the given strain
+        :rtype: StrainKmerSet
         """
 
         if name in self.strainCache:
@@ -109,7 +112,9 @@ class StrainKmerSet(kmertools.KmerSet):
     def __init__(self, pan, name):
         """
         Strain KmerSet object
-        Initially contains full strain Kmset, but that might be reduced by excluded kmers.
+        Initially contains full strain Kmset, but that might be reduced by
+        excluded kmers.
+
         :param pan: PanGenome object
         :param name: strain name
         """
@@ -152,8 +157,8 @@ class StrainGST:
         """
         Find the strains in a sample
         :param sample: Sample object to score
-        :param outFile: output file in which to store a table of metrics
-        :return: found strains
+        :return: Object with all results
+        :rtype: StrainGSTResult
         """
 
         # Reduce the sample KmerSet to its intersection with the PanGenome
@@ -165,7 +170,7 @@ class StrainGST:
         # Metrics for Sample kmers in pan genome
         sample_pan_kmers = sample.counts.sum()
         sample_pan_kcov = sample_pan_kmers / sample.kmers.size
-        sample_pan_pct = sample_pan_kmers * 100.0 / sample.totalKmers
+        sample_pan_pct = sample_pan_kmers * 100.0 / sample.total_kmers
 
         if self.use_fingerprint:
             # really minHash fraction
@@ -190,9 +195,15 @@ class StrainGST:
             strain_scores = list(s for s in iter if s is not None)
             strain_scores.sort(key=lambda e: e.score)
 
+            if not strain_scores:
+                logger.info("No good strains found, quiting.")
+                break
+
             winner = strain_scores[0]
             # if best score isn't good enough, we're done
             if winner.score < self.min_score:
+                logger.info("Score %.3f below min score %.3f, quiting.",
+                            winner.score, self.min_score)
                 break
 
             # Collect the winning strain (and additional extra high scoring

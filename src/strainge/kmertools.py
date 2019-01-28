@@ -61,8 +61,11 @@ def kmer_string(k, kmer):
 
 def open_seq_file(file_name):
     """
-    Open a sequence file with SeqIO; can be fasta or fastq with optional gz or bz2 compression.
+    Open a sequence file with SeqIO; can be fasta or fastq with optional gz or
+    bz2 compression.
+
     Assumes fasta unless ".fastq" or ".fq" in the file name.
+
     :param fileName:
     :return: SeqIO.parse object
     """

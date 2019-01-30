@@ -68,6 +68,7 @@ def open_seq_file(file_name):
 
     :param fileName:
     :return: SeqIO.parse object
+    :rtype: SeqIO.SeqRecord
     """
 
     components = file_name.split('.')

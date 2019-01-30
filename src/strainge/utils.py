@@ -33,6 +33,12 @@ StrainGE utility functions
 #
 
 import math
+from collections import namedtuple
+
+import numpy
+
+
+Group = namedtuple('Group', 'data start end length')
 
 
 def parse_num_suffix(num):
@@ -111,3 +117,36 @@ def lander_waterman(coverage):
     Expected fraction of genome covered
     """
     return 1.0 - math.exp(-coverage)
+
+
+def find_consecutive_groups(array, min_size=1):
+    """
+    Find consecutive groups of 1's and 0's in a numpy boolean array.
+    Adjusted from https://stackoverflow.com/questions/7352684/
+
+    Parameters
+    ----------
+    array : array-like
+        Numpy 1-dimensional boolean array to process
+    min_size
+        Minimum size of the group to be reported
+
+    Yields
+    ------
+    Group
+        `Group` is a named tuple with attributes `data`, `start`, `end` and
+        `size`.
+    """
+
+    groups = numpy.split(
+        array, numpy.where(numpy.abs(numpy.diff(array)) == 1)[0] + 1)
+
+    cur_pos = 0
+    for group in groups:
+        start = cur_pos
+        length = len(group)
+        cur_pos += length
+
+        if length >= min_size:
+            yield Group(group, start, cur_pos, length)
+

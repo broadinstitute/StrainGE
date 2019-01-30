@@ -36,6 +36,7 @@ from strainge.cli.kmersets import (KmerizeSubcommand, CompareSubCommand,
                                    ClusterSubcommand, CreateDBSubcommand,
                                    PlotSubcommand, StatsSubcommand)
 from strainge.cli.straingst import StrainGSTSubCommand
+from strainge.cli.straingr import CallSubcommand, ViewSubcommand
 
 logger = logging.getLogger()
 
@@ -98,6 +99,9 @@ strainge_cli.register_subcommand('createdb', subcommand=CreateDBSubcommand())
 
 strainge_cli.register_subcommand('ref-search',
                                  subcommand=StrainGSTSubCommand())
+
+strainge_cli.register_subcommand('call', subcommand=CallSubcommand())
+strainge_cli.register_subcommand('view', subcommand=ViewSubcommand())
 
 strainge_cli.register_subcommand('stats', subcommand=StatsSubcommand())
 strainge_cli.register_subcommand('plot', subcommand=PlotSubcommand())

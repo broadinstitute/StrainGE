@@ -1,3 +1,4 @@
+pybind11
 intervaltree
 numpy
 scipy
@@ -5,3 +6,4 @@ h5py
 pysam
 matplotlib
 biopython
+pyvcf

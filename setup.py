@@ -112,7 +112,6 @@ setup(
         'bin/kmerspectrum',
         'bin/kmertree',
         'bin/treepath',
-        'bin/straingst',
         'bin/pankmer',
         'bin/refseq-download',
         'bin/refseq-extract'
@@ -135,7 +134,8 @@ setup(
         'intervaltree',
         'matplotlib',
         'biopython',
-        'pysam'
+        'pysam',
+        'pyvcf'
     ],
 
     # CLI endpoints

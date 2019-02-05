@@ -128,7 +128,14 @@ setup(
 
     # Dependencies
     install_requires=[
-        'pybind11>=2.2'
+        'pybind11>=2.2',
+        'numpy',
+        'scipy',
+        'h5py',
+        'intervaltree',
+        'matplotlib',
+        'biopython',
+        'pysam'
     ],
 
     # CLI endpoints

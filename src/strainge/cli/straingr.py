@@ -31,13 +31,16 @@ import csv
 import sys
 import logging
 import argparse
+from pathlib import Path
 
 import pysam
 
 from strainge.variant_caller import VariantCaller, Reference
+from strainge.sample_compare import SampleComparison
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
                                   generate_call_summary_tsv)
+from strainge.io.comparisons import generate_compare_summary_tsv
 from strainge.cli.registry import Subcommand
 
 logger = logging.getLogger()
@@ -194,7 +197,7 @@ class CallSubcommand(Subcommand):
                  track_covered=None, track_poor_mq=None,
                  track_high_coverage=None,
                  track_gaps=None, track_min_size=1, **kwargs):
-        """Call variants in a potential mixed-strain sample."""
+        """Call variants in a mixed-strain sample."""
 
         logger.info("Loading reference %s...", reference)
         reference = Reference(reference)
@@ -215,7 +218,7 @@ class CallSubcommand(Subcommand):
             generate_call_summary_tsv(call_data, summary)
 
         if hdf5_out:
-            # Output collector datasets to HDF5
+            # Output call datasets to HDF5
             logger.info("Writing data to HDF5 file %s...", hdf5_out)
             call_data_to_hdf5(call_data, hdf5_out)
 
@@ -309,19 +312,108 @@ class ViewSubcommand(Subcommand):
         reference = Reference(reference)
 
         logger.info("Loading data from HDF5 file %s", hdf5)
-        collector = call_data_from_hdf5(reference, hdf5)
+        call_data = call_data_from_hdf5(reference, hdf5)
 
         if summary:
             # Output a summary TSV
             if summary != sys.stdout:
                 logger.info("Writing summary to %s", summary.name)
-            generate_call_summary_tsv(collector, summary)
+            generate_call_summary_tsv(call_data, summary)
 
-        write_tracks(collector, track_covered, track_poor_mq,
+        write_tracks(call_data, track_covered, track_poor_mq,
                      track_high_coverage, track_gaps, track_min_size)
 
         if vcf:
             logger.info("Generating VCF file...")
-            write_vcf(collector, vcf, not verbose_vcf)
+            write_vcf(call_data, vcf, not verbose_vcf)
 
         logger.info("Done.")
+
+
+class SampleCompareSubcommand(Subcommand):
+    """
+    Compare strains and variant calls in two different samples. Reads of
+    both samples must be aligned to the same reference.
+
+    It's possible to generate a TSV with summary stats as well as a file
+    with more detailed information on which alleles are called at what
+    positions.
+    """
+
+    def register_arguments(self, subparser: argparse.ArgumentParser):
+        subparser.add_argument(
+            'reference', metavar='REF',
+            help="The reference used for variant calling."
+        )
+
+        subparser.add_argument(
+            'samples', nargs='+', metavar='SAMPLE_HDF5', type=Path,
+            help="HDF5 files with variant calling data for each sample. "
+                 "Number of samples should be exactly two, except when used "
+                 "with --baseline."
+        )
+
+        subparser.add_argument(
+            '-o', '--summary-out', type=argparse.FileType('w'),
+            default=sys.stdout,
+            help="Output file for summary statistics. Defaults to stdout."
+        )
+
+        subparser.add_argument(
+            '-d', '--details-out', type=argparse.FileType('w'), default=None,
+            help="Output file for detailed base level differences between "
+                 "samples (optional)."
+        )
+
+        subparser.add_argument(
+            '-b', '--baseline', default=None, required=False, type=Path,
+            help="Path to a sample to use as baseline, and compare all other "
+                 "given samples to this one. Outputs a shell script that "
+                 "runs all individual pairwise comparisons."
+        )
+
+        subparser.add_argument(
+            '-D', '--output-dir', default=None, required=False, type=Path,
+            help="The output directory of all comparison files when using "
+                 "--baseline."
+        )
+
+    def __call__(self, reference, samples, summary_out=None, details_out=None,
+                 baseline=None, output_dir="", *args, **kwargs):
+        if baseline:
+            output_dir = Path(output_dir)
+
+            for sample in samples:
+                if sample == baseline:
+                    continue
+
+                fname_base = f"{baseline.stem}.vs.{sample.stem}"
+                summary_file = output_dir / f"{fname_base}.summary.tsv"
+                details_file = output_dir / f"{fname_base}.details.tsv"
+                print(sys.argv[0], "sample-compare",
+                      "-o", summary_file,
+                      "-d", details_file,
+                      reference, baseline, sample)
+        else:
+            if len(samples) != 2:
+                logger.error("The number of samples given should be exactly "
+                             "two. To compare multiple sample against a "
+                             "single baseline, using --baseline.")
+
+                return 1
+
+            logger.info("Comparing sample %s vs %s", samples[0].stem,
+                        samples[1].stem)
+
+            logger.debug("Loading sample 1 %s", samples[0].stem)
+            call_data1 = call_data_from_hdf5(reference, samples[0])
+            logger.debug("Loading sample 2 %s", samples[1].stem)
+            call_data2 = call_data_from_hdf5(reference, samples[1])
+
+            comparison = SampleComparison(call_data1, call_data2)
+
+            generate_compare_summary_tsv(comparison, summary_out)
+
+            if details_out:
+                # TODO: write details file
+                pass

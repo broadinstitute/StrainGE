@@ -150,7 +150,9 @@ class Reference:
 
     def scaffold_to_genome_coord(self, scaffold_name, coord):
         """
-        Turn a 1-based scaffold coordinate into a 0-based genome-wide coordinate
+        Turn a 1-based scaffold coordinate into a 0-based genome-wide
+        coordinate.
+
         :param scaffold_name: scaffold name
         :param coord: 1-based scaffold coordinate
         :return: genomeCoord

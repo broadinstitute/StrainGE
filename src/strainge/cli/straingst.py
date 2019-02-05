@@ -47,7 +47,7 @@ sample_stats_tsv_columns = dict([
 ])
 
 strain_tsv_columns = dict([
-    ("i", "%d"),
+    ("i", "%s"),
     ("strain", "%s"),
     ("gkmers", "%d"),
     ("ikmers", "%d"),
@@ -143,9 +143,6 @@ class StrainGSTSubCommand(Subcommand):
         # Output found strains
         writer.writerow(list(strain_tsv_columns.keys()))
         for pos, strain in results.strains:
-            logger.info("Found strain %s, score %.3f", strain.strain,
-                        strain.score)
-
             values = strain._asdict()
             values['i'] = pos
 

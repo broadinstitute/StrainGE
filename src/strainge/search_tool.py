@@ -193,7 +193,7 @@ class StrainGST:
             )
 
             strain_scores = list(s for s in iter if s is not None)
-            strain_scores.sort(key=lambda e: e.score)
+            strain_scores.sort(key=lambda e: e.score, reverse=True)
 
             if not strain_scores:
                 logger.info("No good strains found, quiting.")
@@ -212,7 +212,10 @@ class StrainGST:
                 pos = str(i) if self.top == 1 else f"{i}.{t}"
                 result.strains.append((pos, winner))
 
-            winning_strain = self.pangenome.loadStrain(winner.strain)
+            winning_strain = self.pangenome.load_strain(winner.strain)
+
+            logger.info("Found strain %s, score %.3f", winner.strain,
+                        winner.score)
 
             # Exclude kmers from winning strain from sample (and from each
             # strain next iteration)
@@ -315,7 +318,7 @@ class StrainGST:
         return Strain(
             strain=strain_name,
             gkmers=strain_kmerset.distinct_kmers,
-            ikmers=strain_kmerset.size,
+            ikmers=strain_kmerset.kmers.size,
             skmers=sample.kmers.size,
             cov=covered,
             kcov=kmer_coverage,

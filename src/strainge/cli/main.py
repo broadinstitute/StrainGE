@@ -98,8 +98,7 @@ strainge_cli.register_subcommand('compare', subcommand=CompareSubCommand())
 strainge_cli.register_subcommand('cluster', subcommand=ClusterSubcommand())
 strainge_cli.register_subcommand('createdb', subcommand=CreateDBSubcommand())
 
-strainge_cli.register_subcommand('ref-search',
-                                 subcommand=StrainGSTSubCommand())
+strainge_cli.register_subcommand('search', subcommand=StrainGSTSubCommand())
 
 strainge_cli.register_subcommand('call', subcommand=CallSubcommand())
 strainge_cli.register_subcommand('view', subcommand=ViewSubcommand())

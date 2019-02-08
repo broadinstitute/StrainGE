@@ -49,7 +49,7 @@ TSV_FIELDS = (
     ("median", "%d"), ("callable", "%d"), ("callablePct", "%.2f"),
     ("confirmed", "%d"), ("confirmedPct", "%.2f"),
     ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
-    ("multiPct", "%.2f"), ("lowmq", "%d"), ("lowmqPct", ".2f"),
+    ("multiPct", "%.2f"), ("lowmq", "%d"), ("lowmqPct", "%.2f"),
     ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"),
     ("gapLength", "%d")
 )
@@ -163,7 +163,7 @@ def call_data_from_hdf5(reference, hdf5_file):
     # These datasets have pre-allocated numpy arrays in `VariantCallData`
     read_direct = {"alleles", "bad", "lowmq_count", "mq_sum"}
 
-    with h5py.File(hdf5_file) as hdf5:
+    with h5py.File(hdf5_file, 'r') as hdf5:
         if 'type' not in hdf5.attrs:
             raise IOError(f"The HDF5 file {hdf5_file} does not contain"
                           f"`VariantCallData`.")
@@ -188,9 +188,11 @@ def call_data_from_hdf5(reference, hdf5_file):
                     arr = numpy.array(hdf5[scaffold_name][dataset_name])
                     setattr(scaffold, dataset_name, arr)
 
-            scaffold.mean_coverage = hdf5[scaffold].attrs['mean_coverage']
-            scaffold.median_coverage = hdf5[scaffold].attrs['median_coverage']
-            scaffold.coverage_cutoff = hdf5[scaffold].attrs['coverage_cutoff']
+            scaffold.mean_coverage = hdf5[scaffold_name].attrs['mean_coverage']
+            scaffold.median_coverage = hdf5[scaffold_name].attrs[
+                'median_coverage']
+            scaffold.coverage_cutoff = hdf5[scaffold_name].attrs[
+                'coverage_cutoff']
 
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']

@@ -210,17 +210,17 @@ class CallSubcommand(Subcommand):
 
         call_data = caller.process(reference, sample_bam.pileup())
 
+        if hdf5_out:
+            # Output call datasets to HDF5
+            logger.info("Writing data to HDF5 file %s...", hdf5_out)
+            call_data_to_hdf5(call_data, hdf5_out)
+
         if summary:
             # Output a summary TSV
             if summary != sys.stdout:
                 logger.info("Writing summary to %s", summary.name)
 
             generate_call_summary_tsv(call_data, summary)
-
-        if hdf5_out:
-            # Output call datasets to HDF5
-            logger.info("Writing data to HDF5 file %s...", hdf5_out)
-            call_data_to_hdf5(call_data, hdf5_out)
 
         if vcf:
             logger.info("Generating VCF file...")
@@ -366,14 +366,14 @@ class SampleCompareSubcommand(Subcommand):
         )
 
         subparser.add_argument(
-            '-b', '--baseline', default=None, required=False, type=Path,
+            '-b', '--baseline', default="", required=False, type=Path,
             help="Path to a sample to use as baseline, and compare all other "
                  "given samples to this one. Outputs a shell script that "
                  "runs all individual pairwise comparisons."
         )
 
         subparser.add_argument(
-            '-D', '--output-dir', default=None, required=False, type=Path,
+            '-D', '--output-dir', default="", required=False, type=Path,
             help="The output directory of all comparison files when using "
                  "--baseline."
         )

@@ -52,7 +52,7 @@ class Allele(IntFlag):
     genomic location.
     """
 
-    NONE = 0
+    N = 0
     A = auto()
     C = auto()
     G = auto()
@@ -65,7 +65,7 @@ class Allele(IntFlag):
         """Create a new `Allele` object from a single character string."""
 
         if base not in cls.__members__:
-            return None
+            return Allele.N
 
         return cls.__members__[base]
 
@@ -80,10 +80,10 @@ class Allele(IntFlag):
             return super().__str__()
 
 
-ALLELE_MASKS = numpy.array([v for v in Allele if v != Allele.NONE])
+ALLELE_MASKS = numpy.array([v for v in Allele if v != Allele.N])
 
 ALLELE_INDEX = {
-    a: i for i, a in enumerate(v for v in Allele if v != Allele.NONE)
+    a: i for i, a in enumerate(v for v in Allele if v != Allele.N)
 }
 
 
@@ -183,7 +183,7 @@ class VariantCallData:
         self.min_gap_size = min_gap_size
 
         self.scaffolds_data = {
-            name: ScaffoldCallData(name, scaffold.seq)
+            name: ScaffoldCallData(name, scaffold.seq.upper())
             for name, scaffold in self.reference.scaffolds.items()
         }  # type: Dict[str, ScaffoldCallData]
 
@@ -194,6 +194,12 @@ class VariantCallData:
         self.scaffolds_data[scaffold].bad[pos] += 1
 
     def low_mapping_quality(self, scaffold, pos):
+        if pos >= self.scaffolds_data[scaffold].length:
+            logger.warning("Position %d for scaffold %s of length %d out of "
+                           "bounds, ignoring!", pos, scaffold,
+                           self.scaffolds_data[scaffold].length)
+            return
+
         self.scaffolds_data[scaffold].lowmq_count[pos] += 1
 
     def update_mapping_quality(self, scaffold, pos, mapping_quality):
@@ -210,7 +216,7 @@ class VariantCallData:
 
         all_coverage = numpy.concatenate([s.coverage for s in
                                           self.scaffolds_data.values()])
-        self.mean_coverage = numpy.mean(all_coverage)
+        self.mean_coverage = numpy.sum(all_coverage) / self.reference.length
         self.median_coverage = numpy.median(all_coverage)
 
         return self
@@ -266,9 +272,11 @@ class VariantCallData:
             # Don't take abnormal high coverage regions into account when
             # calculating mean coverage
             normal_coverage = ~scaffold.high_coverage
-            coverage = (scaffold.coverage[normal_coverage].sum() /
-                        scaffold.length)
-            median_coverage = numpy.median(scaffold.coverage)
+            summed_coverage = (scaffold.coverage[normal_coverage].sum() +
+                               scaffold.lowmq.sum())
+            coverage = summed_coverage / scaffold.length
+
+            median_coverage = numpy.median(scaffold.coverage + scaffold.lowmq)
             all_coverages.append(coverage)
 
             num_confirmed = numpy.count_nonzero(confirmed)
@@ -297,12 +305,12 @@ class VariantCallData:
             total_gap_length += gap_length
 
             yield {
-                "name": scaffold,
+                "name": scaffold.name,
                 "length": scaffold.length,
                 "coverage": coverage,
                 "median": median_coverage,
-                "covered": num_callable,
-                "coveredPct": callable_pct,
+                "callable": num_callable,
+                "callablePct": callable_pct,
                 "confirmed": num_confirmed,
                 "confirmedPct": confirmed_pct,
                 "snps": num_snps,
@@ -353,6 +361,9 @@ class ScaffoldCallData:
     def __init__(self, name, sequence):
         self.name = name
         self.length = len(sequence)
+
+        logger.info("Building refmask for scaffold %s", name)
+
         self.refmask = numpy.array(
             [int(Allele.from_str(base)) for base in sequence],
             dtype=numpy.uint8
@@ -360,7 +371,7 @@ class ScaffoldCallData:
 
         # Store for each position and per possible allele the counts and sum
         # of base qualities. We use len(Allele)-1 because we store nothing
-        # for Allele.NONE.
+        # for Allele.N.
         self.alleles = numpy.zeros((self.length, 2, len(Allele)-1),
                                    dtype=numpy.uint32)
 
@@ -413,10 +424,11 @@ class ScaffoldCallData:
         coverage might be dominated by conserved regions.
         """
         self.coverage = self.alleles[:, 0].sum(axis=-1) + self.lowmq_count
-        self.mean_coverage = numpy.mean(self.coverage)
+        self.mean_coverage = numpy.sum(self.coverage) / self.length
         self.median_coverage = numpy.median(self.coverage)
 
-        self.coverage_cutoff = poisson_coverage_cutoff(self.median_coverage)
+        self.coverage_cutoff = poisson_coverage_cutoff(
+            max(0.5, self.median_coverage))
 
         logger.info("Scaffold %s has mean coverage %.2f (median: %d). High "
                     "coverage cutoff: %d.", self.name, self.mean_coverage,
@@ -457,8 +469,10 @@ class ScaffoldCallData:
         scaled taking mean coverage of this scaffold into account.
         """
         min_size = scale_min_gap_size(min_size, self.mean_coverage)
+        logger.info("%s: scaled min-gap size %.2f at mean coverage %.2f",
+                    self.name, min_size, self.mean_coverage)
 
-        depth = self.alleles[:, 0]
+        depth = self.alleles[:, 0].sum(axis=-1)
         self.lowmq = ((self.lowmq_count > 1) & (self.lowmq_count > depth))
 
         # Covered is either: 1) we can make a strong call 2) we have low
@@ -539,9 +553,9 @@ class VariantCaller:
         :param pileup_iter: Iterable of pysam.PileupColumn objects
         :return:
         """
-        logger.info("Processing pileups...")
         call_data = VariantCallData(reference, self.min_gap_size)
 
+        logger.info("Processing pileups...")
         for column in pileup_iter:
             scaffold = column.reference_name
             refpos = column.reference_pos
@@ -634,25 +648,24 @@ class VariantCaller:
         alignment = read.alignment
         mq = alignment.mapping_quality
         if mq < self.min_mapping_quality:
-            # experimental: process other mappings
             others = self._alternative_locations(alignment, refpos)
 
             for scaffold, pos, rc in others:
-                pos = pos - 1
-                call_data.low_mapping_quality(scaffold, pos)
+                call_data.low_mapping_quality(scaffold, pos-1)
 
     def _alternative_locations(self, read, loc):
         alns = []
         if read.has_tag("XA"):
             xa = read.get_tag("XA")
             nm = int(read.get_tag("NM"))
-            offset = (read.reference_end - 1 - loc if read.is_reverse else
-                      loc - read.reference_start)
+            offset = (read.reference_end - 1 - loc if read.is_reverse
+                      else loc - read.reference_start)
+
             for aln in xa.split(';'):
                 if aln:
-                    scaffold, pos, cigar, alt_nm = aln.split(',')
-                    alt_nm = int(alt_nm)
-                    if alt_nm <= nm:
+                    scaffold, pos, cigar, anm = aln.split(',')
+                    anm = int(anm)
+                    if anm <= nm:
                         pos = int(pos)
                         rc = pos < 0
                         coord = (-pos + read.query_length - 1 - offset if rc

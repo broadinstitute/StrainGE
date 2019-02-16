@@ -23,7 +23,7 @@
 #  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 #  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
 #  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHsER IN CONTRACT, STRICT LIABILITY,
 #  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
@@ -31,7 +31,7 @@
 import argparse
 import os
 from Bio import SeqIO
-import kmertools
+from strainge.kmertools import open_seq_file
 
 
 parser = argparse.ArgumentParser(description="Parse RefSeq fasta files to chromosome & plasmid fasta files")
@@ -46,7 +46,7 @@ names = set()
 
 def extract(seqFile, outputDir):
     global names
-    for seq in seqFile:
+    for seq in open_seq_file(seqFile):
         #print seq.description
         # remove all after comma
         name = seq.description.split(',')[0]
@@ -81,14 +81,14 @@ def extract(seqFile, outputDir):
         size = len(seq.seq)
         if name in names:
             name += "_" + seq.name
-        print(name)
+        print(os.path.dirname(seqFile) + ' ' + seq.name + ' ' + name)
         path = os.path.join(outputDir, name + ".fasta")
         SeqIO.write(seq, path, "fasta")
         names.add(name)
 
 
 for fa in args.fasta:
-    extract(kmertools.openSeqFile(fa), args.dir)
+    extract(fa, args.dir)
 
 
 

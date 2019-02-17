@@ -101,7 +101,7 @@ def open_seq_file(file_name):
 
 def load_hdf5(file_path, thing):
     with h5py.File(file_path, 'r') as h5:
-        if h5.attrs['type'] != "KmerSet":
+        if h5.attrs['type'].decode() != "KmerSet":
             raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
                              " '{}'".format(h5.attrs['type']))
 
@@ -461,7 +461,7 @@ class KmerSet(object):
         return (-(probs * np.log2(probs)).sum()) / 2
 
     def save_hdf5(self, h5, compress=None):
-        h5.attrs["type"] = "KmerSet"
+        h5.attrs["type"] = "KmerSet".encode()
         h5.attrs["k"] = self.k
         h5.attrs["nSeqs"] = self.n_seqs
 
@@ -490,7 +490,7 @@ class KmerSet(object):
             self.save_hdf5(h5, compress)
 
     def load_hdf5(self, h5):
-        if h5.attrs['type'] != "KmerSet":
+        if h5.attrs['type'].decode() != "KmerSet":
             raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
                              " '{}'".format(h5.attrs['type']))
         self.k = int(h5.attrs['k'])

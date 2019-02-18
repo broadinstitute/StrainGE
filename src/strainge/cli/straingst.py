@@ -130,7 +130,7 @@ class StrainGSTSubCommand(Subcommand):
             'sample': sample_kmerset.name,
             'totalkmers': sample_kmerset.total_kmers,
             'distinct': sample_kmerset.distinct_kmers,
-            'pkmers': sample_kmerset.kmers.size,
+            'pkmers': results.pan_kmers,
             'pkcov': results.pan_kcov,
             'pan%': results.pan_pct
         }

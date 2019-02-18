@@ -127,7 +127,8 @@ class StrainKmerSet(kmertools.KmerSet):
 
 
 class StrainGSTResult:
-    def __init__(self, pan_kcov, pan_pct):
+    def __init__(self, pan_kmers, pan_kcov, pan_pct):
+        self.pan_kmers = pan_kmers
         self.pan_kcov = pan_kcov
         self.pan_pct = pan_pct
 
@@ -180,7 +181,7 @@ class StrainGST:
                     "database (%.2f%%)", sample.name, sample_pan_kmers,
                     sample_pan_pct)
 
-        result = StrainGSTResult(sample_pan_kcov, sample_pan_pct)
+        result = StrainGSTResult(sample.kmers.size, sample_pan_kcov, sample_pan_pct)
 
         # Excludes will contain kmers removed from consideration because they
         # were in a found in a previous strain

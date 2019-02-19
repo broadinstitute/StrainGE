@@ -57,13 +57,13 @@ def write_tracks(call_data, track_covered=None, track_poor_mq=None,
     if track_poor_mq:
         logger.info("Writing 'poor mapping quality' BED track...")
         for scaffold in call_data.scaffolds_data.values():
-            boolean_array_to_bedfile(scaffold.lowmq, track_covered,
+            boolean_array_to_bedfile(scaffold.lowmq, track_poor_mq,
                                      scaffold.name, track_min_size)
 
     if track_high_coverage:
         logger.info("Writing 'high coverage' BED track...")
         for scaffold in call_data.scaffolds_data.values():
-            boolean_array_to_bedfile(scaffold.high_coverage, track_covered,
+            boolean_array_to_bedfile(scaffold.high_coverage, track_high_coverage,
                                      scaffold.name, track_min_size)
 
     if track_gaps:

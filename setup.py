@@ -97,7 +97,7 @@ class BuildExt(build_ext):
 setup(
     name='strainge',
     author='Bruce Walker, Tim Straub, Lucas van Dijk',
-    author_email='bruce@w1bw.us, tstraub@broadinstitute.org, '
+    author_email='bruce@broadinstitute.org, tstraub@broadinstitute.org, '
                  'lvandijk@broadinstitute.org',
     description='Strain-level diversity analysis tools',
 

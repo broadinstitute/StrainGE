@@ -302,7 +302,7 @@ def vcf_records_for_scaffold(scaffold, variants_only=True):
             INFO={
                 'DP': scaffold.depth(pos),
                 'RQ': scaffold.ref_qual(pos),
-                'RF': scaffold.ref_fraction(pos),
+                'RF': round(scaffold.ref_fraction(pos),3),
                 'AD': allele_counts,
                 'QS': allele_quals,
                 'ST': [int(b in strong) for b in ref_plus_alts]

@@ -261,7 +261,6 @@ class KmerSet(object):
         n_seqs = 0
         n_bases = 0
         n_kmers = 0
-        n_batch = 0  # kmers in this batch
         pruned = False
 
         for seq in seq_file:
@@ -377,12 +376,32 @@ class KmerSet(object):
               self.n_kmers, 'Distinct:', self.kmers.size,
               'Singletons:', self.singletons)
 
-    def min_hash(self, frac=0.002):
+    def min_hash(self, frac=DEFAULT_FINGERPRINT_FRACTION):
         nkmers = int(round(self.kmers.size * frac))
         order = kmerizer.fnvhash_kmers(self.k, self.kmers).argsort()[:nkmers]
         self.fingerprint = self.kmers[order]
         self.fingerprint.sort()
+
+        ix = kmerizer.intersect_ix(self.kmers, self.fingerprint)
+        self.fingerprint_counts = self.kmers[ix]
+
+        self.finderprint_fraction = frac
+
         return self.fingerprint
+
+    def fingerprint_as_kmerset(self):
+        assert self.fingerprint is not None
+
+        kset = KmerSet(k=self.k)
+        kset.kmers = self.fingerprint
+        kset.fingerprint_fraction = self.fingerprint_fraction
+
+        if self.fingerprint_counts is not None:
+            kset.counts = self.fingerprint_counts
+        else:
+            kset.counts = np.ones_like(kset.kmers, dtype=np.uint64)
+
+        return kset
 
     def freq_filter(self, min_freq=1, max_freq=None):
         condition = (self.counts >= min_freq)

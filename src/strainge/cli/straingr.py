@@ -63,7 +63,8 @@ def write_tracks(call_data, track_covered=None, track_poor_mq=None,
     if track_high_coverage:
         logger.info("Writing 'high coverage' BED track...")
         for scaffold in call_data.scaffolds_data.values():
-            boolean_array_to_bedfile(scaffold.high_coverage, track_high_coverage,
+            boolean_array_to_bedfile(scaffold.high_coverage,
+                                     track_high_coverage,
                                      scaffold.name, track_min_size)
 
     if track_gaps:
@@ -380,7 +381,7 @@ class SampleCompareSubcommand(Subcommand):
 
     def __call__(self, reference, samples, summary_out=None, details_out=None,
                  baseline=None, output_dir="", *args, **kwargs):
-        if baseline:
+        if baseline and baseline.is_file():
             output_dir = Path(output_dir)
 
             for sample in samples:
@@ -397,8 +398,8 @@ class SampleCompareSubcommand(Subcommand):
         else:
             if len(samples) != 2:
                 logger.error("The number of samples given should be exactly "
-                             "two. To compare multiple sample against a "
-                             "single baseline, using --baseline.")
+                             "two. To compare multiple samples against a "
+                             "single baseline, use --baseline.")
 
                 return 1
 

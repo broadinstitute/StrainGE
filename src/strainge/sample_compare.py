@@ -145,7 +145,7 @@ class SampleComparison:
 
     def compare_thing(self, common, thing):
         """
-        Computes occurance of a condition within a set, and returns those
+        Computes occurrence of a condition within a set, and returns those
         stats.
 
         :param common: flag for locations to consider

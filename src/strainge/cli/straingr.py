@@ -381,7 +381,10 @@ class SampleCompareSubcommand(Subcommand):
 
     def __call__(self, reference, samples, summary_out=None, details_out=None,
                  baseline=None, output_dir="", *args, **kwargs):
-        if baseline and baseline.is_file():
+        if baseline and not baseline.is_file() and not baseline == Path(""):
+            logger.error("Baseline %s does not exists.", baseline)
+            return 1
+        elif baseline and baseline.is_file():
             output_dir = Path(output_dir)
 
             for sample in samples:
@@ -403,12 +406,15 @@ class SampleCompareSubcommand(Subcommand):
 
                 return 1
 
+            logger.info("Loading reference %s...", reference)
+            reference = Reference(reference)
+
             logger.info("Comparing sample %s vs %s", samples[0].stem,
                         samples[1].stem)
 
-            logger.debug("Loading sample 1 %s", samples[0].stem)
+            logger.info("Loading sample 1 %s", samples[0].stem)
             call_data1 = call_data_from_hdf5(reference, samples[0])
-            logger.debug("Loading sample 2 %s", samples[1].stem)
+            logger.info("Loading sample 2 %s", samples[1].stem)
             call_data2 = call_data_from_hdf5(reference, samples[1])
 
             comparison = SampleComparison(call_data1, call_data2)

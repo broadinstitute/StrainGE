@@ -58,7 +58,6 @@ def generate_compare_summary_tsv(sample_comparison, output_file):
     writer.writerow(f[0] for f in COMPARE_TSV_FIELDS)
 
     for scaffold, metrics in sample_comparison.metrics.items():
-        writer.writerow([scaffold] + [f[1] % metrics.get(f[0], 0)
-                                      for f in COMPARE_TSV_FIELDS])
-
-
+        metrics['scaffold'] = scaffold
+        writer.writerow([f[1] % metrics.get(f[0], 0)
+                         for f in COMPARE_TSV_FIELDS])

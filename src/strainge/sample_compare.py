@@ -76,7 +76,7 @@ class SampleComparison:
 
         Returns
         -------
-
+        dict
         """
         # common locations where both have a call
         common, common_cnt, common_pct = self.compare_thing(
@@ -181,17 +181,17 @@ class SampleComparison:
             (g.start, g.end, g) for g in b.gaps
         )
 
-        a_shared = [g for g in b.gaps if gap_tree_a[g.start:g.end]]
-        b_shared = [g for g in a.gaps if gap_tree_b[g.start:g.end]]
+        a_shared = [g for g in a.gaps if gap_tree_b[g.start:g.end]]
+        b_shared = [g for g in b.gaps if gap_tree_a[g.start:g.end]]
 
         a_shared_length = sum(g.length for g in a_shared)
         b_shared_length = sum(g.length for g in b_shared)
 
         return {
-            "Alength": a_length,
+            "Agaps": a_length,
             "AsharedGaps": a_shared_length,
             "AgapPct": pct(a_shared_length, a_length),
-            "Blength": b_length,
+            "Bgaps": b_length,
             "BsharedGaps": b_shared_length,
             "BgapPct": pct(b_shared_length, b_length)
         }

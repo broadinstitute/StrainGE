@@ -183,12 +183,19 @@ class VariantCallData:
         self.min_gap_size = min_gap_size
 
         self.scaffolds_data = {
-            name: ScaffoldCallData(name, scaffold.seq.upper())
+            name: ScaffoldCallData(name, len(scaffold.seq))
             for name, scaffold in self.reference.scaffolds.items()
         }  # type: Dict[str, ScaffoldCallData]
 
         self.mean_coverage = 0.0
         self.median_coverage = 0
+
+    def build_refmask(self):
+        for name, scaffold in self.reference.scaffolds.items():
+            logger.info("Building refmask for scaffold %s", name)
+
+            for i, base in enumerate(scaffold.seq.upper()):
+                scaffold.refmask[i] = Allele(base)
 
     def bad_read(self, scaffold, pos):
         self.scaffolds_data[scaffold].bad[pos] += 1
@@ -358,16 +365,11 @@ class ScaffoldCallData:
     Contains statistics about pileups for a given scaffold.
     """
 
-    def __init__(self, name, sequence):
+    def __init__(self, name, length):
         self.name = name
-        self.length = len(sequence)
+        self.length = length
 
-        logger.info("Building refmask for scaffold %s", name)
-
-        self.refmask = numpy.array(
-            [int(Allele.from_str(base)) for base in sequence],
-            dtype=numpy.uint8
-        )
+        self.refmask = numpy.zeros((self.length,), dtype=numpy.uint8)
 
         # Store for each position and per possible allele the counts and sum
         # of base qualities. We use len(Allele)-1 because we store nothing
@@ -554,6 +556,7 @@ class VariantCaller:
         :return:
         """
         call_data = VariantCallData(reference, self.min_gap_size)
+        call_data.build_refmask()
 
         logger.info("Processing pileups...")
         for column in pileup_iter:

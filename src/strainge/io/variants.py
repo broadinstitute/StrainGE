@@ -157,7 +157,7 @@ def call_data_from_hdf5(reference, hdf5_file):
     -------
     CallStatsCollector
     """
-    datasets = {"alleles", "bad", "lowmq_count",
+    datasets = {"refmask", "alleles", "bad", "lowmq_count",
                 "mq_sum", "strong", "weak", "coverage", "high_coverage"}
 
     # These datasets have pre-allocated numpy arrays in `VariantCallData`

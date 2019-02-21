@@ -29,6 +29,8 @@
 
 import csv
 
+from strainge.variant_caller import Allele
+
 COMPARE_TSV_FIELDS = (
     ("scaffold", "%s"), ("common", "%d"),
     ("commonPct", "%.2f"), ("single", "%d"),
@@ -61,3 +63,56 @@ def generate_compare_summary_tsv(sample_comparison, output_file):
         metrics['scaffold'] = scaffold
         writer.writerow([f[1] % metrics.get(f[0], 0)
                          for f in COMPARE_TSV_FIELDS])
+
+
+def generate_compare_details_tsv(f, a, b, verbose=False):
+    """
+    Generate a TSV describing variant call differences between the two given
+    samples, down to the single nucleotide level.
+
+    Parameters
+    ----------
+    f : file
+        Output file object
+    a : strainge.variant_caller.VariantCallData
+    b : strainge.variant_caller.VariantCallData
+    """
+
+    writer = csv.writer(f, delimiter='\t', lineterminator='\n')
+
+    for scaffoldA, scaffoldB in zip(a.scaffolds_data.values(),
+                                    b.scaffolds_data.values()):
+        assert scaffoldA.name == scaffoldB.name
+        assert scaffoldA.length == scaffoldB.length
+
+        for pos in range(scaffoldA.length):
+            strongA = scaffoldA.strong[pos]
+            strongB = scaffoldB.strong[pos]
+
+            if strongA and strongB and (verbose or strongA != strongB):
+                ref = Allele(scaffoldA.refmask[pos])
+                alleles_a = _strong_weak_string(strongA, scaffoldA.weak[pos])
+                alleles_b = _strong_weak_string(strongB, scaffoldB.weak[pos])
+                writer.writerow([scaffoldA.name, pos, str(ref), alleles_a,
+                                 alleles_b])
+
+
+def _strong_weak_string(strong, weak):
+    """
+    Returns a string describing strong and weak allele calls.
+
+    Strong are weak calls are separated by a /, and both strong and weak can
+    have multiple alleles. Example:
+
+        A/C,T
+
+    A is a strong call, while C and T are weak calls.
+    """
+
+    strong = Allele(int(strong))
+    weak = Allele(int(weak & ~strong))
+
+    if weak:
+        return f"{str(strong)}/{str(weak)}"
+    else:
+        return str(strong)

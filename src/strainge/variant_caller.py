@@ -29,6 +29,7 @@
 
 import math
 import logging
+import functools
 from enum import IntFlag, auto
 from typing import Dict
 
@@ -69,15 +70,24 @@ class Allele(IntFlag):
 
         return cls.__members__[base]
 
-    def __str__(self):
-        rev_mapping = {
-            v: k for k, v in self.__class__.__members__.items()
-        }
+    def __iter__(self):
+        for allele in Allele:
+            if self.value & allele:
+                yield allele
 
-        if self.value in rev_mapping:
-            return rev_mapping[self.value]
+    def __str__(self):
+        alleles = list(self)
+        if len(alleles) == 1:
+            return _allele_to_str(alleles[0])
         else:
-            return super().__str__()
+            return ",".join(str(v) for v in self)
+
+
+@functools.lru_cache(maxsize=8)
+def _allele_to_str(value):
+    rev_mapping = {v: k for k, v in Allele.__members__.items()}
+
+    return rev_mapping[value]
 
 
 ALLELE_MASKS = numpy.array([v for v in Allele if v != Allele.N])

@@ -40,7 +40,8 @@ from strainge.sample_compare import SampleComparison
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
                                   generate_call_summary_tsv)
-from strainge.io.comparisons import generate_compare_summary_tsv
+from strainge.io.comparisons import (generate_compare_summary_tsv,
+                                     generate_compare_details_tsv)
 from strainge.cli.registry import Subcommand
 
 logger = logging.getLogger()
@@ -365,6 +366,11 @@ class SampleCompareSubcommand(Subcommand):
             help="Output file for detailed base level differences between "
                  "samples (optional)."
         )
+        subparser.add_argument(
+            '-V', '--verbose-details', action="store_true", default=False,
+            help="Output detailed information for every position in the "
+                 "genome instead of only for positions where alleles differ."
+        )
 
         subparser.add_argument(
             '-b', '--baseline', default="", required=False, type=Path,
@@ -380,7 +386,8 @@ class SampleCompareSubcommand(Subcommand):
         )
 
     def __call__(self, reference, samples, summary_out=None, details_out=None,
-                 baseline=None, output_dir="", *args, **kwargs):
+                 verbose_details=False, baseline=None, output_dir="",
+                 *args, **kwargs):
         if baseline and not baseline.is_file() and not baseline == Path(""):
             logger.error("Baseline %s does not exists.", baseline)
             return 1
@@ -422,5 +429,8 @@ class SampleCompareSubcommand(Subcommand):
             generate_compare_summary_tsv(comparison, summary_out)
 
             if details_out:
-                # TODO: write details file
-                pass
+                logger.info("Generating details file...")
+                generate_compare_details_tsv(details_out, call_data1,
+                                             call_data2, verbose_details)
+
+            logger.info("Done.")

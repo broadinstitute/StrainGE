@@ -32,12 +32,12 @@ import argparse
 
 import strainge
 from strainge.cli.registry import SubcommandRegistry
-from strainge.cli.kmersets import (KmerizeSubcommand, CompareSubCommand,
+from strainge.cli.kmersets import (KmerizeSubcommand, KmersimSubCommand,
                                    ClusterSubcommand, CreateDBSubcommand,
                                    PlotSubcommand, StatsSubcommand)
 from strainge.cli.straingst import StrainGSTSubCommand
 from strainge.cli.straingr import (CallSubcommand, ViewSubcommand,
-                                   SampleCompareSubcommand)
+                                   CompareSubCommand)
 
 logger = logging.getLogger()
 
@@ -94,7 +94,7 @@ class StrainGECLI(SubcommandRegistry):
 strainge_cli = StrainGECLI()
 
 strainge_cli.register_subcommand('kmerize', subcommand=KmerizeSubcommand())
-strainge_cli.register_subcommand('compare', subcommand=CompareSubCommand())
+strainge_cli.register_subcommand('kmersim', subcommand=KmersimSubCommand())
 strainge_cli.register_subcommand('cluster', subcommand=ClusterSubcommand())
 strainge_cli.register_subcommand('createdb', subcommand=CreateDBSubcommand())
 
@@ -102,8 +102,7 @@ strainge_cli.register_subcommand('search', subcommand=StrainGSTSubCommand())
 
 strainge_cli.register_subcommand('call', subcommand=CallSubcommand())
 strainge_cli.register_subcommand('view', subcommand=ViewSubcommand())
-strainge_cli.register_subcommand('sample-compare',
-                                 subcommand=SampleCompareSubcommand())
+strainge_cli.register_subcommand('compare', subcommand=CompareSubCommand())
 
 strainge_cli.register_subcommand('stats', subcommand=StatsSubcommand())
 strainge_cli.register_subcommand('plot', subcommand=PlotSubcommand())

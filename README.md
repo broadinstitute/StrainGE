@@ -7,6 +7,22 @@ Genome Search tool, a tool to find close reference genomes for strains present
 in a sample and 2) StrainGR: Strain Genome Recovery, a tool to perform
 strain-aware variant calling at low coverages.
 
+Dependencies
+------------
+
+* Python >= 3.6
+* NumPy
+* SciPy
+* matplotlib
+* biopython
+* pyvcf
+* pysam
+* h5py
+* intervaltree
+
+These dependencies will be automatically installed when creating a conda
+environment from our `environment.yml` file described below.
+
 Installation
 ------------
 
@@ -51,7 +67,7 @@ subcommands:
 **Database creation**
 
 * `strainge kmerize`
-* `strainge compare`
+* `strainge kmersim`
 * `strainge cluster`
 * `strainge createdb`
 
@@ -63,7 +79,7 @@ subcommands:
 **StrainGR: Strain Genome Recovery**
 
 * `strainge call`
-* `strainge sample-compare`
+* `strainge compare`
 
 **Utilities**
 
@@ -108,7 +124,7 @@ First, we need to compute the pairwise similarities between k-mer sets. This
 can be done using `strainge compare`:
 
 ```bash
-strainge compare --all-vs-all -t 4 *.hdf5 > similarities.tsv
+strainge kmersim --all-vs-all -t 4 *.hdf5 > similarities.tsv
 ```
 
 This command produces as tab separated file, where each line contains
@@ -165,9 +181,9 @@ disk writes, we can combine almost all steps described above to one single bash
 command:
 
 ```bash
-strainge compare --all-vs-all -t 4 *.hdf5 \
+strainge kmersim --all-vs-all -t 4 *.hdf5 \
     | strainge cluster -i - -c 0.95 --clusters-out clusters.tsv *.hdf5 \
-    | strainge createdb -F -f - -o pan-genome-db.hdf5
+    | strainge createdb -f - -o pan-genome-db.hdf5
 ```
 
 By using `-` we signify that `strainge` should read from the standard input
@@ -300,7 +316,7 @@ Examples:
 
 ```bash
 strainge kmerize ...     # Only very global logging messages
-strainge -v compare ...  # Get more internal logging messages
+strainge -v kmersim ...  # Get more internal logging messages
 strainge -vv cluster ..  # Enable all debug messages
 ```
 
@@ -336,9 +352,9 @@ strainge -vv cluster ..  # Enable all debug messages
                             Prune singletons after accumulating this (can have
                             suffix of M or G)
 
-#### `strainge compare` - compare k-mer sets 
+#### `strainge kmersim` - compare k-mer sets 
 
-    usage: strainge compare [-h] (-a | -s FILE) [-f]
+    usage: strainge kmersim [-h] (-a | -s FILE) [-f]
                             [-S {jaccard,minsize,meansize,maxsize,reference}] [-F]
                             [-t THREADS] [-o FILE]
                             strains [strains ...]
@@ -523,11 +539,11 @@ strainge -vv cluster ..  # Enable all debug messages
                             (regions) of at least the given size. Default: 1.
 
 
-#### `strainge sample-compare` - compare variant calls across multiple samples
+#### `strainge compare` - compare variant calls across multiple samples
 
-    usage: strainge sample-compare [-h] [-o SUMMARY_OUT] [-d DETAILS_OUT]
-                                   [-b BASELINE] [-D OUTPUT_DIR]
-                                   REF SAMPLE_HDF5 [SAMPLE_HDF5 ...]
+    usage: strainge compare [-h] [-o SUMMARY_OUT] [-d DETAILS_OUT]
+                            [-b BASELINE] [-D OUTPUT_DIR]
+                            REF SAMPLE_HDF5 [SAMPLE_HDF5 ...]
 
     Compare strains and variant calls in two different samples. Reads of
     both samples must be aligned to the same reference.

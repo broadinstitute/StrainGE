@@ -332,7 +332,7 @@ class ViewSubcommand(Subcommand):
         logger.info("Done.")
 
 
-class SampleCompareSubcommand(Subcommand):
+class CompareSubCommand(Subcommand):
     """
     Compare strains and variant calls in two different samples. Reads of
     both samples must be aligned to the same reference.

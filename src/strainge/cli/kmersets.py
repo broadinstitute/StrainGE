@@ -201,7 +201,7 @@ class KmerizeSubcommand(Subcommand):
         kmerset.save(output, compress=True)
 
 
-class CompareSubCommand(Subcommand):
+class KmersimSubCommand(Subcommand):
     """
     Compare k-mer sets with each other. Both all-vs-all and one-vs-all is
     supported.

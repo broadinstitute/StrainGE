@@ -1,0 +1,17 @@
+name: strainge
+channels:
+    - bioconda
+    - conda-forge
+    - anaconda
+dependencies:
+    - "python>=3.6"
+    - pybind11
+    - numpy
+    - scipy
+    - h5py
+    - matplotlib
+    - biopython
+    - pyvcf
+    - pysam
+    - samtools
+    - bwa

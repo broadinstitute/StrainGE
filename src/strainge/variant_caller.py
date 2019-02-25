@@ -31,7 +31,7 @@ import math
 import logging
 import functools
 from enum import IntFlag, auto
-from typing import Dict
+from typing import Dict  # noqa
 
 import numpy
 from scipy.stats import poisson
@@ -661,27 +661,35 @@ class VariantCaller:
         alignment = read.alignment
         mq = alignment.mapping_quality
         if mq < self.min_mapping_quality:
-            others = self._alternative_locations(alignment, refpos)
-
-            for scaffold, pos, rc in others:
-                call_data.low_mapping_quality(scaffold, pos-1)
+            for scaffold, pos, rc in self._alternative_locations(alignment,
+                                                                 refpos):
+                call_data.low_mapping_quality(scaffold, pos)
 
     def _alternative_locations(self, read, loc):
-        alns = []
         if read.has_tag("XA"):
             xa = read.get_tag("XA")
             nm = int(read.get_tag("NM"))
-            offset = (read.reference_end - 1 - loc if read.is_reverse
-                      else loc - read.reference_start)
-
+            offset = (read.reference_end - loc + 1 if read.is_reverse else
+                      loc - read.reference_start)
             for aln in xa.split(';'):
-                if aln:
-                    scaffold, pos, cigar, anm = aln.split(',')
-                    anm = int(anm)
-                    if anm <= nm:
-                        pos = int(pos)
-                        rc = pos < 0
-                        coord = (-pos + read.query_length - 1 - offset if rc
-                                 else pos + offset)
-                        alns.append((scaffold, coord, rc))
-        return alns
+                if not aln:
+                    continue
+
+                scaffold, pos, cigar, alt_nm = aln.split(',')
+
+                if 'S' in cigar or 'H' in cigar:
+                    # Clipped alignment, ignore
+                    logger.debug("Ignoring clipped alternative alignment")
+                    continue
+
+                alt_nm = int(alt_nm)
+                if alt_nm <= nm:
+                    pos = int(pos)
+                    rc = pos < 0
+
+                    # Turn into a 0-based coordinate system
+                    pos = abs(pos) - 1
+                    coord = (pos + read.query_length - offset + 1 if rc
+                             else pos + offset)
+
+                    yield scaffold, coord, rc

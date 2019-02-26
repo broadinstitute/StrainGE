@@ -205,7 +205,7 @@ class VariantCallData:
             logger.info("Building refmask for scaffold %s", name)
 
             for i, base in enumerate(scaffold.seq.upper()):
-                scaffold.refmask[i] = Allele(base)
+                scaffold.refmask[i] = Allele.from_str(base)
 
     def bad_read(self, scaffold, pos):
         self.scaffolds_data[scaffold].bad[pos] += 1

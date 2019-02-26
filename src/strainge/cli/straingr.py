@@ -401,7 +401,7 @@ class CompareSubCommand(Subcommand):
                 fname_base = f"{baseline.stem}.vs.{sample.stem}"
                 summary_file = output_dir / f"{fname_base}.summary.tsv"
                 details_file = output_dir / f"{fname_base}.details.tsv"
-                print(sys.argv[0], "sample-compare",
+                print(sys.argv[0], "compare",
                       "-o", summary_file,
                       "-d", details_file,
                       reference, baseline, sample)

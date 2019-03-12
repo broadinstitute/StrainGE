@@ -211,7 +211,7 @@ class StrainGST:
             # strains if requested)
             for t in range(self.top):
                 pos = str(i) if self.top == 1 else f"{i}.{t}"
-                result.strains.append((pos, winner))
+                result.strains.append((pos, strain_scores[t]))
 
             winning_strain = self.pangenome.load_strain(winner.strain)
 

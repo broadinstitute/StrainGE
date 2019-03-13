@@ -181,7 +181,8 @@ class StrainGST:
                     "database (%.2f%%)", sample.name, sample_pan_kmers,
                     sample_pan_pct)
 
-        result = StrainGSTResult(sample.kmers.size, sample_pan_kcov, sample_pan_pct)
+        result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
+                                 sample_pan_pct)
 
         # Excludes will contain kmers removed from consideration because they
         # were in a found in a previous strain
@@ -209,7 +210,7 @@ class StrainGST:
 
             # Collect the winning strain (and additional extra high scoring
             # strains if requested)
-            for t in range(self.top):
+            for t in range(min(self.top, len(strain_scores))):
                 pos = str(i) if self.top == 1 else f"{i}.{t}"
                 result.strains.append((pos, strain_scores[t]))
 

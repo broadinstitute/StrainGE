@@ -121,7 +121,7 @@ def lander_waterman(coverage):
 
 def find_consecutive_groups(array, min_size=1):
     """
-    Find consecutive groups of 1's and 0's in a numpy boolean array.
+    Find consecutive groups numbers in a numpy boolean array.
     Adjusted from https://stackoverflow.com/questions/7352684/
 
     Parameters
@@ -138,8 +138,11 @@ def find_consecutive_groups(array, min_size=1):
         `size`.
     """
 
-    groups = numpy.split(
-        array, numpy.where(numpy.abs(numpy.diff(array)) == 1)[0] + 1)
+    # Positions where the number changes, i.e. derivative != 0
+    change = ~(numpy.diff(array) == 0)
+
+    # split at changing positions
+    groups = numpy.split(array, numpy.where(change)[0] + 1)
 
     cur_pos = 0
     for group in groups:

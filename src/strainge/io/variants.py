@@ -237,6 +237,24 @@ def boolean_array_to_bedfile(array, output_file, scaffold_name,
         writer.writerow((scaffold_name, start, end))
 
 
+def array_to_bedgraph(array, output_file, scaffold_name):
+    """
+    Export a numpy array to BedGraph format, which can be visualized in
+    genome viewers.
+
+    Parameters
+    ----------
+    array : ndarray
+    output_file : file-like object
+    scaffold_name : str
+    """
+
+    writer = csv.writer(output_file, delimiter='\t', lineterminator='\n')
+
+    for group, start, end, length in find_consecutive_groups(array):
+        writer.writerow([scaffold_name, start, end, group[0]])
+
+
 def vcf_records_for_scaffold(scaffold, variants_only=True):
     """
     Yield VCF records for all positions in the scaffold, or only the

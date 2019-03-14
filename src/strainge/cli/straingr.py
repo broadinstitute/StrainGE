@@ -39,7 +39,7 @@ from strainge.variant_caller import VariantCaller, Reference
 from strainge.sample_compare import SampleComparison
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
-                                  generate_call_summary_tsv)
+                                  generate_call_summary_tsv, array_to_bedgraph)
 from strainge.io.comparisons import (generate_compare_summary_tsv,
                                      generate_compare_details_tsv)
 from strainge.cli.registry import Subcommand
@@ -47,13 +47,24 @@ from strainge.cli.registry import Subcommand
 logger = logging.getLogger()
 
 
-def write_tracks(call_data, track_covered=None, track_poor_mq=None,
-                 track_high_coverage=None, track_gaps=None, track_min_size=1):
+def write_tracks(call_data, track_covered=None, track_coverage=None,
+                 track_poor_mq=None, track_high_coverage=None,
+                 track_gaps=None, track_min_size=1):
     if track_covered:
         logger.info("Writing 'callable' BED track...")
         for scaffold in call_data.scaffolds_data.values():
             boolean_array_to_bedfile(scaffold.strong > 0, track_covered,
                                      scaffold.name, track_min_size)
+
+    if track_coverage:
+        logger.info("Writing 'coverage' BedGraph track...")
+
+        # Write BedGraph trackline
+        print("track type=bedGraph", file=track_coverage)
+
+        # Write BedGraph values
+        for scaffold in call_data.scaffolds_data.values():
+            array_to_bedgraph(scaffold.coverage, track_coverage, scaffold.name)
 
     if track_poor_mq:
         logger.info("Writing 'poor mapping quality' BED track...")
@@ -167,6 +178,12 @@ class CallSubcommand(Subcommand):
                  "callable regions in the genome."
         )
         call_out_group.add_argument(
+            '--track-coverage', type=argparse.FileType('w'), required=False,
+            default=None, metavar='FILE',
+            help="Output a BedGraph file to the given filename, containing "
+                 "the coverage per position as seen by StrainGR."
+        )
+        call_out_group.add_argument(
             '--track-poor-mq', type=argparse.FileType('w'), required=False,
             default=None, metavar='FILE',
             help="Output a BED file to the given filename, indicating regions "
@@ -196,7 +213,8 @@ class CallSubcommand(Subcommand):
                  min_mapping_qual, min_gap,
                  summary=None, hdf5_out=None,
                  vcf=None, verbose_vcf=False,
-                 track_covered=None, track_poor_mq=None,
+                 track_covered=None, track_coverage=None,
+                 track_poor_mq=None,
                  track_high_coverage=None,
                  track_gaps=None, track_min_size=1, **kwargs):
         """Call variants in a mixed-strain sample."""
@@ -228,7 +246,7 @@ class CallSubcommand(Subcommand):
             logger.info("Generating VCF file...")
             write_vcf(call_data, vcf, not verbose_vcf)
 
-        write_tracks(call_data, track_covered, track_poor_mq,
+        write_tracks(call_data, track_covered, track_coverage, track_poor_mq,
                      track_high_coverage, track_gaps, track_min_size)
 
         logger.info("Done.")
@@ -263,9 +281,15 @@ class ViewSubcommand(Subcommand):
                  "callable regions in the genome."
         )
         subparser.add_argument(
+            '--track-coverage', type=argparse.FileType('w'), required=False,
+            default=None, metavar='FILE',
+            help="Output a BedGraph file to the given filename, containing "
+                 "the coverage per position as seen by StrainGR."
+        )
+        subparser.add_argument(
             '--track-poor-mq', type=argparse.FileType('w'), required=False,
             default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating regions "
+            help="Output a  file to the given filename, indicating regions "
                  "with a majority of poorly mapped reads."
         )
         subparser.add_argument(
@@ -305,7 +329,7 @@ class ViewSubcommand(Subcommand):
         )
 
     def __call__(self, reference, hdf5, summary=None,
-                 track_covered=None, track_poor_mq=None,
+                 track_covered=None, track_coverage=None, track_poor_mq=None,
                  track_high_coverage=None, track_gaps=None, track_min_size=1,
                  vcf=None, verbose_vcf=False, **kwargs):
         """View and output the StrainGR calling results in different file
@@ -322,7 +346,7 @@ class ViewSubcommand(Subcommand):
                 logger.info("Writing summary to %s", summary.name)
             generate_call_summary_tsv(call_data, summary)
 
-        write_tracks(call_data, track_covered, track_poor_mq,
+        write_tracks(call_data, track_covered, track_coverage, track_poor_mq,
                      track_high_coverage, track_gaps, track_min_size)
 
         if vcf:

@@ -48,8 +48,8 @@ logger = logging.getLogger()
 
 
 def write_tracks(call_data, track_covered=None, track_coverage=None,
-                 track_poor_mq=None, track_high_coverage=None,
-                 track_gaps=None, track_min_size=1):
+                 track_poor_mq=None, track_lowmq_count=None,
+                 track_high_coverage=None, track_gaps=None, track_min_size=1):
     if track_covered:
         logger.info("Writing 'callable' BED track...")
         for scaffold in call_data.scaffolds_data.values():
@@ -65,6 +65,17 @@ def write_tracks(call_data, track_covered=None, track_coverage=None,
         # Write BedGraph values
         for scaffold in call_data.scaffolds_data.values():
             array_to_bedgraph(scaffold.coverage, track_coverage, scaffold.name)
+
+    if track_lowmq_count:
+        logger.info("Writing 'lowmq count' BedGraph track...")
+
+        # Write BedGraph trackline
+        print("track type=bedGraph", file=track_lowmq_count)
+
+        # Write BedGraph values
+        for scaffold in call_data.scaffolds_data.values():
+            array_to_bedgraph(scaffold.lowmq_count, track_lowmq_count,
+                              scaffold.name)
 
     if track_poor_mq:
         logger.info("Writing 'poor mapping quality' BED track...")
@@ -190,6 +201,13 @@ class CallSubcommand(Subcommand):
                  "with a majority of poorly mapped reads."
         )
         call_out_group.add_argument(
+            '--track-lowmq-count', type=argparse.FileType('w'), required=False,
+            default=None, metavar='FILE',
+            help="Output a BedGraph file indicating how many reads with low "
+                 "mapping quality are located at each position. This "
+                 "includes counts from alternative alignment locations."
+        )
+        call_out_group.add_argument(
             '--track-high-coverage', type=argparse.FileType('w'),
             required=False,
             default=None, metavar='FILE',
@@ -214,7 +232,7 @@ class CallSubcommand(Subcommand):
                  summary=None, hdf5_out=None,
                  vcf=None, verbose_vcf=False,
                  track_covered=None, track_coverage=None,
-                 track_poor_mq=None,
+                 track_poor_mq=None, track_lowmq_count=None,
                  track_high_coverage=None,
                  track_gaps=None, track_min_size=1, **kwargs):
         """Call variants in a mixed-strain sample."""
@@ -246,7 +264,8 @@ class CallSubcommand(Subcommand):
             logger.info("Generating VCF file...")
             write_vcf(call_data, vcf, not verbose_vcf)
 
-        write_tracks(call_data, track_covered, track_coverage, track_poor_mq,
+        write_tracks(call_data, track_covered, track_coverage,
+                     track_poor_mq, track_lowmq_count,
                      track_high_coverage, track_gaps, track_min_size)
 
         logger.info("Done.")
@@ -293,6 +312,13 @@ class ViewSubcommand(Subcommand):
                  "with a majority of poorly mapped reads."
         )
         subparser.add_argument(
+            '--track-lowmq-count', type=argparse.FileType('w'), required=False,
+            default=None, metavar='FILE',
+            help="Output a BedGraph file indicating how many reads with low "
+                 "mapping quality are located at each position. This "
+                 "includes counts from alternative alignment locations."
+        )
+        subparser.add_argument(
             '--track-high-coverage', type=argparse.FileType('w'),
             required=False,
             default=None, metavar='FILE',
@@ -329,7 +355,8 @@ class ViewSubcommand(Subcommand):
         )
 
     def __call__(self, reference, hdf5, summary=None,
-                 track_covered=None, track_coverage=None, track_poor_mq=None,
+                 track_covered=None, track_coverage=None,
+                 track_poor_mq=None, track_lowmq_count=None,
                  track_high_coverage=None, track_gaps=None, track_min_size=1,
                  vcf=None, verbose_vcf=False, **kwargs):
         """View and output the StrainGR calling results in different file
@@ -346,7 +373,8 @@ class ViewSubcommand(Subcommand):
                 logger.info("Writing summary to %s", summary.name)
             generate_call_summary_tsv(call_data, summary)
 
-        write_tracks(call_data, track_covered, track_coverage, track_poor_mq,
+        write_tracks(call_data, track_covered, track_coverage,
+                     track_poor_mq, track_lowmq_count,
                      track_high_coverage, track_gaps, track_min_size)
 
         if vcf:

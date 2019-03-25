@@ -487,9 +487,9 @@ class ScaffoldCallData:
         depth = self.alleles[:, 0].sum(axis=-1)
         self.lowmq = ((self.lowmq_count > 1) & (self.lowmq_count > depth))
 
-        # Covered is either: 1) we can make a strong call 2) we have low
+        # Covered is either: 1) we can make a weak call 2) we have low
         # mapping quality reads there (potentially from repetitive regions)
-        covered_array = ((self.strong > 0) | self.lowmq)
+        covered_array = ((self.weak > 0) | self.lowmq)
 
         self.gaps = [
             group for group in utils.find_consecutive_groups(covered_array,

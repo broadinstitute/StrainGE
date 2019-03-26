@@ -139,7 +139,7 @@ def find_consecutive_groups(array, min_size=1):
     """
 
     # Positions where the number changes, i.e. derivative != 0
-    change = ~(numpy.diff(array) == 0)
+    change = numpy.diff(array) != 0
 
     # split at changing positions
     groups = numpy.split(array, numpy.where(change)[0] + 1)

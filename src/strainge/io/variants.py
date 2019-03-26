@@ -202,7 +202,11 @@ def call_data_from_hdf5(hdf5_file):
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']
         call_data.min_gap_size = hdf5.attrs['min_gap_size']
-        call_data.reference_fasta = hdf5.attrs['reference_fasta']
+
+        if 'reference_fasta' in hdf5.attrs:
+            call_data.reference_fasta = hdf5.attrs['reference_fasta']
+        else:
+            call_data.reference_fasta = ""
 
         logger.info("Mean coverage (across all scaffolds): %.2f",
                     call_data.mean_coverage)

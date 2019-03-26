@@ -30,6 +30,7 @@
 import math
 import logging
 import functools
+from pathlib import Path
 from enum import IntFlag, auto
 from typing import Dict  # noqa
 
@@ -183,29 +184,38 @@ class VariantCallData:
     data is stored per contig/scaffold in the reference.
     """
 
-    def __init__(self, reference, min_gap_size):
+    def __init__(self, scaffolds, min_gap_size):
         """
-        :param reference: The fasta file used as reference for read alignment.
-        :type reference: Reference
+        Initialize various numpy arrays for data storage.
+
+        Parameters
+        ----------
+        scaffolds : Dict[str, int]
+            Dictionary with scaffold names as keys and their lengths as values.
+        min_gap_size : int
+            Minimum required size of a gap to be considered as such.
         """
 
-        self.reference = reference
         self.min_gap_size = min_gap_size
+        self.reference_length = sum(scaffolds.values())
+        self.reference_fasta = ""
 
         self.scaffolds_data = {
-            name: ScaffoldCallData(name, len(scaffold.seq))
-            for name, scaffold in self.reference.scaffolds.items()
+            name: ScaffoldCallData(name, length)
+            for name, length in scaffolds.items()
         }  # type: Dict[str, ScaffoldCallData]
 
         self.mean_coverage = 0.0
         self.median_coverage = 0
 
-    def build_refmask(self):
-        for name, scaffold in self.reference.scaffolds.items():
+    def build_refmask(self, reference):
+        for name, scaffold in reference.scaffolds.items():
             logger.info("Building refmask for scaffold %s", name)
 
             for i, base in enumerate(scaffold.seq.upper()):
                 self.scaffolds_data[name].refmask[i] = Allele.from_str(base)
+
+        self.reference_fasta = Path(reference.fasta).resolve()
 
     def bad_read(self, scaffold, pos):
         self.scaffolds_data[scaffold].bad[pos] += 1
@@ -233,7 +243,7 @@ class VariantCallData:
 
         all_coverage = numpy.concatenate([s.coverage for s in
                                           self.scaffolds_data.values()])
-        self.mean_coverage = numpy.sum(all_coverage) / self.reference.length
+        self.mean_coverage = numpy.sum(all_coverage) / self.reference_length
         self.median_coverage = numpy.median(all_coverage)
 
         return self
@@ -343,18 +353,19 @@ class VariantCallData:
             }
 
         # Return one last entry with all statistics for the genome as a whole
+        lengths = [s.length for s in self.scaffolds_data.values()]
+
         yield {
             "name": "TOTAL",
-            "length": self.reference.length,
+            "length": self.reference_length,
             "coverage": (
                 # Weigh by scaffold length
-                sum(v * l for v, l in
-                    zip(all_coverages, self.reference.lengths)) /
-                self.reference.length
+                sum(v * l for v, l in zip(all_coverages, lengths)) /
+                self.reference_length
             ),
             "median": self.median_coverage,
             "callable": total_callable,
-            "callablePct": pct(total_callable, self.reference.length),
+            "callablePct": pct(total_callable, self.reference_length),
             "confirmed": total_confirmed,
             "confirmedPct": pct(total_confirmed, total_callable),
             "snps": total_snps,
@@ -362,9 +373,9 @@ class VariantCallData:
             "multi": total_multi,
             "multiPct": pct(total_multi, total_snps),
             "lowmq": total_lowmq,
-            "lowmqPct": pct(total_lowmq, self.reference.length),
+            "lowmqPct": pct(total_lowmq, self.reference_length),
             "high": total_high_cov,
-            "highPct": pct(total_high_cov, self.reference.length),
+            "highPct": pct(total_high_cov, self.reference_length),
             "gapCount": total_gaps,
             "gapLength": total_gap_length
         }
@@ -565,8 +576,9 @@ class VariantCaller:
         :param pileup_iter: Iterable of pysam.PileupColumn objects
         :return:
         """
-        call_data = VariantCallData(reference, self.min_gap_size)
-        call_data.build_refmask()
+        scaffolds = dict(zip(reference.scaffolds.keys(), reference.lengths))
+        call_data = VariantCallData(scaffolds, self.min_gap_size)
+        call_data.build_refmask(reference)
 
         logger.info("Processing pileups...")
         for column in pileup_iter:

@@ -279,10 +279,6 @@ class ViewSubcommand(Subcommand):
 
     def register_arguments(self, subparser: argparse.ArgumentParser):
         subparser.add_argument(
-            'reference',
-            help="Reference FASTA file. Can be GZIP compressed."
-        )
-        subparser.add_argument(
             'hdf5',
             help="HDF5 file with StrainGR call statistics."
         )
@@ -354,18 +350,15 @@ class ViewSubcommand(Subcommand):
                  "a SNP is observed."
         )
 
-    def __call__(self, reference, hdf5, summary=None,
+    def __call__(self, hdf5, summary=None,
                  track_covered=None, track_coverage=None,
                  track_poor_mq=None, track_lowmq_count=None,
                  track_high_coverage=None, track_gaps=None, track_min_size=1,
                  vcf=None, verbose_vcf=False, **kwargs):
         """View and output the StrainGR calling results in different file
         formats."""
-        logger.info("Loading reference %s...", reference)
-        reference = Reference(reference)
-
         logger.info("Loading data from HDF5 file %s", hdf5)
-        call_data = call_data_from_hdf5(reference, hdf5)
+        call_data = call_data_from_hdf5(hdf5)
 
         if summary:
             # Output a summary TSV
@@ -395,11 +388,6 @@ class CompareSubCommand(Subcommand):
     """
 
     def register_arguments(self, subparser: argparse.ArgumentParser):
-        subparser.add_argument(
-            'reference', metavar='REF',
-            help="The reference used for variant calling."
-        )
-
         subparser.add_argument(
             'samples', nargs='+', metavar='SAMPLE_HDF5', type=Path,
             help="HDF5 files with variant calling data for each sample. "
@@ -437,7 +425,7 @@ class CompareSubCommand(Subcommand):
                  "--baseline."
         )
 
-    def __call__(self, reference, samples, summary_out=None, details_out=None,
+    def __call__(self, samples, summary_out=None, details_out=None,
                  verbose_details=False, baseline=None, output_dir="",
                  *args, **kwargs):
         if baseline and not baseline.is_file() and not baseline == Path(""):
@@ -456,7 +444,7 @@ class CompareSubCommand(Subcommand):
                 print(sys.argv[0], "compare",
                       "-o", summary_file,
                       "-d", details_file,
-                      reference, baseline, sample)
+                      baseline, sample)
         else:
             if len(samples) != 2:
                 logger.error("The number of samples given should be exactly "
@@ -465,16 +453,13 @@ class CompareSubCommand(Subcommand):
 
                 return 1
 
-            logger.info("Loading reference %s...", reference)
-            reference = Reference(reference)
-
             logger.info("Comparing sample %s vs %s", samples[0].stem,
                         samples[1].stem)
 
             logger.info("Loading sample 1 %s", samples[0].stem)
-            call_data1 = call_data_from_hdf5(reference, samples[0])
+            call_data1 = call_data_from_hdf5(samples[0])
             logger.info("Loading sample 2 %s", samples[1].stem)
-            call_data2 = call_data_from_hdf5(reference, samples[1])
+            call_data2 = call_data_from_hdf5(samples[1])
 
             comparison = SampleComparison(call_data1, call_data2)
 

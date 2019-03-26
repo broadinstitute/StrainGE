@@ -27,10 +27,14 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
+import logging
+
 import numpy
 from intervaltree import IntervalTree
 
 from strainge.utils import pct
+
+logger = logging.getLogger(__name__)
 
 
 class SampleComparison:
@@ -51,20 +55,25 @@ class SampleComparison:
             Variant call data of sample 2
         """
 
+        scaffolds_common = (call_data1.scaffolds_data.keys() &
+                            call_data2.scaffolds_data.keys())
+
+        logger.info("Scaffolds in common: %s", scaffolds_common)
+
         self.metrics = {}
 
         self.sample1 = call_data1
         self.sample2 = call_data2
 
-        for scaffoldA, scaffoldB in zip(call_data1.scaffolds_data.values(),
-                                        call_data2.scaffolds_data.values()):
-            assert scaffoldA.name == scaffoldB.name
-            assert scaffoldA.length == scaffoldB.length
+        for scaffold in scaffolds_common:
+            scaffold_a = call_data1.scaffolds_data[scaffold]
+            scaffold_b = call_data2.scaffolds_data[scaffold]
 
-            self.metrics[scaffoldA.name] = self._do_compare(scaffoldA,
-                                                            scaffoldB)
-            self.metrics[scaffoldA.name].update(self.compare_gaps(scaffoldA,
-                                                                  scaffoldB))
+            assert scaffold_a.length == scaffold_b.length
+
+            self.metrics[scaffold] = self._do_compare(scaffold_a, scaffold_b)
+            self.metrics[scaffold].update(self.compare_gaps(scaffold_a,
+                                                            scaffold_b))
 
     def _do_compare(self, a, b):
         """

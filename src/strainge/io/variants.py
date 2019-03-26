@@ -140,16 +140,16 @@ def call_data_to_hdf5(call_data, output_file):
         h5.attrs['min_gap_size'] = call_data.min_gap_size
         h5.attrs['mean_coverage'] = call_data.mean_coverage
         h5.attrs['median_coverage'] = call_data.median_coverage
+        h5.attrs['reference_fasta'] = call_data.reference_fasta
 
 
-def call_data_from_hdf5(reference, hdf5_file):
+def call_data_from_hdf5(hdf5_file):
     """
     Create a `CallStatsCollector` by loading the relevant data from an
     earlier created HDF5 file.
 
     Parameters
     ----------
-    reference : strainge.io.database.Reference
     hdf5_file : str
         HDF5 filename
 
@@ -169,7 +169,12 @@ def call_data_from_hdf5(reference, hdf5_file):
                           f"`VariantCallData`.")
 
         min_gap = hdf5.attrs['min_gap_size']
-        call_data = VariantCallData(reference, min_gap)
+
+        scaffolds = {}
+        for scaffold in hdf5:
+            scaffolds[scaffold] = len(hdf5[scaffold]['refmask'])
+
+        call_data = VariantCallData(scaffolds, min_gap)
 
         for scaffold_name in hdf5:
             scaffold = call_data.scaffolds_data[scaffold_name]
@@ -197,9 +202,12 @@ def call_data_from_hdf5(reference, hdf5_file):
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']
         call_data.min_gap_size = hdf5.attrs['min_gap_size']
+        call_data.reference_fasta = hdf5.attrs['reference_fasta']
 
-        logger.info("Mean coverage: %.2f", call_data.mean_coverage)
-        logger.info("Median coverage: %.2f", call_data.median_coverage)
+        logger.info("Mean coverage (across all scaffolds): %.2f",
+                    call_data.mean_coverage)
+        logger.info("Median coverage (across all scaffolds): %.2f",
+                    call_data.median_coverage)
         logger.info("Minimum gap size: %.2f", call_data.min_gap_size)
 
         # Reconstruct gaps again
@@ -348,7 +356,7 @@ def write_vcf(call_data, output_file, variants_only=True):
 
     vcf_template = vcf.Reader(io.StringIO(VCF_TEMPLATE.format(
         date=datetime.now(),
-        ref=call_data.reference.fasta
+        ref=call_data.reference_fasta
     )))
 
     vcf_writer = vcf.Writer(output_file, vcf_template)

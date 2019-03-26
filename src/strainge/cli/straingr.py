@@ -31,6 +31,7 @@ import csv
 import sys
 import logging
 import argparse
+import itertools
 from pathlib import Path
 
 import pysam
@@ -412,39 +413,52 @@ class CompareSubCommand(Subcommand):
                  "genome instead of only for positions where alleles differ."
         )
 
-        subparser.add_argument(
+        group = subparser.add_mutually_exclusive_group()
+
+        group.add_argument(
+            '-a', '--all-vs-all', action="store_true", required=False,
+            help="Perform all-vs-all pairwise comparisons between the given "
+                 "samples. Can't be used together with --baseline."
+        )
+
+        group.add_argument(
             '-b', '--baseline', default="", required=False, type=Path,
             help="Path to a sample to use as baseline, and compare all other "
                  "given samples to this one. Outputs a shell script that "
-                 "runs all individual pairwise comparisons."
+                 "runs all individual pairwise comparisons. Can't be used "
+                 "together with --all-vs-all."
         )
 
         subparser.add_argument(
             '-D', '--output-dir', default="", required=False, type=Path,
             help="The output directory of all comparison files when using "
-                 "--baseline."
+                 "--baseline or --all-vs-all."
         )
 
     def __call__(self, samples, summary_out=None, details_out=None,
-                 verbose_details=False, baseline=None, output_dir="",
-                 *args, **kwargs):
+                 verbose_details=False, baseline=None, all_vs_all=False,
+                 output_dir="", *args, **kwargs):
         if baseline and not baseline.is_file() and not baseline == Path(""):
             logger.error("Baseline %s does not exists.", baseline)
             return 1
-        elif baseline and baseline.is_file():
+        elif baseline and baseline.is_file() or all_vs_all:
             output_dir = Path(output_dir)
 
-            for sample in samples:
-                if sample == baseline:
-                    continue
+            if all_vs_all:
+                pairs = itertools.combinations(samples, 2)
+            else:
+                pairs = ((baseline, sample) for sample in samples
+                         if sample != baseline)
 
-                fname_base = f"{baseline.stem}.vs.{sample.stem}"
+            for sample1, sample2 in pairs:
+                fname_base = f"{sample1.stem}.vs.{sample2.stem}"
                 summary_file = output_dir / f"{fname_base}.summary.tsv"
                 details_file = output_dir / f"{fname_base}.details.tsv"
                 print(sys.argv[0], "compare",
                       "-o", summary_file,
                       "-d", details_file,
-                      baseline, sample)
+                      "-V" if verbose_details else "",
+                      sample1, sample2)
         else:
             if len(samples) != 2:
                 logger.error("The number of samples given should be exactly "

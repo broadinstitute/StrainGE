@@ -101,6 +101,10 @@ class StrainGSTSubCommand(Subcommand):
             help="minimum evenness (default: %(default).2f)"
         )
         subparser.add_argument(
+            "-S", "--score-strains", action='append',
+            help="only score these strains (primarily for debugging)"
+        )
+        subparser.add_argument(
             "pan",
             help="hdf5 file containing pan genome kmer set"
         )
@@ -110,7 +114,7 @@ class StrainGSTSubCommand(Subcommand):
         )
 
     def __call__(self, pan, sample, output, iterations, top, fingerprint,
-                 minfrac, score, evenness, *args, **kwargs):
+                 minfrac, score, evenness, score_strains, *args, **kwargs):
 
         logger.info("Running StrainGST on sample %s with database %s",
                     sample, pan)
@@ -120,7 +124,9 @@ class StrainGSTSubCommand(Subcommand):
         straingst = StrainGST(pandb, fingerprint, iterations, top, score,
                               evenness, minfrac)
 
-        results = straingst.find_close_references(sample_kmerset)
+        print("Scoring strains: " + str(score_strains))
+
+        results = straingst.find_close_references(sample_kmerset, score_strains=score_strains)
 
         writer = csv.writer(output, delimiter='\t', lineterminator='\n')
         writer.writerow(list(sample_stats_tsv_columns.keys()))

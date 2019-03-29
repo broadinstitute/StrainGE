@@ -154,13 +154,16 @@ class StrainGST:
 
         self.pangenome = pangenome
 
-    def find_close_references(self, sample):
+    def find_close_references(self, sample, score_strains=None):
         """
         Find the strains in a sample
         :param sample: Sample object to score
         :return: Object with all results
         :rtype: StrainGSTResult
         """
+
+        # Score all pangenome strains unless list given
+        strains = score_strains or self.pangenome.strain_names
 
         # Reduce the sample KmerSet to its intersection with the PanGenome
         # to free up memory and speed things up.
@@ -191,7 +194,7 @@ class StrainGST:
         for i in range(self.iterations):
             iter = map(
                 lambda strain: self.score_strain(strain, sample, excludes),
-                self.pangenome.strain_names
+                strains
             )
 
             strain_scores = list(s for s in iter if s is not None)

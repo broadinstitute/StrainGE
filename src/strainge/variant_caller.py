@@ -215,7 +215,7 @@ class VariantCallData:
             for i, base in enumerate(scaffold.seq.upper()):
                 self.scaffolds_data[name].refmask[i] = Allele.from_str(base)
 
-        self.reference_fasta = Path(reference.fasta).resolve()
+        self.reference_fasta = str(Path(reference.fasta).resolve())
 
     def bad_read(self, scaffold, pos):
         self.scaffolds_data[scaffold].bad[pos] += 1

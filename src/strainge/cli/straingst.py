@@ -124,8 +124,6 @@ class StrainGSTSubCommand(Subcommand):
         straingst = StrainGST(pandb, fingerprint, iterations, top, score,
                               evenness, minfrac)
 
-        print("Scoring strains: " + str(score_strains))
-
         results = straingst.find_close_references(sample_kmerset, score_strains=score_strains)
 
         writer = csv.writer(output, delimiter='\t', lineterminator='\n')

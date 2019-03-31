@@ -30,7 +30,6 @@
 import math
 import logging
 from collections import namedtuple
-
 import h5py
 
 from strainge import kmertools, kmerizer
@@ -294,12 +293,12 @@ class StrainGST:
 
         # Weight each of my kmers by inverse of times it occurs in pan genome
         # relative to this genome
-        strain_weights = strain_kmerset.counts * (1.0 / strain_pan_counts)
-        strain_total_weight = strain_weights.sum()
+        # strain_weights = strain_kmerset.counts * (1.0 / strain_pan_counts)
+        weights = 1.0 / pan_counts
+        strain_total_weight = (counts * weights).sum()
 
         # Weight of each sample kmer
-        sample_weights = counts * (1.0 / pan_counts)
-        sample_total_weight = (sample_counts * sample_weights).sum()
+        sample_total_weight = (sample_counts * weights).sum()
 
         # Weighted genome coverage
         weighted_coverage = sample_total_weight / strain_total_weight

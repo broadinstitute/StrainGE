@@ -196,7 +196,7 @@ class StrainGST:
                 strains
             )
 
-            strain_scores = list(s for s in iter if s is not None)
+            strain_scores = list(s for s in iter if s is not None and s.even >= self.min_evenness)
             strain_scores.sort(key=lambda e: e.score, reverse=True)
 
             if not strain_scores:
@@ -206,8 +206,8 @@ class StrainGST:
             winner = strain_scores[0]
             # if best score isn't good enough, we're done
             if winner.score < self.min_score:
-                logger.info("Score %.3f below min score %.3f, quiting.",
-                            winner.score, self.min_score)
+                logger.info("Score %.3f for %s below min score %.3f, quiting.",
+                            winner.score, winner.strain, self.min_score)
                 break
 
             # Collect the winning strain (and additional extra high scoring
@@ -315,9 +315,6 @@ class StrainGST:
         # add in specificity component (best match should be close to 1.0,
         # higher or lower is worse)
         weighted_score = score * min(specificity, 1.0 / specificity)
-
-        if weighted_score < self.min_score or evenness < self.min_evenness:
-            return None
 
         return Strain(
             strain=strain_name,

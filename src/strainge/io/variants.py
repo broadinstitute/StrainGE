@@ -331,6 +331,7 @@ def vcf_records_for_scaffold(scaffold, variants_only=True):
             FILTER="PASS",
             INFO={
                 'DP': scaffold.depth(pos),
+                'MQ': round(scaffold.mean_mq(pos)),
                 'RQ': scaffold.ref_qual(pos),
                 'RF': round(scaffold.ref_fraction(pos), 3),
                 'AD': allele_counts,

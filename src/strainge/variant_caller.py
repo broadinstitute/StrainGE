@@ -232,10 +232,13 @@ class VariantCallData:
     def update_mapping_quality(self, scaffold, pos, mapping_quality):
         self.scaffolds_data[scaffold].mq_sum[pos] += mapping_quality
 
-    def good_read(self, scaffold, pos, allele, mapping_quality):
+    def good_read(self, scaffold, pos, allele, base_quality, mapping_quality, rc):
         ix = ALLELE_INDEX[allele]
-        self.scaffolds_data[scaffold].alleles[pos, 0, ix] += 1
-        self.scaffolds_data[scaffold].alleles[pos, 1, ix] += mapping_quality
+        scaffold_data = self.scaffolds_data[scaffold]
+        logger.info("%s p=%d a=%d r=%d q=%d mq=%d rc=%d", scaffold, pos, allele, scaffold_data.refmask[pos], base_quality, mapping_quality, rc)
+        scaffold_data.alleles[pos, 0, ix] += 1
+        scaffold_data.alleles[pos, 1, ix] += base_quality
+        scaffold_data.mq_sum[pos] += mapping_quality
 
     def analyze_coverage(self):
         for scaffold in self.scaffolds_data.values():
@@ -552,6 +555,10 @@ class ScaffoldCallData:
     def allele_qual(self, loc, allele):
         return self.alleles[loc, 1, ALLELE_INDEX[allele]]
 
+    def mean_mq(self, loc):
+        d = self.depth(loc)
+        return self.mq_sum[loc] / d if d else 0
+
 
 class VariantCaller:
     """
@@ -560,12 +567,13 @@ class VariantCaller:
     """
 
     def __init__(self, min_qual, min_pileup_qual, min_qual_frac,
-                 min_mapping_quality, min_gap_size):
+                 min_mapping_quality, min_gap_size, score_alternatives=False):
         self.min_qual = min_qual
         self.min_pileup_qual = min_pileup_qual
         self.min_qual_frac = min_qual_frac
         self.min_mapping_quality = min_mapping_quality
         self.min_gap_size = min_gap_size
+        self.score_alternatives = score_alternatives
 
     def process(self, reference, pileup_iter):
         """
@@ -587,7 +595,7 @@ class VariantCaller:
 
             for read in column.pileups:
                 self._assess_read(call_data, scaffold, refpos, read)
-                self._assess_alternative_locations(call_data, refpos, read)
+                #self._assess_alternative_locations(call_data, refpos, read)
 
         logger.info("Done.")
         logger.info("Analyzing coverage...")
@@ -631,16 +639,7 @@ class VariantCaller:
             call_data.bad_read(scaffold, refpos)
             return
 
-        # check for decent mapping quality
-        mq = alignment.mapping_quality
-        call_data.update_mapping_quality(scaffold, refpos, mq)
-
-        # we keep track of otherwise good reads with low mapping quality;
-        # that probably means this is a repeat
-        if mq < self.min_mapping_quality:
-            call_data.low_mapping_quality(scaffold, refpos)
-            return
-
+        # insertions and deletions are treated like alleles
         if read.indel:
             if read.is_del:
                 # deletion
@@ -655,8 +654,20 @@ class VariantCaller:
                 call_data.bad_read(scaffold, refpos)
                 return
 
+        # check for decent mapping quality
+        mq = alignment.mapping_quality
+        #call_data.update_mapping_quality(scaffold, refpos, mq)
+
         # We're good! Update the pileup stats...
-        call_data.good_read(scaffold, refpos, base, qual)
+        call_data.good_read(scaffold, refpos, base, qual, mq, False)
+
+        # we keep track of otherwise good reads with low mapping quality;
+        # that probably means this is a repeat
+        if mq < self.min_mapping_quality:
+            #call_data.low_mapping_quality(scaffold, refpos)
+            for scaffold, pos, rc in self._alternative_locations(alignment, refpos):
+                call_data.good_read(scaffold, pos, base, qual, mq, rc)
+            return
 
     def _assess_alternative_locations(self, call_data, refpos, read):
         """
@@ -683,6 +694,7 @@ class VariantCaller:
             nm = int(read.get_tag("NM"))
             offset = (read.reference_end - loc + 1 if read.is_reverse else
                       loc - read.reference_start)
+            logger.info(xa + ' ' + str(nm))
             for aln in xa.split(';'):
                 if not aln:
                     continue
@@ -704,4 +716,5 @@ class VariantCaller:
                     coord = (pos + read.query_length - offset + 1 if rc
                              else pos + offset)
 
+                    logger.info("loc=%d o=%d r=%d s=%s coord=%d rc=%d", loc, offset, read.is_reverse, scaffold, coord, rc)
                     yield scaffold, coord, rc

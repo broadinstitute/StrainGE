@@ -248,8 +248,8 @@ class VariantCallData:
         base = allele.rc() if rc else allele
         ix = ALLELE_INDEX[base]
         scaffold_data = self.scaffolds_data[scaffold]
-        #if base != scaffold_data.refmask[pos]:
-        #    logger.info("GOOD %s p=%d a=%s r=%s q=%d mq=%d rc=%d", scaffold, pos, str(base), str(Allele(scaffold_data.refmask[pos])), base_quality, mapping_quality, rc)
+        if base in (Allele.INS, Allele.DEL):
+            logger.info("GOOD %s p=%d a=%s r=%s q=%d mq=%d rc=%d", scaffold, pos, str(base), str(Allele(scaffold_data.refmask[pos])), base_quality, mapping_quality, rc)
         scaffold_data.alleles[pos, 0, ix] += 1
         scaffold_data.alleles[pos, 1, ix] += base_quality
         scaffold_data.mq_sum[pos] += mapping_quality
@@ -652,13 +652,11 @@ class VariantCaller:
             return
 
         # insertions and deletions are treated like alleles
-        if read.indel:
-            if read.is_del:
-                # deletion
-                base = Allele.DEL
-            else:
-                # then it must be an insertion
-                base = Allele.INS
+        if read.is_del:
+            base = Allele.DEL
+        elif read.indel > 0:
+            # then it must be an insertion
+            base = Allele.INS
         else:
             # base call must be real base (e.g., not N)
             base = Allele.from_str(alignment.query_sequence[pos])

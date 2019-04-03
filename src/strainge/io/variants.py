@@ -45,12 +45,12 @@ from strainge.variant_caller import Allele, VariantCallData
 logger = logging.getLogger(__name__)
 
 TSV_FIELDS = (
-    ("name", "%s"), ("length", "%d"), ("coverage", "%.2f"),
-    ("median", "%d"), ("callable", "%d"), ("callablePct", "%.2f"),
-    ("confirmed", "%d"), ("confirmedPct", "%.2f"),
-    ("snps", "%d"), ("snpPct", "%.2f"), ("multi", "%d"),
-    ("multiPct", "%.2f"), ("lowmq", "%d"), ("lowmqPct", "%.2f"),
-    ("high", "%d"), ("highPct", "%.2f"), ("gapCount", "%d"),
+    ("name", "%s"), ("length", "%d"), ("coverage", "%.3f"),
+    ("median", "%d"), ("callable", "%d"), ("callablePct", "%.3f"),
+    ("confirmed", "%d"), ("confirmedPct", "%.3f"),
+    ("snps", "%d"), ("snpPct", "%.3f"), ("pureSnps", "%d"),
+    ("pureSnpPct", "%.3f"), ("lowmq", "%d"), ("lowmqPct", "%.3f"),
+    ("high", "%d"), ("highPct", "%.3f"), ("gapCount", "%d"),
     ("gapLength", "%d")
 )
 

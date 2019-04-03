@@ -288,6 +288,7 @@ class VariantCallData:
         total_confirmed = 0
         total_snps = 0
         total_multi = 0
+        total_pure = 0
         total_lowmq = 0
         total_high_cov = 0
         total_gaps = 0
@@ -335,6 +336,10 @@ class VariantCallData:
             multi_pct = pct(num_multi, num_snps)
             total_multi += num_multi
 
+            pure_snps = num_snps - num_multi
+            pure_snp_pct = pct(pure_snps, num_callable)
+            total_pure += pure_snps
+
             num_lowmq = numpy.count_nonzero(scaffold.lowmq)
             lowmq_pct = pct(num_lowmq, scaffold.length)
             total_lowmq += num_lowmq
@@ -359,6 +364,8 @@ class VariantCallData:
                 "confirmedPct": confirmed_pct,
                 "snps": num_snps,
                 "snpPct": snp_pct,
+                "pureSnps": pure_snps,
+                "pureSnpPct": pure_snp_pct,
                 "multi": num_multi,
                 "multiPct": multi_pct,
                 "lowmq": num_lowmq,
@@ -389,6 +396,8 @@ class VariantCallData:
             "snpPct": pct(total_snps, total_callable),
             "multi": total_multi,
             "multiPct": pct(total_multi, total_snps),
+            "pureSnps": total_pure,
+            "pureSnpPct": pct(total_pure, total_callable),
             "lowmq": total_lowmq,
             "lowmqPct": pct(total_lowmq, self.reference_length),
             "high": total_high_cov,

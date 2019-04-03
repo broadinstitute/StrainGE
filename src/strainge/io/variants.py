@@ -61,6 +61,7 @@ VCF_TEMPLATE = """##fileformat=VCFv4.0
 ##INFO=<ID=DP,Number=1,Type=Integer,Description="Coverage depth">
 ##INFO=<ID=RQ,Number=1,Type=Integer,Description="Sum of reference base \
 qualities">
+##INFO=<ID=MQ,Number=1,Type=Integer,Description="Mean mapping quality">
 ##INFO=<ID=RF,Number=1,Type=Float,Description="Reference Fraction">
 ##INFO=<ID=AD,Number=R,Type=Integer,Description="Allele read depths">
 ##INFO=<ID=QS,Number=R,Type=Integer,Description="Sum of base qualities">

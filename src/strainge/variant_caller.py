@@ -248,8 +248,8 @@ class VariantCallData:
         base = allele.rc() if rc else allele
         ix = ALLELE_INDEX[base]
         scaffold_data = self.scaffolds_data[scaffold]
-        if base in (Allele.INS, Allele.DEL):
-            logger.info("GOOD %s p=%d a=%s r=%s q=%d mq=%d rc=%d", scaffold, pos, str(base), str(Allele(scaffold_data.refmask[pos])), base_quality, mapping_quality, rc)
+        #if base in (Allele.INS, Allele.DEL):
+        #    logger.info("GOOD %s p=%d a=%s r=%s q=%d mq=%d rc=%d", scaffold, pos, str(base), str(Allele(scaffold_data.refmask[pos])), base_quality, mapping_quality, rc)
         scaffold_data.alleles[pos, 0, ix] += 1
         scaffold_data.alleles[pos, 1, ix] += base_quality
         scaffold_data.mq_sum[pos] += mapping_quality

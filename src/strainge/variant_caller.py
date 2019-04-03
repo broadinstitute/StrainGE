@@ -720,8 +720,8 @@ class VariantCaller:
 
                 scaffold, pos, cigar, alt_nm = aln.split(',')
 
-                if 'S' in cigar or 'H' in cigar:
-                    # Clipped alignment, ignore
+                if 'S' in cigar or 'H' in cigar or 'D' in cigar or 'I' in cigar:
+                    # Clipped alignment, ignore. Also ignore alt alignments with indels to keep things in sync.
                     logger.debug("Ignoring clipped alternative alignment")
                     continue
 

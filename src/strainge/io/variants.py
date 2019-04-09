@@ -268,7 +268,7 @@ def array_to_bedgraph(array, output_file, scaffold_name):
         writer.writerow([scaffold_name, start, end, group[0]])
 
 
-def vcf_records_for_scaffold(scaffold, variants_only=True):
+def vcf_records_for_scaffold(scaffold, verboseness=0):
     """
     Yield VCF records for all positions in the scaffold, or only the
     positions with something else than the reference.
@@ -277,18 +277,27 @@ def vcf_records_for_scaffold(scaffold, variants_only=True):
     ----------
     scaffold : strainge.variant_caller.ScaffoldCallData
         Variant call data for this scaffold
-    variants_only : bool
-        Only output VCF entries for positions with something else than the
-        reference.
+    verboseness : int
+        Determines the verboseness of the VCF. Higher value will result in
+        more entries in the VCF. Accepted values:
+
+        0: Only output StrainGR strong SNPs
+        1: Output strong and weak SNPs
+        2: Output an entry for every position in the genome, even if nothing
+           else but the reference is observed.
+
     """
 
     logger.info("Generate VCF records for scaffold %s", scaffold.name)
     positions = numpy.arange(scaffold.length)
 
-    if variants_only:
+    if verboseness < 2:
         # Find positions with something else than the reference base
         # Remove bit corresponding to reference base
-        alt_mask = scaffold.weak & ~scaffold.refmask
+        if verboseness == 0:
+            alt_mask = scaffold.strong & ~scaffold.refmask
+        else:
+            alt_mask = scaffold.weak & ~scaffold.refmask
 
         # Only keep those with something else than the reference
         ix = alt_mask > 0
@@ -344,7 +353,7 @@ def vcf_records_for_scaffold(scaffold, variants_only=True):
         )
 
 
-def write_vcf(call_data, output_file, variants_only=True):
+def write_vcf(call_data, output_file, verboseness=0):
     """
     Write out variant calling data to a VCF file. By default only writes
     entries where something else than the reference has been observed.
@@ -353,11 +362,14 @@ def write_vcf(call_data, output_file, variants_only=True):
     ----------
     call_data : VariantCallData
     output_file : file
-    variants_only : bool
-        If set to False, this function will also output a VCF row for each
-        position where nothing interesting is found except confirmation of
-        the reference base. By default, only positions with evidence for a
-        SNP will be written to the file.
+    verboseness : int
+        Determines the verboseness of the VCF. Higher value will result in
+        more entries in the VCF. Accepted values:
+
+        0: Only output StrainGR strong SNPs
+        1: Output strong and weak SNPs
+        2: Output an entry for every position in the genome, even if nothing
+           else but the reference is observed.
     """
 
     vcf_template = vcf.Reader(io.StringIO(VCF_TEMPLATE.format(
@@ -368,7 +380,7 @@ def write_vcf(call_data, output_file, variants_only=True):
     vcf_writer = vcf.Writer(output_file, vcf_template)
 
     record_iter = itertools.chain.from_iterable(
-        vcf_records_for_scaffold(scaffold, variants_only)
+        vcf_records_for_scaffold(scaffold, verboseness)
         for scaffold in call_data.scaffolds_data.values()
     )
 

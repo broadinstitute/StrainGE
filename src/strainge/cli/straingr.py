@@ -176,12 +176,13 @@ class CallSubcommand(Subcommand):
                  "VCF file."
         )
         call_out_group.add_argument(
-            '--verbose-vcf', action="store_true", default=False,
-            help="To be used with --vcf. If you set this flag, then the VCF "
-                 "will also include records for positions in the genome where "
-                 "nothing but the reference base is observed. By default it "
-                 "will only output records for positions where some evidence "
-                 "for a SNP is observed."
+            '--verbose-vcf', type=int, default=0, metavar='LEVEL',
+            help="To be used with --vcf. Increase the verboseness of the "
+                 "generated VCF. By default it only outputs strong SNPs. A "
+                 "value of 1 will also output any weak calls. If set to 2, "
+                 "it will include an entry for every position in the "
+                 "reference, even if no other base than the reference is "
+                 "observed."
         )
         call_out_group.add_argument(
             '--track-callable', type=argparse.FileType('w'), required=False,
@@ -263,7 +264,7 @@ class CallSubcommand(Subcommand):
 
         if vcf:
             logger.info("Generating VCF file...")
-            write_vcf(call_data, vcf, not verbose_vcf)
+            write_vcf(call_data, vcf, verbose_vcf)
 
         write_tracks(call_data, track_covered, track_coverage,
                      track_poor_mq, track_lowmq_count,
@@ -343,12 +344,13 @@ class ViewSubcommand(Subcommand):
                  "VCF file."
         )
         subparser.add_argument(
-            '--verbose-vcf', action="store_true", default=False,
-            help="To be used with --vcf. If you set this flag, then the VCF "
-                 "will also include rows for positions in the genome where "
-                 "nothing but the reference base is observed. By default it "
-                 "will only output rows for positions where some evidence for "
-                 "a SNP is observed."
+            '--verbose-vcf', type=int, default=0, metavar='LEVEL',
+            help="To be used with --vcf. Increase the verboseness of the "
+                 "generated VCF. By default it only outputs strong SNPs. A "
+                 "value of 1 will also output any weak calls. If set to 2, "
+                 "it will include an entry for every position in the "
+                 "reference, even if no other base than the reference is "
+                 "observed."
         )
 
     def __call__(self, hdf5, summary=None,
@@ -373,7 +375,7 @@ class ViewSubcommand(Subcommand):
 
         if vcf:
             logger.info("Generating VCF file...")
-            write_vcf(call_data, vcf, not verbose_vcf)
+            write_vcf(call_data, vcf, verbose_vcf)
 
         logger.info("Done.")
 

@@ -72,7 +72,8 @@ class Allele(IntFlag):
         return cls.__members__[base]
 
     def rc(self):
-        """Return reverse-complement allele; only valid for single-allele values"""
+        """Return reverse-complement allele; only valid for single-allele
+        values"""
         if self.value == Allele.A:
             return Allele.T
         if self.value == Allele.C:
@@ -687,9 +688,10 @@ class VariantCaller:
         call_data.good_read(scaffold, refpos, base, qual, mq, False)
 
         if mq <= 3:
-            # If we're here, we're scoring low mapping quality reads; make sure we
-            # do so for other alternative alignment locations
-            for scaffold, pos, rc in self._alternative_locations(alignment, refpos):
+            # If we're here, we're scoring low mapping quality reads; make
+            # sure we do so for other alternative alignment locations
+            for scaffold, pos, rc in self._alternative_locations(alignment,
+                                                                 refpos):
                 call_data.good_read(scaffold, pos, base, qual, mq, rc)
             return
 
@@ -712,7 +714,6 @@ class VariantCaller:
                                                                  refpos):
                 call_data.low_mapping_quality(scaffold, pos)
 
-
     def _alternative_locations(self, read, loc):
         if read.has_tag("XA"):
             xa = read.get_tag("XA")
@@ -727,8 +728,10 @@ class VariantCaller:
 
                 scaffold, pos, cigar, alt_nm = aln.split(',')
 
-                if 'S' in cigar or 'H' in cigar or 'D' in cigar or 'I' in cigar:
-                    # Clipped alignment, ignore. Also ignore alt alignments with indels to keep things in sync.
+                if ('S' in cigar or 'H' in cigar or 'D' in cigar or
+                        'I' in cigar):
+                    # Clipped alignment, ignore. Also ignore alt alignments
+                    # with indels to keep things in sync.
                     logger.debug("Ignoring clipped alternative alignment")
                     continue
 

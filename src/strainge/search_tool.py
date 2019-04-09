@@ -310,7 +310,9 @@ class StrainGST:
         # indicates that more kmers specific to this strain are found that
         # would be exected from random sampling, e.g., maybe the sample only
         # contains a chunk of this genome.
-        specificity = weighted_coverage / genome_coverage
+        strain_mean_weight = strain_total_weight / counts.sum()
+        sample_mean_weight = sample_total_weight / sample_count
+        specificity = sample_mean_weight / strain_mean_weight
 
         # add in specificity component (best match should be close to 1.0,
         # higher or lower is worse)

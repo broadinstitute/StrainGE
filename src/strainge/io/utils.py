@@ -47,6 +47,9 @@ def parse_straingst(result_file, return_sample_stats=False):
     Iterable[dict]
     """
 
+    # Ignore comments
+    result_file = (line for line in result_file if not line.startswith('#'))
+
     # Collect sample statistics (first two lines)
     sample_stats = [
         next(result_file),

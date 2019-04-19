@@ -480,7 +480,7 @@ class KmerSet(object):
         return (-(probs * np.log2(probs)).sum()) / 2
 
     def save_hdf5(self, h5, compress=None):
-        h5.attrs["type"] = "KmerSet".encode()
+        h5.attrs["type"] = "KmerSet"
         h5.attrs["k"] = self.k
         h5.attrs["nSeqs"] = self.n_seqs
 
@@ -509,9 +509,16 @@ class KmerSet(object):
             self.save_hdf5(h5, compress)
 
     def load_hdf5(self, h5):
-        if h5.attrs['type'].decode() != "KmerSet":
+        h5_type = h5.attrs['type']
+
+        # Support for HDF5 files generated in previous versions under Python 2
+        if isinstance(h5_type, bytes):
+            h5_type = h5_type.decode()
+
+        if h5_type != "KmerSet":
             raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
-                             " '{}'".format(h5.attrs['type']))
+                             " '{}'".format(h5_type))
+
         self.k = int(h5.attrs['k'])
         if 'nSeqs' in h5.attrs:
             self.n_seqs = int(h5.attrs['nSeqs'])

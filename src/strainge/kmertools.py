@@ -127,8 +127,14 @@ def name_from_path(file_path):
 def kmerset_from_hdf5(file_path):
     if not file_path.endswith(".hdf5"):
         file_path += ".hdf5"
+
     with h5py.File(file_path, 'r') as h5:
-        assert h5.attrs["type"] == "KmerSet", "Not a KmerSet file!"
+        hdf5_type = h5.attrs['type']
+
+        if isinstance(hdf5_type, bytes):
+            hdf5_type = hdf5_type.decode('utf-8')
+
+        assert hdf5_type == "KmerSet", "Not a KmerSet file!"
         kset = KmerSet(h5.attrs['k'])
 
         if "fingerprint_fraction" in h5.attrs:
@@ -144,6 +150,7 @@ def kmerset_from_hdf5(file_path):
             kset.kmers = np.array(h5["kmers"])
         if "counts" in h5:
             kset.counts = np.array(h5["counts"])
+
     return kset
 
 

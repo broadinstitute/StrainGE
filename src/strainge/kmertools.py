@@ -132,7 +132,7 @@ def kmerset_from_hdf5(file_path):
         hdf5_type = h5.attrs['type']
 
         if isinstance(hdf5_type, bytes):
-            hdf5_type = hdf5_type.decode('utf-8')
+            hdf5_type = hdf5_type.decode()
 
         assert hdf5_type == "KmerSet", "Not a KmerSet file!"
         kset = KmerSet(h5.attrs['k'])

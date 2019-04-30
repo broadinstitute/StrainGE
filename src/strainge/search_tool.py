@@ -142,7 +142,7 @@ Strain = namedtuple('Strain', [
 
 class StrainGST:
     def __init__(self, pangenome, use_fingerprint, iterations, top,
-                 min_score, min_evenness, min_frac):
+                 min_score, min_evenness, min_frac, debug_hdf5=None):
         self.use_fingerprint = use_fingerprint
         self.iterations = iterations
         self.top = top
@@ -152,6 +152,7 @@ class StrainGST:
         self.min_frac = min_frac
 
         self.pangenome = pangenome
+        self.debug_hdf5 = debug_hdf5
 
     def find_close_references(self, sample, score_strains=None):
         """
@@ -186,17 +187,34 @@ class StrainGST:
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
                                  sample_pan_pct)
 
+        h5 = None
+        if self.debug_hdf5:
+            h5 = h5py.File(self.debug_hdf5, 'w')
+
         # Excludes will contain kmers removed from consideration because they
         # were in a found in a previous strain
         excludes = None
 
         for i in range(self.iterations):
+            # Output the remaining sample k-mers per iteration for debugging
+            # purposes if requested.
+            if h5 is not None:
+                group = h5.create_group(f"iteration{i}")
+                group.create_dataset("kmers", data=sample.kmers,
+                                     compression="gzip")
+                group.create_dataset("counts", data=sample.counts,
+                                     compression="gzip")
+
             iter = map(
                 lambda strain: self.score_strain(strain, sample, excludes),
                 strains
             )
 
-            strain_scores = list(s for s in iter if s is not None and s.even >= self.min_evenness)
+            strain_scores = list(
+                s for s in iter if s is not None
+                and s.even >= self.min_evenness
+            )
+
             strain_scores.sort(key=lambda e: e.score, reverse=True)
 
             if not strain_scores:
@@ -225,6 +243,9 @@ class StrainGST:
             # strain next iteration)
             excludes = winning_strain.kmers
             sample.exclude(excludes)
+
+        if h5 is not None:
+            h5.close()
 
         return result
 

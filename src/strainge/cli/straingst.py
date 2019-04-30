@@ -75,6 +75,11 @@ class StrainGSTSubCommand(Subcommand):
             help="output text file (default: standard out)"
         )
         subparser.add_argument(
+            "-d", "--debug-out", default="", required=False,
+            help="Output a debug HDF5 file containing the remaining sample "
+                 "k-mers per iteration. Optional."
+        )
+        subparser.add_argument(
             "-i", "--iterations", type=int, default=5,
             help="max strains to look for (default: 5)"
         )
@@ -113,8 +118,9 @@ class StrainGSTSubCommand(Subcommand):
             help="Search for strains in this sample"
         )
 
-    def __call__(self, pan, sample, output, iterations, top, fingerprint,
-                 minfrac, score, evenness, score_strains, *args, **kwargs):
+    def __call__(self, pan, sample, output, debug_out, iterations, top,
+                 fingerprint, minfrac, score, evenness, score_strains,
+                 *args, **kwargs):
 
         logger.info("Running StrainGST on sample %s with database %s",
                     sample, pan)
@@ -122,9 +128,10 @@ class StrainGSTSubCommand(Subcommand):
         sample_kmerset = Sample(sample)
 
         straingst = StrainGST(pandb, fingerprint, iterations, top, score,
-                              evenness, minfrac)
+                              evenness, minfrac, debug_out)
 
-        results = straingst.find_close_references(sample_kmerset, score_strains=score_strains)
+        results = straingst.find_close_references(sample_kmerset,
+                                                  score_strains=score_strains)
 
         writer = csv.writer(output, delimiter='\t', lineterminator='\n')
         writer.writerow(list(sample_stats_tsv_columns.keys()))

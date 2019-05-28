@@ -124,8 +124,16 @@ class StrainGSTSubCommand(Subcommand):
 
         logger.info("Running StrainGST on sample %s with database %s",
                     sample, pan)
+
         pandb = PanGenome(pan)
         sample_kmerset = Sample(sample)
+
+        if pandb.k != sample_kmerset.k:
+            logger.error(f"Different k-mer size for pan-genome database ("
+                         f"{pandb.k}) and "
+                         f"sample k-mer set ({sample_kmerset.k}). Quiting.")
+
+            return 1
 
         straingst = StrainGST(pandb, fingerprint, iterations, top, score,
                               evenness, minfrac, debug_out)

@@ -653,13 +653,14 @@ class VariantCaller:
                 call_data.bad_read(scaffold, refpos)
                 return
 
-        num_mismatches = 0
-        if alignment.has_tag('NM'):
-            num_mismatches = alignment.get_tag('NM')
+        if self.max_num_mismatches > 0:
+            num_mismatches = 0
+            if alignment.has_tag('NM'):
+                num_mismatches = alignment.get_tag('NM')
 
-        if num_mismatches > self.max_num_mismatches:
-            call_data.bad_read(scaffold, refpos)
-            return
+            if num_mismatches > self.max_num_mismatches:
+                call_data.bad_read(scaffold, refpos)
+                return
 
         # get base quality (note this is next base if deletion, but we won't
         # use that)

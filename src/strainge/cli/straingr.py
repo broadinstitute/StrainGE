@@ -144,9 +144,10 @@ class CallSubcommand(Subcommand):
                  "Default: %(default)d."
         )
         call_qc_group.add_argument(
-            '-N', '--max-mismatches', type=int, default=18,
+            '-N', '--max-mismatches', type=int, default=0,
             help="Ignore alignments with a higher number of mismatches than "
-                 "the given threshold. Default: %(default)d."
+                 "the given threshold. A value of 0 disables this "
+                 "check. Default: %(default)d."
         )
         call_qc_group.add_argument(
             '-G', '--min-gap', type=int, default=2000,

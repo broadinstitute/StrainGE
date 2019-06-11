@@ -67,12 +67,19 @@ class StrainGECLI(SubcommandRegistry):
         which subcommand is called, and run the corresponding `Subcommand`
         instance."""
 
+        # Enable bash auto completion if the package `argcomplete` is installed
+        try:
+            import argcomplete
+            argcomplete.autocomplete(self.parser)
+        except ImportError:
+            pass
+
         args = self.parser.parse_args()
 
         # Setup logging
         logger.setLevel(logging.INFO)
-        spaghetti_logger = logging.getLogger('spaghetti')
-        spaghetti_logger.setLevel(logging.WARNING)
+        strainge_logger = logging.getLogger('strainge')
+        strainge_logger.setLevel(logging.WARNING)
 
         formatter = logging.Formatter(
             "%(asctime)s - %(levelname)s:%(name)s:%(message)s")
@@ -82,11 +89,11 @@ class StrainGECLI(SubcommandRegistry):
         logger.addHandler(handler)
 
         if args.verbose > 0:
-            spaghetti_logger.setLevel(logging.INFO)
+            strainge_logger.setLevel(logging.INFO)
 
         if args.verbose > 1:
             logger.setLevel(logging.DEBUG)
-            spaghetti_logger.setLevel(logging.DEBUG)
+            strainge_logger.setLevel(logging.DEBUG)
 
         self.run(args)
 

@@ -268,6 +268,25 @@ def array_to_bedgraph(array, output_file, scaffold_name):
         writer.writerow([scaffold_name, start, end, group[0]])
 
 
+def array_to_wig(array, output_file, scaffold_name):
+    """
+    Write the values of a numpy array to WIG format, which is viewable in
+    IGV. WIG is better suitable for continuous data.
+
+    Parameters
+    ----------
+    array : array (1D)
+    output_file : str or file-like object
+        If the given filename contains ".gz" it will automatically compress
+        the file.
+    scaffold_name : str
+    """
+
+    numpy.savetxt(output_file, array.T, fmt="%g",
+                  header=f"fixedStep chrom={scaffold_name}", comments="",
+                  encoding="utf-8")
+
+
 def vcf_records_for_scaffold(scaffold, verboseness=0):
     """
     Yield VCF records for all positions in the scaffold, or only the

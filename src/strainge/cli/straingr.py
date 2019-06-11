@@ -40,7 +40,7 @@ from strainge.variant_caller import VariantCaller, Reference
 from strainge.sample_compare import SampleComparison
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
-                                  generate_call_summary_tsv, array_to_bedgraph)
+                                  generate_call_summary_tsv, array_to_wig)
 from strainge.io.comparisons import (generate_compare_summary_tsv,
                                      generate_compare_details_tsv)
 from strainge.cli.registry import Subcommand
@@ -48,55 +48,92 @@ from strainge.cli.registry import Subcommand
 logger = logging.getLogger()
 
 
-def write_tracks(call_data, track_covered=None, track_coverage=None,
-                 track_poor_mq=None, track_lowmq_count=None,
-                 track_high_coverage=None, track_gaps=None, track_min_size=1):
-    if track_covered:
-        logger.info("Writing 'callable' BED track...")
-        for scaffold in call_data.scaffolds_data.values():
-            boolean_array_to_bedfile(scaffold.strong > 0, track_covered,
-                                     scaffold.name, track_min_size)
+def coverage_track(call_data, output_file, *args, **kwargs):
+    logger.info("Writing 'coverage' Wiggle track...")
+    for scaffold in call_data.scaffolds_data.values():
+        array_to_wig(scaffold.coverage, output_file, scaffold.name)
 
-    if track_coverage:
-        logger.info("Writing 'coverage' BedGraph track...")
 
-        # Write BedGraph trackline
-        print("track type=bedGraph", file=track_coverage)
+def callable_track(call_data, output_file, min_size):
+    logger.info("Writing 'callable' BED track...")
+    for scaffold in call_data.scaffolds_data.values():
+        boolean_array_to_bedfile(scaffold.strong > 0, output_file,
+                                 scaffold.name, min_size)
 
-        # Write BedGraph values
-        for scaffold in call_data.scaffolds_data.values():
-            array_to_bedgraph(scaffold.coverage, track_coverage, scaffold.name)
 
-    if track_lowmq_count:
-        logger.info("Writing 'lowmq count' BedGraph track...")
+def multimapped_track(call_data, output_file, *args, **kwargs):
+    logger.info("Writing 'multimapped' Wiggle track...")
+    for scaffold in call_data.scaffolds_data.values():
+        array_to_wig(scaffold.lowmq_count, output_file, scaffold.name)
 
-        # Write BedGraph trackline
-        print("track type=bedGraph", file=track_lowmq_count)
 
-        # Write BedGraph values
-        for scaffold in call_data.scaffolds_data.values():
-            array_to_bedgraph(scaffold.lowmq_count, track_lowmq_count,
-                              scaffold.name)
+def lowmq_track(call_data, output_file, min_size):
+    logger.info("Writing 'low mapping quality' BED track...")
+    for scaffold in call_data.scaffolds_data.values():
+        boolean_array_to_bedfile(scaffold.lowmq, output_file, scaffold.name,
+                                 min_size)
 
-    if track_poor_mq:
-        logger.info("Writing 'poor mapping quality' BED track...")
-        for scaffold in call_data.scaffolds_data.values():
-            boolean_array_to_bedfile(scaffold.lowmq, track_poor_mq,
-                                     scaffold.name, track_min_size)
 
-    if track_high_coverage:
-        logger.info("Writing 'high coverage' BED track...")
-        for scaffold in call_data.scaffolds_data.values():
-            boolean_array_to_bedfile(scaffold.high_coverage,
-                                     track_high_coverage,
-                                     scaffold.name, track_min_size)
+def bad_track(call_data, output_file, *args, **kwargs):
+    logger.info("Writing 'bad reads' Wiggle track...")
+    for scaffold in call_data.scaffolds_data.values():
+        array_to_wig(scaffold.bad, output_file, scaffold.name)
 
-    if track_gaps:
-        logger.info("Writing 'gaps' BED track...")
-        writer = csv.writer(track_gaps, delimiter='\t', lineterminator='\n')
-        for scaffold in call_data.scaffolds_data.values():
-            for gap in scaffold.gaps:
-                writer.writerow((scaffold.name, gap.start, gap.end))
+
+def high_coverage_track(call_data, output_file, min_size):
+    logger.info("Writing 'high coverage' BED track...")
+    for scaffold in call_data.scaffolds_data.values():
+        boolean_array_to_bedfile(scaffold.high_coverage, output_file,
+                                 scaffold.name, min_size)
+
+
+def gaps_track(call_data, output_file, *args, **kwargs):
+    logger.info("Writing 'gaps' BED track...")
+    writer = csv.writer(output_file, delimiter='\t', lineterminator='\n')
+    for scaffold in call_data.scaffolds_data.values():
+        for gap in scaffold.gaps:
+            writer.writerow((scaffold.name, gap.start, gap.end))
+
+
+TRACKS = {
+    "coverage": (".coverage.wig", coverage_track),
+    "callable": (".callable.bed", callable_track),
+    "multimapped": (".multimapped.wig", multimapped_track),
+    "lowmq": (".lowmq.bed", lowmq_track),
+    "bad": (".bad.wig", bad_track),
+    "high_coverage": (".high_coverage.bed", high_coverage_track),
+    "gaps": (".gaps.bed", gaps_track)
+}
+
+
+def write_tracks(call_data, tracks, prefix, min_size=1):
+    """
+    Write the requested tracks to their corresponding files.
+
+    The filename suffixes are hardcoded, the final file path is based on the
+    given `prefix`.
+
+    Parameters
+    ----------
+    call_data
+    tracks : set
+    prefix : Path
+    min_size : int
+    """
+    if "all" in tracks:
+        tracks = TRACKS.keys()
+
+    unknown_tracks = tracks - TRACKS.keys()
+    if unknown_tracks:
+        logger.warning("Ignoring unknown tracks: %s", ",".join(unknown_tracks))
+
+    tracks = tracks & TRACKS.keys()
+
+    for track in tracks:
+        suffix, func = TRACKS[track]
+
+        with prefix.with_suffix(suffix).open("w") as f:
+            func(call_data, f, min_size)
 
 
 class CallSubcommand(Subcommand):
@@ -157,21 +194,19 @@ class CallSubcommand(Subcommand):
 
         call_out_group = subparser.add_argument_group(
             "Output formats",
-            "Options for writing the results to different file "
-            "formats. If you're unsure what to choose, output at least the "
-            "data to HDF5, the rest of the output files can be created "
-            "afterwards from the HDF5 data using 'straingr view'."
+            "Options for writing the results to different file formats."
         )
 
+        call_out_group.add_argument(
+            '-o', '--hdf5-out', required=True, metavar='FILE',
+            help="Output StrainGR variant calling data to the given HDF5 "
+                 "file. Required."
+        )
         call_out_group.add_argument(
             '-s', '--summary', type=argparse.FileType('w'), required=False,
             metavar='FILE', default=sys.stdout,
             help="Output a TSV with a summary of variant calling statistics "
-                 "to the given file."
-        )
-        call_out_group.add_argument(
-            '--hdf5-out', default=None, required=False, metavar='FILE',
-            help="Output StrainGR variant calling data to the given HDF5 file."
+                 "to the given file. Defaults to stdout."
         )
         call_out_group.add_argument(
             '-V', '--vcf', type=argparse.FileType('w'), required=False,
@@ -191,47 +226,18 @@ class CallSubcommand(Subcommand):
                  "observed."
         )
         call_out_group.add_argument(
-            '--track-callable', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating the "
-                 "callable regions in the genome."
-        )
-        call_out_group.add_argument(
-            '--track-coverage', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BedGraph file to the given filename, containing "
-                 "the coverage per position as seen by StrainGR."
-        )
-        call_out_group.add_argument(
-            '--track-poor-mq', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating regions "
-                 "with a majority of poorly mapped reads."
-        )
-        call_out_group.add_argument(
-            '--track-lowmq-count', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BedGraph file indicating how many reads with low "
-                 "mapping quality are located at each position. This "
-                 "includes counts from alternative alignment locations."
-        )
-        call_out_group.add_argument(
-            '--track-high-coverage', type=argparse.FileType('w'),
-            required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating regions "
-                 "with abnormally high coverage."
-        )
-        call_out_group.add_argument(
-            '--track-gaps', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating regions "
-                 "marked as a gap"
+            '-t', '--tracks', action="append", default=[],
+            help="Write track files that can be visualized in a genome "
+                 "viewer, use this option multiple times to generate "
+                 "multiple track types. Use 'all' to generate all tracks. "
+                 "Available track types: {}".format(
+                     ", ".join(TRACKS.keys())
+            )
         )
         call_out_group.add_argument(
             '--track-min-size', type=int, required=False, default=1,
-            help="For all --track-* options above, only include features ("
-                 "regions) of at least the given size. Default: %(default)d."
+            help="For all tracks to generate, only include features ("
+                 "regions)  of at least the given size. Default: %(default)d."
         )
 
     def __call__(self, reference, sample,
@@ -239,10 +245,7 @@ class CallSubcommand(Subcommand):
                  min_mapping_qual, min_gap, max_mismatches,
                  summary=None, hdf5_out=None,
                  vcf=None, verbose_vcf=False,
-                 track_covered=None, track_coverage=None,
-                 track_poor_mq=None, track_lowmq_count=None,
-                 track_high_coverage=None,
-                 track_gaps=None, track_min_size=1, **kwargs):
+                 tracks=None, track_min_size=1, **kwargs):
         """Call variants in a mixed-strain sample."""
 
         logger.info("Loading reference %s...", reference)
@@ -256,10 +259,9 @@ class CallSubcommand(Subcommand):
 
         call_data = caller.process(reference, sample_bam.pileup())
 
-        if hdf5_out:
-            # Output call datasets to HDF5
-            logger.info("Writing data to HDF5 file %s...", hdf5_out)
-            call_data_to_hdf5(call_data, hdf5_out)
+        # Output call datasets to HDF5
+        logger.info("Writing data to HDF5 file %s...", hdf5_out)
+        call_data_to_hdf5(call_data, hdf5_out)
 
         if summary:
             # Output a summary TSV
@@ -272,9 +274,9 @@ class CallSubcommand(Subcommand):
             logger.info("Generating VCF file...")
             write_vcf(call_data, vcf, verbose_vcf)
 
-        write_tracks(call_data, track_covered, track_coverage,
-                     track_poor_mq, track_lowmq_count,
-                     track_high_coverage, track_gaps, track_min_size)
+        if tracks:
+            write_tracks(call_data, set(tracks), Path(hdf5_out),
+                         track_min_size)
 
         logger.info("Done.")
 
@@ -298,42 +300,13 @@ class ViewSubcommand(Subcommand):
                  "to the given file."
         )
         subparser.add_argument(
-            '--track-covered', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating "
-                 "callable regions in the genome."
-        )
-        subparser.add_argument(
-            '--track-coverage', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BedGraph file to the given filename, containing "
-                 "the coverage per position as seen by StrainGR."
-        )
-        subparser.add_argument(
-            '--track-poor-mq', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a  file to the given filename, indicating regions "
-                 "with a majority of poorly mapped reads."
-        )
-        subparser.add_argument(
-            '--track-lowmq-count', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BedGraph file indicating how many reads with low "
-                 "mapping quality are located at each position. This "
-                 "includes counts from alternative alignment locations."
-        )
-        subparser.add_argument(
-            '--track-high-coverage', type=argparse.FileType('w'),
-            required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating regions "
-                 "marked as abnormally high coverage."
-        )
-        subparser.add_argument(
-            '--track-gaps', type=argparse.FileType('w'), required=False,
-            default=None, metavar='FILE',
-            help="Output a BED file to the given filename, indicating regions "
-                 "marked as a gap"
+            '-t', '--tracks', action="append", default=[],
+            help="Write track files that can be visualized in a genome "
+                 "viewer, use this option multiple times to generate "
+                 "multiple track types. Use 'all' to generate all tracks. "
+                 "Available track types: {}".format(
+                ", ".join(TRACKS.keys())
+            )
         )
         subparser.add_argument(
             '--track-min-size', type=int, required=False, default=1,
@@ -359,10 +332,7 @@ class ViewSubcommand(Subcommand):
                  "observed."
         )
 
-    def __call__(self, hdf5, summary=None,
-                 track_covered=None, track_coverage=None,
-                 track_poor_mq=None, track_lowmq_count=None,
-                 track_high_coverage=None, track_gaps=None, track_min_size=1,
+    def __call__(self, hdf5, summary=None, tracks=None, track_min_size=1,
                  vcf=None, verbose_vcf=False, **kwargs):
         """View and output the StrainGR calling results in different file
         formats."""
@@ -375,9 +345,10 @@ class ViewSubcommand(Subcommand):
                 logger.info("Writing summary to %s", summary.name)
             generate_call_summary_tsv(call_data, summary)
 
-        write_tracks(call_data, track_covered, track_coverage,
-                     track_poor_mq, track_lowmq_count,
-                     track_high_coverage, track_gaps, track_min_size)
+        if tracks:
+            tracks = set(tracks)
+
+            write_tracks(call_data, tracks, Path(hdf5), track_min_size)
 
         if vcf:
             logger.info("Generating VCF file...")

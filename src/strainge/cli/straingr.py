@@ -144,6 +144,11 @@ class CallSubcommand(Subcommand):
                  "Default: %(default)d."
         )
         call_qc_group.add_argument(
+            '-N', '--max-mismatches', type=int, default=18,
+            help="Ignore alignments with a higher number of mismatches than "
+                 "the given threshold. Default: %(default)d."
+        )
+        call_qc_group.add_argument(
             '-G', '--min-gap', type=int, default=2000,
             help="Minimum size of gap to be considered as such. Default: "
                  "2000. Will be automatically scaled depending on coverage."
@@ -230,7 +235,7 @@ class CallSubcommand(Subcommand):
 
     def __call__(self, reference, sample,
                  min_qual, min_pileup_qual, min_qual_frac,
-                 min_mapping_qual, min_gap,
+                 min_mapping_qual, min_gap, max_mismatches,
                  summary=None, hdf5_out=None,
                  vcf=None, verbose_vcf=False,
                  track_covered=None, track_coverage=None,
@@ -246,7 +251,7 @@ class CallSubcommand(Subcommand):
 
         logger.info("Start analyzing aligned reads...")
         caller = VariantCaller(min_qual, min_pileup_qual, min_qual_frac,
-                               min_mapping_qual, min_gap)
+                               min_mapping_qual, min_gap, max_mismatches)
 
         call_data = caller.process(reference, sample_bam.pileup())
 

@@ -248,9 +248,8 @@ class VariantCallData:
     def good_read(self, scaffold, pos, allele, base_quality, mapping_quality, rc):
         base = allele.rc() if rc else allele
         ix = ALLELE_INDEX[base]
+
         scaffold_data = self.scaffolds_data[scaffold]
-        #if base in (Allele.INS, Allele.DEL):
-        #    logger.info("GOOD %s p=%d a=%s r=%s q=%d mq=%d rc=%d", scaffold, pos, str(base), str(Allele(scaffold_data.refmask[pos])), base_quality, mapping_quality, rc)
         scaffold_data.alleles[pos, 0, ix] += 1
         scaffold_data.alleles[pos, 1, ix] += base_quality
         scaffold_data.mq_sum[pos] += mapping_quality
@@ -591,12 +590,13 @@ class VariantCaller:
     """
 
     def __init__(self, min_qual, min_pileup_qual, min_qual_frac,
-                 min_mapping_quality, min_gap_size):
+                 min_mapping_quality, min_gap_size, max_num_mismatches):
         self.min_qual = min_qual
         self.min_pileup_qual = min_pileup_qual
         self.min_qual_frac = min_qual_frac
         self.min_mapping_quality = min_mapping_quality
         self.min_gap_size = min_gap_size
+        self.max_num_mismatches = max_num_mismatches
 
     def process(self, reference, pileup_iter):
         """
@@ -653,6 +653,14 @@ class VariantCaller:
                 call_data.bad_read(scaffold, refpos)
                 return
 
+        num_mismatches = 0
+        if alignment.has_tag('NM'):
+            num_mismatches = alignment.get_tag('NM')
+
+        if num_mismatches > self.max_num_mismatches:
+            call_data.bad_read(scaffold, refpos)
+            return
+
         # get base quality (note this is next base if deletion, but we won't
         # use that)
         pos = read.query_position_or_next
@@ -693,7 +701,6 @@ class VariantCaller:
             for scaffold, pos, rc in self._alternative_locations(alignment,
                                                                  refpos):
                 call_data.good_read(scaffold, pos, base, qual, mq, rc)
-            return
 
     def _assess_alternative_locations(self, call_data, refpos, read):
         """
@@ -745,5 +752,4 @@ class VariantCaller:
                     coord = (pos + read.query_length - offset - 1 if rc
                              else pos + offset)
 
-                    #logger.info("loc=%d o=%d r=%d s=%s coord=%d rc=%d", loc, offset, read_rc, scaffold, coord, rc)
                     yield scaffold, coord, rc != read_rc

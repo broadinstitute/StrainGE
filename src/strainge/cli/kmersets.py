@@ -27,7 +27,6 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
-import os
 import sys
 import csv
 import logging
@@ -35,13 +34,16 @@ import argparse
 import functools
 import itertools
 import multiprocessing
+from pathlib import Path
 
 import h5py
 
 from strainge.cli.registry import Subcommand
 from strainge import kmertools, utils, comparison
 
-logger = logging.getLogger(__name__)
+from strainge import cluster
+
+logger = logging.getLogger()
 
 
 class StatsSubcommand(Subcommand):
@@ -258,7 +260,7 @@ class KmersimSubCommand(Subcommand):
             name1, data1 = set1
             name2, data2 = set2
 
-            logging.info("Comparing %s vs %s...", name1, name2)
+            logger.info("Comparing %s vs %s...", name1, name2)
 
             similarity = comparison.similarity_score(data1, data2, scoring)
 
@@ -276,7 +278,7 @@ class KmersimSubCommand(Subcommand):
         logger.info("Loading %d k-mer sets...", len(strains))
         kmer_data = [(kmertools.name_from_path(strain), loader(strain))
                      for strain in strains]
-        logging.info("Done.")
+        logger.info("Done.")
 
         to_compute_iter = None
         if sample:
@@ -340,15 +342,24 @@ class ClusterSubcommand(Subcommand):
         subparser.add_argument(
             '-i', '--similarity-scores', type=argparse.FileType('r'),
             default=sys.stdin, metavar='FILE',
-            help="The file with the similarity scores between sets (the "
+            help="The file with the similarity scores between kmersets (the "
                  "output of 'strainge compare --all-vs-all'). Defaults to"
                  " standard input."
         )
         subparser.add_argument(
+            '-p', '--priorities', type=argparse.FileType('r'), default=None,
+            metavar="FILE",
+            help="An optional TSV file where the first column represents the "
+                 "ID of a reference kmerset, and the second an integer "
+                 "indicating the priority for clustering. References with "
+                 "higher priority get precedence over references with lower "
+                 "priority in the same cluster."
+        )
+        subparser.add_argument(
             '-o', '--output', type=argparse.FileType('w'), default=sys.stdout,
             metavar='FILE',
-            help="The file where the list of sets to keep after clustering "
-                 "gets written. Defaults to standard output."
+            help="The file where the list of kmersets to keep after "
+                 "clustering gets written. Defaults to standard output."
         )
         subparser.add_argument(
             '--clusters-out', type=argparse.FileType('w'), default=None,
@@ -357,126 +368,43 @@ class ClusterSubcommand(Subcommand):
                  "their entries."
         )
         subparser.add_argument(
-            'kmersets', nargs='+', metavar='kmerset',
+            'kmersets', nargs='+', metavar='kmerset', type=Path,
             help="The list of HDF5 filenames of k-mer sets to cluster."
         )
 
-    def __call__(self, kmersets, similarity_scores, output, cutoff=0.95,
-                 clusters_out=None, **kwargs):
+    def __call__(self, kmersets, similarity_scores, output, priorities=None,
+                 cutoff=0.95, clusters_out=None, **kwargs):
+        label_to_path = {
+            kset.stem: kset for kset in kmersets
+        }
+        labels = list(label_to_path.keys())
 
-        clusters = {}
-        clustered_to = {}
-        directories = {kmertools.name_from_path(f): os.path.dirname(f) for f in
-                       kmersets}
-        keep = set(directories.keys())
+        logger.info("Reading pairwise similarities...")
+        similarities = cluster.read_similarities(similarity_scores)
+        logger.info("Clustering genomes...")
+        clusters = cluster.cluster_genomes(similarities, labels, cutoff)
 
-        num_clusters = 0
-        logger.info("Start reading similarity scores...")
-        for lineno, line in enumerate(similarity_scores):
-            parts = line.strip().split()
-            if len(parts) != 3:
-                logger.warning("Line %d - invalid format: contains %d "
-                               "elements instead of the expected 3 elements, "
-                               "skipping.",
-                               lineno, len(parts))
-                continue
+        ref_priorities = {}
+        if priorities:
+            reader = csv.reader(priorities, delimiter='\t')
+            ref_priorities = {
+                row[0].strip(): int(row[1].strip()) for row in reader if
+                len(row) == 2
+            }
 
-            similarity = float(parts[2])
-            if similarity < cutoff:
-                # We expect the list of similarity scores to be ordered,
-                # when the similarity drops below the cutoff, we can stop
-                logger.info("Similarity score dropped below cutoff (%.5f<%g)",
-                            similarity, cutoff)
-                break
-
-            set1 = parts[0]
-            set2 = parts[1]
-
-            logger.info("%s is %.2f%% similar to %s", set1, similarity*100,
-                        set2)
-
-            if set1 in clustered_to and set2 not in clustered_to:
-                cluster_id = clustered_to[set1]
-                clusters[cluster_id].add(set2)
-                clustered_to[set2] = cluster_id
-
-                logger.debug("Added %s to existing cluster %d", set2,
-                             cluster_id)
-            elif set1 not in clustered_to and set2 in clustered_to:
-                cluster_id = clustered_to[set2]
-                clusters[cluster_id].add(set1)
-                clustered_to[set1] = cluster_id
-
-                logger.debug("Added %s to existing cluster %d", set1,
-                             cluster_id)
-            elif set1 in clustered_to and set2 in clustered_to:
-                cid1 = clustered_to[set1]
-                cid2 = clustered_to[set2]
-
-                if cid1 != cid2:
-                    # Merge the smaller cluster to the larger cluster
-                    if len(clusters[cid1]) >= len(clusters[cid2]):
-                        clusters[cid1].update(clusters[cid2])
-                        for s in clusters[cid2]:
-                            clustered_to[s] = cid1
-
-                        del clusters[cid2]
-                        logger.debug("Merged cluster %d into %d", cid2, cid1)
-                    else:
-                        clusters[cid2].update(clusters[cid1])
-                        for s in clusters[cid1]:
-                            clustered_to[s] = cid2
-
-                        del clusters[cid1]
-                        logger.debug("Merged cluster %d into %d", cid1, cid2)
-            else:
-                # Create new cluster
-                clusters[num_clusters] = {set1, set2}
-                clustered_to[set1] = num_clusters
-                clustered_to[set2] = num_clusters
-                logger.debug("Created new cluster with ID %d", num_clusters)
-
-                num_clusters += 1
-
-        logger.info("Clustering done.")
-
-        writer = None
-        if clusters_out:
-            writer = csv.writer(clusters_out, delimiter="\t",
-                                lineterminator="\n")
-
-        logger.info("Figure out which sets to keep (by sorting the entries by "
-                    "number of scaffolds in the FASTA)...")
-
-        def _kmerset_num_scaffolds(kmerset):
-            filename = os.path.join(directories[kmerset], kmerset) + ".hdf5"
-            with h5py.File(filename, 'r') as h5:
-                if 'nSeqs' not in h5.attrs:
-                    raise KeyError(
-                        f"k-mer set '{filename}' does not contain number of "
-                        "sequences in its HDF5 file. Key 'nSeqs' missing in "
-                        "HDF5 attributes."
-                    )
-
-                return int(h5.attrs['nSeqs'])
-
-        for cluster in sorted(clusters):
-            sets = clusters[cluster]
-            sorted_sets = sorted(sets, key=_kmerset_num_scaffolds)
+        logger.info("Picking a representive genome per cluster...")
+        count = 0
+        for ix, sorted_entries in cluster.pick_representative(
+                clusters, similarities, ref_priorities):
+            print(label_to_path[sorted_entries[0]], file=output)
 
             if clusters_out:
-                items = [cluster]
-                items.extend(sorted_sets)
-                writer.writerow(items)
+                print(*sorted_entries, sep='\t', file=clusters_out)
 
-            sorted_sets.pop(0)
-            keep.difference_update(sorted_sets)
+            count += 1
 
-        logger.info("Done. After clustering %d/%d genomes remain. Writing "
-                    "output...", len(keep), len(kmersets))
-        for kmerset in keep:
-            print(os.path.join(directories[kmerset], kmerset) + ".hdf5",
-                  file=output)
+        logger.info("Done. After clustering %d/%d genomes remain.",
+                    count, len(kmersets))
 
 
 class CreateDBSubcommand(Subcommand):

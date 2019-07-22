@@ -101,7 +101,12 @@ def open_seq_file(file_name):
 
 def load_hdf5(file_path, thing):
     with h5py.File(file_path, 'r') as h5:
-        if h5.attrs['type'].decode() != "KmerSet":
+        hdf5_type = h5.attrs['type']
+
+        if isinstance(hdf5_type, bytes):
+            hdf5_type = hdf5_type.decode()
+
+        if hdf5_type != "KmerSet":
             raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
                              " '{}'".format(h5.attrs['type']))
 

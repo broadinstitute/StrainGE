@@ -32,6 +32,7 @@ import os
 import sys
 import urllib.request, urllib.parse, urllib.error
 import csv
+import time
 from subprocess import call
 
 def load_assemblies():
@@ -57,11 +58,12 @@ def assembly_filter(ass, keywords):
 def rsync_assembly(ass):
     uri = ass['ftp_path'].replace("ftp:", "rsync:")
     dirname = assembly_dir(ass)
-    if os.path.exists(dirname):
+    if os.path.exists(os.path.join("ncbi", dirname)):
         return
     command = ["rsync", "-av", uri, "ncbi"]
     print("Running", ' '.join(command))
     call(command)
+    time.sleep(1)
     return dirname
 
 def link_assembly(ass):

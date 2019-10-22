@@ -344,25 +344,34 @@ def vcf_records_for_scaffold(scaffold, verboseness=0):
             if allele & scaffold.strong[pos]:
                 strong.add(allele)
 
-        ref_plus_alts = [scaffold.refmask[pos]] + alts_bit
-        allele_counts = [scaffold.allele_count(pos, allele)
-                         for allele in ref_plus_alts]
-        allele_quals = [scaffold.allele_qual(pos, allele)
-                        for allele in ref_plus_alts]
+        ref = scaffold.refmask[pos]
+        ref_plus_alts = [ref] + alts_bit
+
+        allele_counts = [
+            scaffold.allele_count(pos, allele) if allele else 0
+            for allele in ref_plus_alts
+        ]
+        allele_quals = [
+            scaffold.allele_qual(pos, allele) if allele else 0
+            for allele in ref_plus_alts
+        ]
+
+        ref_qual = scaffold.ref_qual(pos) if ref else 0
+        ref_fraction = round(scaffold.ref_fraction(pos), 3) if ref else 0.0
 
         yield VcfRecord(
             CHROM=scaffold.name,
             POS=pos+1,  # 1-based coordinate system
             ID=".",
-            REF=str(Allele(scaffold.refmask[pos]))[:1],
+            REF=str(Allele(ref))[:1],
             ALT=alts,
             QUAL=".",
             FILTER="PASS",
             INFO={
                 'DP': scaffold.depth(pos),
                 'MQ': int(round(scaffold.mean_mq(pos))),
-                'RQ': scaffold.ref_qual(pos),
-                'RF': round(scaffold.ref_fraction(pos), 3),
+                'RQ': ref_qual,
+                'RF': ref_fraction,
                 'AD': allele_counts,
                 'QS': allele_quals,
                 'ST': [int(b in strong) for b in ref_plus_alts]

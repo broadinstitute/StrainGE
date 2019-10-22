@@ -52,9 +52,15 @@ def maxsize(kmers1, kmers2):
     return intersection, max(kmers1.size, kmers2.size)
 
 
+def subset(kmers1, kmers2):
+    """Calculate the fraction of k-mers in k-merset 1 that are also in k-merset
+    2, useful to check whether k-merset 1 is a subset of another."""
+    intersection = kmerizer.count_common(kmers1, kmers2)
+    return intersection, kmers1.size
+
+
 def reference(kmers1, kmers2):
-    """Second k-mer set is seen as reference, useful for comparing reads to
-    assemled references."""
+    """Assume k-merset 2 is the k-merset of a reference genome."""
     intersection = kmerizer.count_common(kmers1, kmers2)
     return intersection, kmers2.size
 
@@ -69,5 +75,5 @@ def similarity_score(kmers1, kmers2, scoring="jaccard"):
     return SCORING_METHODS[scoring](kmers1, kmers2)
 
 
-SCORING_FUNCS = (jaccard, minsize, meansize, maxsize, reference)
+SCORING_FUNCS = (jaccard, minsize, meansize, maxsize, subset, reference)
 SCORING_METHODS = {func.__name__: func for func in SCORING_FUNCS}

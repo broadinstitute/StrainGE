@@ -34,34 +34,6 @@ from collections import defaultdict
 logger = logging.getLogger(__name__)
 
 
-def read_similarities(f, threshold=None):
-    similarities = {}
-
-    # Assumes similarities file is sorted
-    for lineno, line in enumerate(f):
-        if line.startswith('#') or not line.strip():
-            continue
-
-        parts = [
-            p.strip() for p in line.split()
-        ]
-
-        if len(parts) != 3:
-            raise ValueError(f"Line {lineno} has invalid format. Each line "
-                             f"requires three fields.")
-
-        similarity = float(parts[2])
-
-        if threshold and similarity < threshold:
-            logger.info("Line %d: Similarity lower than threshold %g",
-                        lineno, threshold)
-            break
-
-        similarities[tuple(parts[:2])] = float(parts[2])
-
-    return similarities
-
-
 def cluster_genomes(similarities, labels, threshold):
     label_to_cluster = {
         label: i for i, label in enumerate(labels)
@@ -73,7 +45,9 @@ def cluster_genomes(similarities, labels, threshold):
     }
 
     # Assumes `similarities` is sorted
-    for (label1, label2), similarity in similarities.items():
+    for label1, label2 in similarities.index:
+        similarity = similarities.loc[(label1, label2), 'jaccard']
+
         logger.info("Checking %s vs %s, similarity: %g", label1, label2,
                     similarity)
 
@@ -81,6 +55,10 @@ def cluster_genomes(similarities, labels, threshold):
             logger.info("Similarity dropped below threshold %g, stopping",
                         threshold)
             break
+
+        if label1 not in label_to_cluster or label2 not in label_to_cluster:
+            # Excluded by subset step
+            continue
 
         cluster1 = label_to_cluster[label1]
         cluster2 = label_to_cluster[label2]
@@ -111,10 +89,10 @@ def pick_representative(clusters, similarities, priorities=None):
             sim_per_label[entries[0]].append(1.0)
         else:
             for label1, label2 in itertools.combinations(entries, 2):
-                if (label1, label2) in similarities:
-                    similarity = similarities[label1, label2]
+                if (label1, label2) in similarities.index:
+                    similarity = similarities.loc[(label1, label2), 'jaccard']
                 else:
-                    similarity = similarities[label2, label1]
+                    similarity = similarities.loc[(label2, label1), 'jaccard']
 
                 sim_per_label[label1].append(similarity)
                 sim_per_label[label2].append(similarity)

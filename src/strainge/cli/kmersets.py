@@ -37,6 +37,7 @@ import multiprocessing
 from pathlib import Path
 
 import h5py
+import pandas
 
 from strainge.cli.registry import Subcommand
 from strainge import kmertools, utils, comparison
@@ -229,14 +230,10 @@ class KmersimSubCommand(Subcommand):
         )
         subparser.add_argument(
             '-S', '--scoring', choices=list(comparison.SCORING_METHODS.keys()),
-            default="jaccard", required=False,
-            help="The scoring metric to use (default: jaccard)."
-        )
-        subparser.add_argument(
-            '-F', '--fraction', action="store_true", default=False,
-            required=False,
-            help="Output numerator and denominator separately instead of "
-                 "evaluating the division."
+            default=[], required=False, action="append",
+            help="The scoring metric to use (default: jaccard). Can be used "
+                 "multiple times to include multiple scoring metrics. Choices:"
+                 " %(choices)s."
         )
         subparser.add_argument(
             '-t', '--threads', type=int, default=1, required=False,
@@ -262,15 +259,19 @@ class KmersimSubCommand(Subcommand):
 
             logger.info("Comparing %s vs %s...", name1, name2)
 
-            similarity = comparison.similarity_score(data1, data2, scoring)
+            scores = [comparison.similarity_score(data1, data2, metric)
+                      for metric in scoring]
 
-            return name1, name2, similarity
+            return [name1, name2, *scores]
         except KeyboardInterrupt:
             pass
 
     def __call__(self, strains, output, all_vs_all=False, sample=None,
-                 fingerprint=False, scoring="jaccard", threads=1,
+                 fingerprint=False, scoring=None, threads=1,
                  fraction=False, **kwargs):
+
+        if not scoring:
+            scoring = ["jaccard"]
 
         # First, load all K-mer sets
         loader = (kmertools.load_fingerprint if fingerprint
@@ -313,18 +314,18 @@ class KmersimSubCommand(Subcommand):
         logger.info("Done.")
 
         # Sort results
-        scores = sorted(scores, key=lambda e: e[2][0] / e[2][1], reverse=True)
+        # We use the first given scoring metric for sorting
+        scores = sorted(scores, key=lambda e: e[2][0] / e[2][1],
+                        reverse=True)
 
         # Write results
         logger.info("Writing results...")
         writer = csv.writer(output, delimiter="\t", lineterminator="\n")
-        for name1, name2, (numerator, denominator) in scores:
-            if fraction:
-                writer.writerow((name1, name2, numerator, denominator,
-                                 "{:.5f}".format(numerator / denominator)))
-            else:
-                writer.writerow((name1, name2, "{:.5f}".format(
-                    numerator / denominator)))
+        writer.writerow(["kmerset1", "kmerset2", *scoring])
+        for name1, name2, *scores in scores:
+            scores_fmt = ["{:.5f}".format(num / denum)
+                          for num, denum in scores]
+            writer.writerow([name1, name2, *scores_fmt])
 
         logger.info("Done.")
 
@@ -345,6 +346,17 @@ class ClusterSubcommand(Subcommand):
             help="The file with the similarity scores between kmersets (the "
                  "output of 'strainge compare --all-vs-all'). Defaults to"
                  " standard input."
+        )
+        subparser.add_argument(
+            '-d', '--discard-contained', action="store_true",
+            help="Discard k-mersets that are a subset of another k-merset. "
+                 "Requires 'subset' scoring metric in the similarity scores "
+                 "TSV files."
+        )
+        subparser.add_argument(
+            '-C', '--contained-cutoff', type=float, default=0.99,
+            help="Minimum fraction of kmers to be present in another genome "
+                 "to discard it."
         )
         subparser.add_argument(
             '-p', '--priorities', type=argparse.FileType('r'), default=None,
@@ -372,15 +384,38 @@ class ClusterSubcommand(Subcommand):
             help="The list of HDF5 filenames of k-mer sets to cluster."
         )
 
-    def __call__(self, kmersets, similarity_scores, output, priorities=None,
-                 cutoff=0.95, clusters_out=None, **kwargs):
+    def __call__(self, kmersets, similarity_scores, output,
+                 discard_contained=False, priorities=None, cutoff=0.95,
+                 contained_cutoff=0.99, clusters_out=None, **kwargs):
         label_to_path = {
             kset.stem: kset for kset in kmersets
         }
         labels = list(label_to_path.keys())
 
         logger.info("Reading pairwise similarities...")
-        similarities = cluster.read_similarities(similarity_scores)
+        similarities = pandas.read_csv(similarity_scores, sep='\t',
+                                       comment='#')
+
+        exclude = set()
+        if discard_contained and 'subset' not in similarities.columns:
+            logger.warning("No 'subset' score in similarities file. Can't "
+                           "discard k-mersets that are subsets of another. "
+                           "Run `strainge kmersim` with both '--scoring "
+                           "jaccard' and '--scoring subset'")
+        elif discard_contained:
+            subset_matrix = similarities.pivot('kmerset1', 'kmerset2',
+                                               'subset')
+
+            subset_max = subset_matrix.max(axis=1)
+            exclude = subset_max[subset_max >= contained_cutoff].index
+            logger.info("Excluding %d genomes because they're for at least "
+                        "%d%% contained in another genome.", len(exclude),
+                        contained_cutoff * 100)
+
+            labels = [l for l in labels if l not in exclude]
+
+        similarities = similarities.set_index(['kmerset1', 'kmerset2'])
+
         logger.info("Clustering genomes...")
         clusters = cluster.cluster_genomes(similarities, labels, cutoff)
 

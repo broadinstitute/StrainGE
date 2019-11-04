@@ -58,6 +58,7 @@ VCF_TEMPLATE = """##fileformat=VCFv4.0
 ##fileDate={date}
 ##source=StrainGR
 ##reference={ref}
+{contig_lengths}
 ##INFO=<ID=DP,Number=1,Type=Integer,Description="Coverage depth">
 ##INFO=<ID=RQ,Number=1,Type=Integer,Description="Sum of reference base \
 qualities">
@@ -329,7 +330,9 @@ def vcf_records_for_scaffold(scaffold, verboseness=0):
 
         # Check for alternative alleles (i.e. not the reference base)
         for allele in Allele:
-            if (allele & scaffold.weak[pos] and
+            called_alleles = (scaffold.strong[pos] if verboseness == 0 else
+                              scaffold.weak[pos])
+            if (allele & called_alleles and
                     not allele & scaffold.refmask[pos]):
                 alts_bit.append(allele)
 
@@ -400,9 +403,16 @@ def write_vcf(call_data, output_file, verboseness=0):
            else but the reference is observed.
     """
 
+    contig_lengths = []
+    for scaffold in call_data.scaffolds_data.values():
+        contig_lengths.append(
+            f"##contig=<ID={scaffold.name},length={scaffold.length}>"
+        )
+
     vcf_template = vcf.Reader(io.StringIO(VCF_TEMPLATE.format(
         date=datetime.now(),
-        ref=call_data.reference_fasta
+        ref=call_data.reference_fasta,
+        contig_lengths="\n".join(contig_lengths)
     )))
 
     vcf_writer = vcf.Writer(output_file, vcf_template)

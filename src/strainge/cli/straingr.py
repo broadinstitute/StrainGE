@@ -31,18 +31,26 @@ import csv
 import sys
 import logging
 import argparse
+import functools
 import itertools
+import multiprocessing
 from pathlib import Path
 
+import numpy
 import pysam
+from Bio import SeqIO
+from Bio import Phylo
+from Bio.Phylo.TreeConstruction import _DistanceMatrix, DistanceTreeConstructor
 
 from strainge.variant_caller import VariantCaller, Reference
-from strainge.sample_compare import SampleComparison
+from strainge.sample_compare import (SampleComparison, kimura_distance,
+                                     count_ts_tv)
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
                                   generate_call_summary_tsv, array_to_wig)
 from strainge.io.comparisons import (generate_compare_summary_tsv,
                                      generate_compare_details_tsv)
+from strainge.io.utils import open_compressed
 from strainge.cli.registry import Subcommand
 
 logger = logging.getLogger()
@@ -464,3 +472,188 @@ class CompareSubCommand(Subcommand):
                                              call_data2, verbose_details)
 
             logger.info("Done.")
+
+
+class TreeSubcommand(Subcommand):
+    """
+    Build an approximate phylogenetic tree based on Kimura's two parameter
+    model, for all strains close to a selected reference genome.
+    """
+
+    def register_arguments(self, subparser: argparse.ArgumentParser):
+        subparser.add_argument(
+            '-r', '--reference', type=Path,
+            help="The reference genome to base the tree on."
+        )
+
+        subparser.add_argument(
+            '-x', '--min-coverage', type=float, required=False, default=0.5,
+            help="Minimum coverage of the reference genome to consider a "
+                 "sample. Default %(default)sx."
+        )
+
+        subparser.add_argument(
+            '-e', '--exclude-ref', action="store_false",
+            help="Do not include the reference genome as leaf in the tree."
+        )
+
+        subparser.add_argument(
+            '-p', '--processes', type=int, default=2,
+            help="Number of parallel processes to start. Default %(default)s."
+        )
+
+        subparser.add_argument(
+            '-o', '--output', type=argparse.FileType('w'), default=sys.stdout,
+            help="Output filename. Defaults to stdout."
+        )
+
+        subparser.add_argument(
+            'samples', nargs='+', type=Path,
+            help="StrainGR call data HDF5 files."
+        )
+
+    def _do_ref_compare(self, sample, ref_contigs, min_coverage):
+        try:
+            ref, sample = sample
+            logger.info("Loading %s", sample)
+            call_data = call_data_from_hdf5(sample)
+
+            total_length = sum(call_data.scaffolds_data[s].length for s in
+                               ref_contigs if s in call_data.scaffolds_data)
+
+            if total_length == 0:
+                # Strain not present in this sample
+                logger.info("Sample does not contain %s", ref)
+                return ref, sample, -1
+
+            coverage = sum(
+                call_data.scaffolds_data[s].mean_coverage *
+                call_data.scaffolds_data[s].length
+                for s in ref_contigs
+            ) / total_length
+
+            if coverage < min_coverage:
+                logger.info("Skipping %s, coverage %.2f too low.", sample,
+                            coverage)
+                return ref, sample, -1
+
+            logger.info("Comparing %s to %s (mean coverage: %.2f)",
+                        sample, ref, coverage)
+
+            total_singles = 0
+            total_ts = 0
+            total_tv = 0
+            for scaffold in call_data.scaffolds_data.values():
+                if scaffold.name not in ref_contigs:
+                    continue
+
+                singles = (scaffold.strong & (scaffold.strong - 1)) == 0
+                singles &= scaffold.strong > 0
+                total_singles += numpy.count_nonzero(singles)
+
+                snps = scaffold.strong & ~scaffold.refmask
+                single_snps = (singles & snps).astype(bool)
+                logger.info("Scaffold %s has %d single allele snps.",
+                            scaffold.name, numpy.count_nonzero(single_snps))
+
+                transitions, transversions = count_ts_tv(
+                    scaffold.refmask[single_snps],
+                    scaffold.strong[single_snps]
+                )
+
+                total_ts += transitions
+                total_tv += transversions
+
+            ts_pct = total_ts / total_singles
+            tv_pct = total_tv / total_singles
+
+            logger.info("Singles: %d, ts: %d (%.2f%%), tv: %d (%.2f%%)",
+                        total_singles, total_ts, ts_pct, total_tv, tv_pct)
+
+            return ref, sample, kimura_distance(ts_pct, tv_pct)
+        except KeyboardInterrupt:
+            pass
+
+    def _do_sample_compare(self, samples, ref_contigs, min_coverage):
+        try:
+            sample1, sample2 = samples
+            logger.info("Comparing %s to %s", sample1, sample2)
+
+            call_data1 = call_data_from_hdf5(sample1)
+            call_data2 = call_data_from_hdf5(sample2)
+
+            comparison = SampleComparison(call_data1, call_data2)
+            metrics = {k: v for k, v in comparison.metrics.items()
+                       if k in ref_contigs}
+            total_single = sum(m['single'] for m in metrics.values())
+
+            if total_single == 0:
+                return sample1, sample2, 0.0
+
+            ts_pct = sum(m['transitionsPct'] * m['single'] / 100
+                         for k, m in metrics.items())
+            ts_pct /= total_single
+
+            tv_pct = sum(m['transversionsPct'] * m['single'] / 100
+                         for m in metrics.values())
+            tv_pct /= total_single
+
+            return sample1, sample2, kimura_distance(ts_pct, tv_pct)
+        except KeyboardInterrupt:
+            pass
+
+    def __call__(self, reference, samples, min_coverage, exclude_ref,
+                 processes, output, *args, **kwargs):
+        # Check which contigs belong to this reference genome
+        logger.info("Building tree for reference %s", reference.stem)
+        logger.info("Loading reference scaffold IDs...")
+        with open_compressed(reference) as f:
+            ref_contigs = {r.id for r in SeqIO.parse(f, "fasta")}
+
+        logger.info("Inspecting scaffolds %s", ref_contigs)
+
+        with multiprocessing.Pool(processes) as p:
+            logger.info("Comparing samples to reference...")
+            ref_scores = list(p.imap_unordered(
+                functools.partial(self._do_ref_compare,
+                                  ref_contigs=ref_contigs,
+                                  min_coverage=min_coverage),
+                ((reference.stem, sample) for sample in samples),
+                chunksize=2**4
+            ))
+
+            exclude_samples = set(s[1] for s in ref_scores if s[2] == -1)
+            for sample in exclude_samples:
+                logger.info("Excluding sample %s because the reference has "
+                            "to low coverage.", sample)
+
+            samples = [s for s in samples if s not in exclude_samples]
+            names = [reference.stem] + [s.stem for s in samples]
+
+            dm = _DistanceMatrix(names=names)
+            for _, sample, score in ref_scores:
+                if sample in exclude_samples:
+                    continue
+
+                dm[reference.stem, sample.stem] = score
+
+            logger.info("Comparing samples to eachother...")
+            pair_iter = itertools.combinations(samples, 2)
+            sample_scores = list(p.imap_unordered(
+                functools.partial(self._do_sample_compare,
+                                  ref_contigs=ref_contigs,
+                                  min_coverage=min_coverage),
+                pair_iter,
+                chunksize=2**4
+            ))
+
+            for sample1, sample2, score in sample_scores:
+                dm[sample1.stem, sample2.stem] = score
+
+        logger.info("Building tree using neighbour joining...")
+        constructor = DistanceTreeConstructor()
+        tree = constructor.nj(dm)
+        tree.root_at_midpoint()
+
+        logger.info("Writing tree...")
+        Phylo.write(tree, output, "newick")

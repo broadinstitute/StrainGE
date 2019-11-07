@@ -37,11 +37,14 @@ COMPARE_TSV_FIELDS = (
     ("singlePct", "%.2f"), ("singleAgree", "%d"), ("singleAgreePct", "%.2f"),
     ("variants", "%d"), ("variantPct", "%.2f"), ("commonVariant", "%d"),
     ("commonVariantPct", "%.2f"), ("variantAgree", "%d"),
-    ("variantAgreePct", "%.2f"), ("AnotB", "%d"), ("AnotBpct", "%.2f"),
+    ("variantAgreePct", "%.2f"),
+    ("transitions", "%d"), ("transitionsPct", "%.2f"),
+    ("transversions", "%d"), ("transversionsPct", "%.2f"),
+    ("AnotB", "%d"), ("AnotBpct", "%.2f"),
     ("AnotBweak", "%d"), ("AnotBweakPct", "%.2f"), ("BnotA", "%d"),
     ("BnotApct", "%.2f"), ("BnotAweak", "%d"), ("BnotAweakPct", "%.2f"),
     ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.2f"),
-    ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.2f")
+    ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.2f"),
 )
 
 

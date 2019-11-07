@@ -28,14 +28,28 @@
 #
 
 import csv
-import json
+import bz2
+import gzip
 from typing import List, Iterable  # noqa
 from pathlib import Path
-from collections import defaultdict
+from contextlib import contextmanager
 
-from Bio import SeqIO
 
-from strainge.kmertools import open_seq_file
+@contextmanager
+def open_compressed(filename):
+    if not isinstance(filename, Path):
+        filename = Path(filename)
+
+    if filename.suffix == ".gz":
+        f = gzip.open(filename, "rt")
+    elif filename.suffix == ".bz2":
+        f = bz2.open(filename, "rt")
+    else:
+        f = open(filename)
+
+    yield f
+
+    f.close()
 
 
 def parse_straingst(result_file, return_sample_stats=False):
@@ -64,29 +78,3 @@ def parse_straingst(result_file, return_sample_stats=False):
 
     # Return each strain found with its statistics
     yield from csv.DictReader(result_file, delimiter='\t')
-
-
-def ref_concat_with_metadata(refs, concat_out, metadata_out=None):
-    """Concatenate the given list of references, and keep track which contigs
-    belong to which reference. This will be written to `metadata_out`.
-
-    Parameters
-    ----------
-    refs : List[str]
-    concat_out : file
-    metadata_out : file
-    """
-
-    contigs = defaultdict(list)
-    to_write = []
-    for ref in refs:
-        ref_path = Path(ref)
-
-        for scaffold in open_seq_file(ref):
-            contigs[ref_path.stem].append(scaffold.name)
-            to_write.append(scaffold)
-
-    SeqIO.write(to_write, concat_out, "fasta")
-
-    if metadata_out:
-        json.dump(contigs, metadata_out)

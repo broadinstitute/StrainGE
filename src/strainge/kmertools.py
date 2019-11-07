@@ -28,8 +28,6 @@
 #
 
 import os
-import bz2
-import gzip
 import logging
 
 import h5py
@@ -39,6 +37,7 @@ from Bio import SeqIO
 import matplotlib.pyplot as plt
 
 from strainge import kmerizer
+from strainge.io.utils import open_compressed
 
 logger = logging.getLogger(__name__)
 
@@ -83,20 +82,15 @@ def open_seq_file(file_name):
                 if not read.is_qcfail:
                     yield read
 
-        return bam_sequences()
-
-    if "bz2" in components:
-        file = bz2.open(file_name, 'rt')
-    elif "gz" in components:
-        file = gzip.open(file_name, 'rt')
+        yield from bam_sequences()
     else:
-        file = open(file_name, 'r')
+        with open_compressed(file_name) as f:
+            if "fastq" in components or "fq" in components:
+                file_type = "fastq"
+            else:
+                file_type = "fasta"
 
-    if "fastq" in components or "fq" in components:
-        file_type = "fastq"
-    else:
-        file_type = "fasta"
-    return SeqIO.parse(file, file_type)
+            yield from SeqIO.parse(f, file_type)
 
 
 def load_hdf5(file_path, thing):

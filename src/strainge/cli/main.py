@@ -37,7 +37,7 @@ from strainge.cli.kmersets import (KmerizeSubcommand, KmersimSubCommand,
                                    PlotSubcommand, StatsSubcommand)
 from strainge.cli.straingst import StrainGSTSubCommand
 from strainge.cli.straingr import (CallSubcommand, ViewSubcommand,
-                                   CompareSubCommand)
+                                   CompareSubCommand, TreeSubcommand)
 
 logger = logging.getLogger()
 
@@ -110,6 +110,7 @@ strainge_cli.register_subcommand('search', subcommand=StrainGSTSubCommand())
 strainge_cli.register_subcommand('call', subcommand=CallSubcommand())
 strainge_cli.register_subcommand('view', subcommand=ViewSubcommand())
 strainge_cli.register_subcommand('compare', subcommand=CompareSubCommand())
+strainge_cli.register_subcommand('tree', subcommand=TreeSubcommand())
 
 strainge_cli.register_subcommand('stats', subcommand=StatsSubcommand())
 strainge_cli.register_subcommand('plot', subcommand=PlotSubcommand())

@@ -53,6 +53,10 @@ class StrainGECLI(SubcommandRegistry):
         desc = strainge.__doc__
         desc += "\n\nVersion: {}".format(strainge.__version__)
 
+        if deprecated:
+            desc += ("\n\nDEPRECATED: please use `straingst` or `straingr` "
+                     "instead.")
+
         super().__init__(description=desc, version=strainge.__version__,
                          formatter_class=argparse.RawDescriptionHelpFormatter)
 

@@ -61,34 +61,34 @@ A typical workflow using StrainGE is as follows:
 3. Run StrainGR to call SNPs and other variants, and to compare strains across
    samples.
 
-Each step is divided into multiple subtasks, which can be ran using the
-`strainge` command line program. The `strainge` program consists of multiple 
-subcommands:
+StrainGE is divided in two command line programs, `straingst` and `straingr`.
+An overview
 
 **Database creation**
 
-* `strainge kmerize`
-* `strainge kmersim`
-* `strainge cluster`
-* `strainge createdb`
+* `straingst kmerize`
+* `straingst kmersim`
+* `straingst cluster`
+* `straingst createdb`
 
 **StrainGST: Strain Genome Search Tool**
 
-* `strainge kmerize`
-* `strainge search`
+* `straingst kmerize`
+* `straingst run`
+
+**K-mer set utilities**
+
+* `straingst stats`
+* `straingst plot`
 
 **StrainGR: Strain Genome Recovery**
 
-* `strainge call`
-* `strainge compare`
-* `strainge dist`
-* `strainge tree`
+* `straingr call`
+* `straingr compare`
+* `straingr dist`
+* `straingr tree`
+* `straingr view`
 
-**Utilities**
-
-* `strainge view`
-* `strainge stats`
-* `strainge plot`
 
 This tutorial will explain how to run each step and how everything is 
 connected. A graphical overview of the pipeline can be seen below.
@@ -187,7 +187,7 @@ It is also possible to give the list of k-mer sets to include in the database
 as positional arguments, like in the following example:
 
 ```bash
-strainge createdb -o pan-genome-db.hdf5 ref1.hdf5 ref2.hdf5 ...
+straingst createdb -o pan-genome-db.hdf5 ref1.hdf5 ref2.hdf5 ...
 ```
 
 Combining the two methods described above works too.
@@ -223,7 +223,7 @@ straingst kmerize -k 23 -o patient1.hdf5 \
 
 #### 2. Run StrainGST
 
-We can now run `strainge search` with our database HDF5 and our sample HDF5:
+We can now run `straingst run` with our database HDF5 and our sample HDF5:
 
 ```bash
 straingst run -o results.tsv pan-genome-db.hdf5 patient1.hdf5

@@ -32,12 +32,12 @@ import logging
 
 import h5py
 import pysam
+import skbio
 import numpy as np
-from Bio import SeqIO
 import matplotlib.pyplot as plt
 
 from strainge import kmerizer
-from strainge.io.utils import open_compressed
+from strainge.io.utils import open_compressed, read_fastq
 
 logger = logging.getLogger(__name__)
 
@@ -58,39 +58,60 @@ def kmer_string(k, kmer):
     return seq
 
 
+def iter_sequences_bam(bamfile):
+    """Iterate over sequences in a BAM file. Only outputs the sequence, useful
+    for kmerizing."""
+
+    bam = pysam.AlignmentFile(bamfile, check_header=False, check_sq=False)
+
+    seq_iter = iter(bam.fetch(until_eof=True))
+    seq_iter = filter(lambda r: not r.is_qcfail, seq_iter)
+
+    yield from (seq.seq.encode('utf-8') for seq in seq_iter)
+
+    bam.close()
+
+
+def iter_sequences_fasta(f):
+    """Use scikit-bio to iterate over FASTA sequences."""
+
+    yield from (str(seq) for seq in skbio.io.read(f, "fasta"))
+
+
+def iter_sequences_fastq(f):
+    """Use Heng Li's fast FASTQ reader to iterate over reads"""
+
+    yield from (r[1] for r in read_fastq(f))
+
+
 def open_seq_file(file_name):
     """
-    Open a sequence file with SeqIO; can be fasta or fastq with optional gz or
-    bz2 compression.
+    Iterate over sequences present in either a BAM file, FASTA file, or FASTQ
+    file.
 
     Assumes fasta unless ".fastq" or ".fq" in the file name.
 
-    :param fileName:
-    :return: SeqIO.parse object
-    :rtype: SeqIO.SeqRecord
+    Parameters
+    ----------
+    file_name : str
+        The file to open
+
+    Yields
+    ------
+    str
+        Each sequence present in the given file
     """
 
     components = file_name.split('.')
 
     if "bam" in components:
-        file = pysam.AlignmentFile(file_name, "rb", check_header=False,
-                                   check_sq=False)
-
-        # generator for sequences in bam
-        def bam_sequences():
-            for read in file.fetch(until_eof=True):
-                if not read.is_qcfail:
-                    yield read
-
-        yield from bam_sequences()
+        yield from iter_sequences_bam(file_name)
     else:
         with open_compressed(file_name) as f:
             if "fastq" in components or "fq" in components:
-                file_type = "fastq"
+                yield from iter_sequences_fastq(f)
             else:
-                file_type = "fasta"
-
-            yield from SeqIO.parse(f, file_type)
+                yield from iter_sequences_fasta(f)
 
 
 def load_hdf5(file_path, thing):
@@ -271,7 +292,7 @@ class KmerSet(object):
 
         for seq in seq_file:
             n_seqs += 1
-            seq_length = len(seq.seq)
+            seq_length = len(seq)
             n_bases += seq_length
             if n_kmers + seq_length > batch_size:
                 self.process_batch(batch, n_seqs, n_bases, n_kmers, verbose)
@@ -283,12 +304,11 @@ class KmerSet(object):
                 n_seqs = 0
                 n_bases = 0
                 n_kmers = 0
-            n_kmers += kmerizer.kmerize_into_array(self.k, str(seq.seq), batch,
-                                                   n_kmers)
+
+            n_kmers += kmerizer.kmerize_into_array(self.k, seq, batch, n_kmers)
             if limit and self.n_kmers + n_kmers >= limit:
                 break
 
-        seq_file.close()
         self.process_batch(batch, n_seqs, n_bases, n_kmers, verbose)
         if pruned:
             self.prune_singletons(verbose)
@@ -378,9 +398,9 @@ class KmerSet(object):
         return self
 
     def print_stats(self):
-        print('Seqs:', self.n_seqs, 'Bases:', self.n_bases, 'Kmers:',
-              self.n_kmers, 'Distinct:', self.kmers.size,
-              'Singletons:', self.singletons)
+        logger.info("Seqs %d, bases %d, kmers: %d, distinct: %d, singletons: "
+                    "%d", self.n_seqs, self.n_bases, self.n_kmers,
+                    self.kmers.size, self.singletons)
 
     def min_hash(self, frac=DEFAULT_FINGERPRINT_FRACTION):
         nkmers = int(round(self.kmers.size * frac))

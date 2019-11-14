@@ -38,9 +38,8 @@ from pathlib import Path
 
 import numpy
 import pysam
-from Bio import SeqIO
-from Bio import Phylo
-from Bio.Phylo.TreeConstruction import _DistanceMatrix, DistanceTreeConstructor
+import skbio
+from skbio.stats.distance import DistanceMatrix
 
 from strainge.variant_caller import VariantCaller, Reference
 from strainge.sample_compare import (SampleComparison, kimura_distance,
@@ -474,10 +473,10 @@ class CompareSubCommand(Subcommand):
             logger.info("Done.")
 
 
-class TreeSubcommand(Subcommand):
+class DistSubcommand(Subcommand):
     """
-    Build an approximate phylogenetic tree based on Kimura's two parameter
-    model, for all strains close to a selected reference genome.
+    Build a distance matrix using Kimura's two parameter model, for all strains
+    in samples close to a selected reference genome.
     """
 
     def register_arguments(self, subparser: argparse.ArgumentParser):
@@ -493,8 +492,9 @@ class TreeSubcommand(Subcommand):
         )
 
         subparser.add_argument(
-            '-e', '--exclude-ref', action="store_false",
-            help="Do not include the reference genome as leaf in the tree."
+            '-a', '--min-abundance', type=float, required=False, default=0.05,
+            help="Minimum abundance fraction of this strain in a sample. "
+                 "Default %(default)s."
         )
 
         subparser.add_argument(
@@ -509,10 +509,11 @@ class TreeSubcommand(Subcommand):
 
         subparser.add_argument(
             'samples', nargs='+', type=Path,
-            help="StrainGR call data HDF5 files."
+            help="StrainGR call data HDF5 file for each sample."
         )
 
-    def _do_ref_compare(self, sample, ref_contigs, min_coverage):
+    def _do_ref_compare(self, sample, ref_contigs, min_coverage,
+                        min_abundance):
         try:
             ref, sample = sample
             logger.info("Loading %s", sample)
@@ -526,6 +527,13 @@ class TreeSubcommand(Subcommand):
                 logger.info("Sample does not contain %s", ref)
                 return ref, sample, -1
 
+            # Sometimes our concatenated StrainGR reference does not include
+            # all scaffolds of the original reference, for example small
+            # plasmids are often filtered. Only analyse reference contigs that
+            # are actually present in our call data.
+            ref_contigs = {r for r in ref_contigs if r in
+                           call_data.scaffolds_data}
+
             coverage = sum(
                 call_data.scaffolds_data[s].mean_coverage *
                 call_data.scaffolds_data[s].length
@@ -537,8 +545,17 @@ class TreeSubcommand(Subcommand):
                             coverage)
                 return ref, sample, -1
 
-            logger.info("Comparing %s to %s (mean coverage: %.2f)",
-                        sample, ref, coverage)
+            abundance = (sum(call_data.scaffolds_data[s].read_count
+                             for s in ref_contigs)
+                         / call_data.uniquely_mapped_reads)
+
+            if abundance < min_abundance:
+                logger.info("Skipping %s, abundance %.2f too low.", sample,
+                            abundance)
+                return ref, sample, -1
+
+            logger.info("Comparing %s to %s (mean coverage: %.2f, abundance: "
+                        "%.2f)", sample, ref, coverage, abundance)
 
             total_singles = 0
             total_ts = 0
@@ -574,7 +591,7 @@ class TreeSubcommand(Subcommand):
         except KeyboardInterrupt:
             pass
 
-    def _do_sample_compare(self, samples, ref_contigs, min_coverage):
+    def _do_sample_compare(self, samples, ref_contigs):
         try:
             sample1, sample2 = samples
             logger.info("Comparing %s to %s", sample1, sample2)
@@ -602,13 +619,14 @@ class TreeSubcommand(Subcommand):
         except KeyboardInterrupt:
             pass
 
-    def __call__(self, reference, samples, min_coverage, exclude_ref,
+    def __call__(self, reference, samples, min_coverage, min_abundance,
                  processes, output, *args, **kwargs):
         # Check which contigs belong to this reference genome
         logger.info("Building tree for reference %s", reference.stem)
         logger.info("Loading reference scaffold IDs...")
         with open_compressed(reference) as f:
-            ref_contigs = {r.id for r in SeqIO.parse(f, "fasta")}
+            ref_contigs = {r.metadata['id']
+                           for r in skbio.io.read(f, 'fasta', verify=False)}
 
         logger.info("Inspecting scaffolds %s", ref_contigs)
 
@@ -617,7 +635,8 @@ class TreeSubcommand(Subcommand):
             ref_scores = list(p.imap_unordered(
                 functools.partial(self._do_ref_compare,
                                   ref_contigs=ref_contigs,
-                                  min_coverage=min_coverage),
+                                  min_coverage=min_coverage,
+                                  min_abundance=min_abundance),
                 ((reference.stem, sample) for sample in samples),
                 chunksize=2**4
             ))
@@ -625,35 +644,77 @@ class TreeSubcommand(Subcommand):
             exclude_samples = set(s[1] for s in ref_scores if s[2] == -1)
             for sample in exclude_samples:
                 logger.info("Excluding sample %s because the reference has "
-                            "to low coverage.", sample)
+                            "too low coverage or too low abundance.", sample)
 
             samples = [s for s in samples if s not in exclude_samples]
+            sample_ix = {s.stem: i+1 for i, s in enumerate(samples)}
+            sample_ix[reference.stem] = 0
             names = [reference.stem] + [s.stem for s in samples]
 
-            dm = _DistanceMatrix(names=names)
+            dm_array = numpy.zeros((len(names), len(names)))
+
             for _, sample, score in ref_scores:
                 if sample in exclude_samples:
                     continue
 
-                dm[reference.stem, sample.stem] = score
+                i = sample_ix[reference.stem]
+                j = sample_ix[sample.stem]
+
+                dm_array[i, j] = score
+                dm_array[j, i] = score
 
             logger.info("Comparing samples to eachother...")
             pair_iter = itertools.combinations(samples, 2)
             sample_scores = list(p.imap_unordered(
                 functools.partial(self._do_sample_compare,
-                                  ref_contigs=ref_contigs,
-                                  min_coverage=min_coverage),
+                                  ref_contigs=ref_contigs),
                 pair_iter,
                 chunksize=2**4
             ))
 
             for sample1, sample2, score in sample_scores:
-                dm[sample1.stem, sample2.stem] = score
+                i = sample_ix[sample1.stem]
+                j = sample_ix[sample2.stem]
 
-        logger.info("Building tree using neighbour joining...")
-        constructor = DistanceTreeConstructor()
-        tree = constructor.nj(dm)
-        tree.root_at_midpoint()
+                dm_array[i, j] = score
+                dm_array[j, i] = score
 
-        logger.info("Writing tree...")
-        Phylo.write(tree, output, "newick")
+        logger.info("Writing distance matrix...")
+        dm = DistanceMatrix(dm_array, names)
+        dm.write(output)
+
+        logger.info("Done.")
+
+
+class TreeSubcommand(Subcommand):
+    """
+    Build an approximate phylogenetic tree based on Kimura's two parameter
+    model, for all strains close to a selected reference genome.
+    """
+
+    def register_arguments(self, subparser: argparse.ArgumentParser):
+        subparser.add_argument(
+            'distance_matrix', type=argparse.FileType('r'),
+            help="The path to the distance matrix TSV, as created by `straingr"
+                 " dist`."
+        )
+
+        subparser.add_argument(
+            '-o', '--output', type=argparse.FileType('w'), default=sys.stdout,
+            help="Output filename. Defaults to stdout."
+        )
+
+    def __call__(self, distance_matrix, output, verbose, *args, **kwargs):
+        logger.info("Loading distance matrix...")
+        dm = DistanceMatrix.read(distance_matrix)
+
+        logger.info("Building tree...")
+        tree = skbio.tree.nj(dm)
+        tree = tree.root_at_midpoint()
+
+        if verbose > 0:
+            logger.info("Approximate tree using neighbour joining:\n%s",
+                        tree.ascii_art())
+
+        tree.write(output, format='newick')
+        logger.info("Done.")

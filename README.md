@@ -14,7 +14,7 @@ Dependencies
 * NumPy
 * SciPy
 * matplotlib
-* biopython
+* scikit-bio
 * pyvcf
 * pysam
 * h5py

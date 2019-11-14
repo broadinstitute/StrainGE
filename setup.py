@@ -134,7 +134,7 @@ setup(
         'h5py',
         'intervaltree',
         'matplotlib',
-        'biopython',
+        'scikit-bio>=0.5',
         'pysam',
         'pyvcf'
     ],

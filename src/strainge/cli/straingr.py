@@ -265,7 +265,7 @@ class CallSubcommand(Subcommand):
         caller = VariantCaller(min_qual, min_pileup_qual, min_qual_frac,
                                min_mapping_qual, min_gap, max_mismatches)
 
-        call_data = caller.process(reference, sample_bam.pileup())
+        call_data = caller.process(reference, sample_bam)
 
         # Output call datasets to HDF5
         logger.info("Writing data to HDF5 file %s...", hdf5_out)

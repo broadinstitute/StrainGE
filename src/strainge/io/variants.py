@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 TSV_FIELDS = (
     ("name", "%s"), ("length", "%d"), ("coverage", "%.3f"),
+    ("uReads", "%d"), ("abundance", "%.3f"),
     ("median", "%d"), ("callable", "%d"), ("callablePct", "%.3f"),
     ("confirmed", "%d"), ("confirmedPct", "%.3f"),
     ("snps", "%d"), ("snpPct", "%.3f"), ("pureSnps", "%d"),
@@ -137,12 +138,14 @@ def call_data_to_hdf5(call_data, output_file):
             scaffold_grp.attrs["mean_coverage"] = scaffold.mean_coverage
             scaffold_grp.attrs["median_coverage"] = scaffold.median_coverage
             scaffold_grp.attrs["coverage_cutoff"] = scaffold.coverage_cutoff
+            scaffold_grp.attrs["read_count"] = scaffold.read_count
 
         h5.attrs['type'] = "VariantCallData"
         h5.attrs['min_gap_size'] = call_data.min_gap_size
         h5.attrs['mean_coverage'] = call_data.mean_coverage
         h5.attrs['median_coverage'] = call_data.median_coverage
         h5.attrs['reference_fasta'] = call_data.reference_fasta
+        h5.attrs['uniquely_mapped_reads'] = call_data.uniquely_mapped_reads
 
 
 def call_data_from_hdf5(hdf5_file):
@@ -201,9 +204,24 @@ def call_data_from_hdf5(hdf5_file):
             scaffold.coverage_cutoff = hdf5[scaffold_name].attrs[
                 'coverage_cutoff']
 
+            if 'read_count' not in hdf5[scaffold_name].attrs:
+                logger.warning("This is an old StrainGR hdf5 file. Strain "
+                               "abundance information not available.")
+
+            scaffold.read_count = hdf5[scaffold_name].attrs.get(
+                'read_count', 0)
+
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']
         call_data.min_gap_size = hdf5.attrs['min_gap_size']
+
+        if 'uniquely_mapped_reads' not in hdf5.attrs:
+            logger.warning("This is an old StrainGR hdf5 file. Strain "
+                           "abundance information not available.")
+
+        # 1 as default to prevent division by zero error
+        call_data.uniquely_mapped_reads = hdf5.attrs.get(
+            'uniquely_mapped_reads', 1)
 
         if 'reference_fasta' in hdf5.attrs:
             call_data.reference_fasta = hdf5.attrs['reference_fasta']

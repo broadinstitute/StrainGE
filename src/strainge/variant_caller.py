@@ -220,6 +220,7 @@ class VariantCallData:
 
         self.mean_coverage = 0.0
         self.median_coverage = 0
+        self.uniquely_mapped_reads = 0
 
     def build_refmask(self, reference):
         for name, scaffold in reference.scaffolds.items():
@@ -229,6 +230,10 @@ class VariantCallData:
                 self.scaffolds_data[name].refmask[i] = Allele.from_str(base)
 
         self.reference_fasta = str(Path(reference.fasta).resolve())
+
+    def inc_uniquely_mapped_reads(self, scaffold):
+        self.uniquely_mapped_reads += 1
+        self.scaffolds_data[scaffold].read_count += 1
 
     def bad_read(self, scaffold, pos):
         self.scaffolds_data[scaffold].bad[pos] += 1
@@ -245,7 +250,8 @@ class VariantCallData:
     def update_mapping_quality(self, scaffold, pos, mapping_quality):
         self.scaffolds_data[scaffold].mq_sum[pos] += mapping_quality
 
-    def good_read(self, scaffold, pos, allele, base_quality, mapping_quality, rc):
+    def good_read(self, scaffold, pos, allele, base_quality, mapping_quality,
+                  rc):
         base = allele.rc() if rc else allele
         ix = ALLELE_INDEX[base]
 
@@ -358,6 +364,8 @@ class VariantCallData:
                 "length": scaffold.length,
                 "coverage": coverage,
                 "median": median_coverage,
+                "uReads": scaffold.read_count,
+                "abundance": scaffold.read_count / self.uniquely_mapped_reads,
                 "callable": num_callable,
                 "callablePct": callable_pct,
                 "confirmed": num_confirmed,
@@ -388,6 +396,8 @@ class VariantCallData:
                 self.reference_length
             ),
             "median": self.median_coverage,
+            "uReads": self.uniquely_mapped_reads,
+            "abundance": 1.0,
             "callable": total_callable,
             "callablePct": pct(total_callable, self.reference_length),
             "confirmed": total_confirmed,
@@ -415,6 +425,7 @@ class ScaffoldCallData:
     def __init__(self, name, length):
         self.name = name
         self.length = length
+        self.read_count = 0
 
         self.refmask = numpy.zeros((self.length,), dtype=numpy.uint8)
 
@@ -597,22 +608,32 @@ class VariantCaller:
         self.min_mapping_quality = min_mapping_quality
         self.min_gap_size = min_gap_size
         self.max_num_mismatches = max_num_mismatches
+        self.discarded_reads = set()
 
-    def process(self, reference, pileup_iter):
+    def process(self, reference, bamfile):
         """
         Process the pileups from a BAM file and collect all statistics and
         data reequired for variant calling
         :param reference: Which reference used for alignment
         :type reference: Reference
-        :param pileup_iter: Iterable of pysam.PileupColumn objects
+        :param bamfile: BAM file to process
+        :type bamfile: pysam.AlignmentFile
         :return:
         """
         scaffolds = dict(zip(reference.scaffolds.keys(), reference.lengths))
         call_data = VariantCallData(scaffolds, self.min_gap_size)
         call_data.build_refmask(reference)
 
+        logger.info("Estimating abundance...")
+        for alignment in bamfile.fetch():
+            # Only count uniquely mapped reads
+            if alignment.mapping_quality > 3 and not alignment.has_tag('XA'):
+                scaffold = alignment.reference_name
+                call_data.inc_uniquely_mapped_reads(scaffold)
+
         logger.info("Processing pileups...")
-        for column in pileup_iter:
+        self.discarded_reads = set()
+        for column in bamfile.pileup():
             scaffold = column.reference_name
             refpos = column.reference_pos
 
@@ -635,14 +656,22 @@ class VariantCaller:
     def _assess_read(self, call_data, scaffold, refpos, read):
         alignment = read.alignment
 
+        if alignment.query_name in self.discarded_reads:
+            # Query name is the same for both pairs, so if its mate is
+            # discarded then discard this read too.
+            call_data.bad_read(scaffold, refpos)
+            return
+
         # if this is a paired read, make sure the pairs are properly aligned
         if alignment.is_paired and not alignment.is_proper_pair:
+            self.discarded_reads.add(alignment.query_name)
             call_data.bad_read(scaffold, refpos)
             return
 
         # restrict ourselves to full-length alignments (not clipped)
         if alignment.query_alignment_length != alignment.query_length:
             # alignment is clipped
+            self.discarded_reads.add(alignment.query_name)
             call_data.bad_read(scaffold, refpos)
             return
 
@@ -650,6 +679,7 @@ class VariantCaller:
         if alignment.is_paired:
             tlen = alignment.template_length
             if abs(tlen) < alignment.query_length:
+                self.discarded_reads.add(alignment.query_name)
                 call_data.bad_read(scaffold, refpos)
                 return
 
@@ -659,6 +689,7 @@ class VariantCaller:
                 num_mismatches = alignment.get_tag('NM')
 
             if num_mismatches > self.max_num_mismatches:
+                self.discarded_reads.add(alignment.query_name)
                 call_data.bad_read(scaffold, refpos)
                 return
 
@@ -729,7 +760,7 @@ class VariantCaller:
             read_rc = read.is_reverse
             offset = (read.reference_end - loc - 1 if read_rc else
                       loc - read.reference_start)
-            #logger.info(xa + ' ' + str(nm))
+            # logger.info(xa + ' ' + str(nm))
             for aln in xa.split(';'):
                 if not aln:
                     continue

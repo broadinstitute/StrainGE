@@ -143,6 +143,8 @@ setup(
     entry_points={
         'console_scripts': [
             'strainge=strainge.cli.main:strainge_cli',
+            'straingst=strainge.cli.main:straingst_cli',
+            'straingr=strainge.cli.main:straingr_cli'
         ]
     }
 )

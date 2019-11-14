@@ -49,7 +49,7 @@ class StrainGECLI(SubcommandRegistry):
     Collects all available subcommands and builds a argument parser.
     """
 
-    def __init__(self):
+    def __init__(self, deprecated=False):
         desc = strainge.__doc__
         desc += "\n\nVersion: {}".format(strainge.__version__)
 
@@ -61,6 +61,8 @@ class StrainGECLI(SubcommandRegistry):
             '-v', '--verbose', action='count', default=0, required=False,
             help="Increase verbosity level, number of levels: 0, 1, 2"
         )
+
+        self.deprecated = deprecated
 
     def __call__(self, *args, **kwargs):
         """This is basically our main() function. Setup logging, determine
@@ -95,10 +97,15 @@ class StrainGECLI(SubcommandRegistry):
             logger.setLevel(logging.DEBUG)
             strainge_logger.setLevel(logging.DEBUG)
 
+        if self.deprecated:
+            logger.warning("DEPRECATION WARNING - the `strainge` CLI program "
+                           "is deprecated, please use `straingst` or "
+                           "`straingr` instead.")
+
         self.run(args)
 
 
-strainge_cli = StrainGECLI()
+strainge_cli = StrainGECLI(deprecated=True)
 
 strainge_cli.register_subcommand('kmerize', subcommand=KmerizeSubcommand())
 strainge_cli.register_subcommand('kmersim', subcommand=KmersimSubCommand())
@@ -114,3 +121,18 @@ strainge_cli.register_subcommand('tree', subcommand=TreeSubcommand())
 
 strainge_cli.register_subcommand('stats', subcommand=StatsSubcommand())
 strainge_cli.register_subcommand('plot', subcommand=PlotSubcommand())
+
+straingst_cli = StrainGECLI()
+straingst_cli.register_subcommand('kmerize', subcommand=KmerizeSubcommand())
+straingst_cli.register_subcommand('kmersim', subcommand=KmersimSubCommand())
+straingst_cli.register_subcommand('cluster', subcommand=ClusterSubcommand())
+straingst_cli.register_subcommand('createdb', subcommand=CreateDBSubcommand())
+straingst_cli.register_subcommand('stats', subcommand=StatsSubcommand())
+straingst_cli.register_subcommand('plot', subcommand=PlotSubcommand())
+straingst_cli.register_subcommand('run', subcommand=StrainGSTSubCommand())
+
+straingr_cli = StrainGECLI()
+straingr_cli.register_subcommand('call', subcommand=CallSubcommand())
+straingr_cli.register_subcommand('view', subcommand=ViewSubcommand())
+straingr_cli.register_subcommand('compare', subcommand=CompareSubCommand())
+straingr_cli.register_subcommand('tree', subcommand=TreeSubcommand())

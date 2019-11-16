@@ -235,7 +235,7 @@ class VariantCallData:
 
             for base, allele in zip(bases, alleles):
                 ix = scaffold.values == base
-                self.scaffolds_data[scaffold].refmask[ix] = allele
+                self.scaffolds_data[name].refmask[ix] = allele
 
         self.reference_fasta = str(Path(reference.fasta).resolve())
 

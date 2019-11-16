@@ -35,10 +35,12 @@ from enum import IntFlag, auto
 from typing import Dict  # noqa
 
 import numpy
+import skbio
 from scipy.stats import poisson
 
-from strainge import kmertools, utils
+from strainge import utils
 from strainge.utils import pct
+from strainge.io.utils import open_compressed
 
 logger = logging.getLogger(__name__)
 
@@ -148,10 +150,12 @@ class Reference:
     """
     def __init__(self, fasta):
         self.fasta = fasta
-        self.scaffolds = {
-            scaffold.name: scaffold
-            for scaffold in kmertools.open_seq_file(fasta)
-        }
+
+        with open_compressed(fasta) as f:
+            self.scaffolds = {
+                r.metadata['id']: r for r in skbio.io.read(f, 'fasta')
+            }
+
         self.lengths = [len(s) for s in self.scaffolds.values()]
         self.length = sum(self.lengths)
 
@@ -169,7 +173,7 @@ class Reference:
         offset = 0
         for scaffold, length in zip(self.scaffolds.values(), self.lengths):
             if coord < offset + length:
-                return scaffold.name, coord + 1 - offset
+                return scaffold.metadata['id'], coord + 1 - offset
             offset += length
 
     def scaffold_to_genome_coord(self, scaffold_name, coord):
@@ -226,8 +230,12 @@ class VariantCallData:
         for name, scaffold in reference.scaffolds.items():
             logger.info("Building refmask for scaffold %s", name)
 
-            for i, base in enumerate(scaffold.seq.upper()):
-                self.scaffolds_data[name].refmask[i] = Allele.from_str(base)
+            bases = [b'A', b'C', b'G', b'T']
+            alleles = [Allele.A, Allele.C, Allele.G, Allele.T]
+
+            for base, allele in zip(bases, alleles):
+                ix = scaffold.values == base
+                self.scaffolds_data[name].refmask[ix] = allele
 
         self.reference_fasta = str(Path(reference.fasta).resolve())
 

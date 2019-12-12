@@ -34,7 +34,7 @@ from collections import defaultdict
 logger = logging.getLogger(__name__)
 
 
-def cluster_genomes(similarities, labels, threshold):
+def cluster_genomes(similarities, labels, threshold, metric='jaccard'):
     label_to_cluster = {
         label: i for i, label in enumerate(labels)
     }
@@ -46,7 +46,7 @@ def cluster_genomes(similarities, labels, threshold):
 
     # Assumes `similarities` is sorted
     for label1, label2 in similarities.index:
-        similarity = similarities.loc[(label1, label2), 'jaccard']
+        similarity = similarities.loc[(label1, label2), metric]
 
         logger.info("Checking %s vs %s, similarity: %g", label1, label2,
                     similarity)

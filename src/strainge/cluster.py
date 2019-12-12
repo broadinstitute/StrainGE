@@ -78,7 +78,8 @@ def cluster_genomes(similarities, labels, threshold, metric='jaccard'):
     return clusters
 
 
-def pick_representative(clusters, similarities, priorities=None):
+def pick_representative(clusters, similarities, priorities=None,
+                        metric='jaccard'):
     if not priorities:
         priorities = {}
 
@@ -90,9 +91,9 @@ def pick_representative(clusters, similarities, priorities=None):
         else:
             for label1, label2 in itertools.combinations(entries, 2):
                 if (label1, label2) in similarities.index:
-                    similarity = similarities.loc[(label1, label2), 'jaccard']
+                    similarity = similarities.loc[(label1, label2), metric]
                 else:
-                    similarity = similarities.loc[(label2, label1), 'jaccard']
+                    similarity = similarities.loc[(label2, label1), metric]
 
                 sim_per_label[label1].append(similarity)
                 sim_per_label[label2].append(similarity)

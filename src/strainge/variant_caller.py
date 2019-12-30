@@ -635,9 +635,34 @@ class VariantCaller:
         logger.info("Estimating abundance...")
         for alignment in bamfile.fetch():
             # Only count uniquely mapped reads
-            if alignment.mapping_quality > 3 and not alignment.has_tag('XA'):
-                scaffold = alignment.reference_name
-                call_data.inc_uniquely_mapped_reads(scaffold)
+            if alignment.mapping_quality < 3 or alignment.has_tag('XA'):
+                continue
+
+            # Properly paired
+            if alignment.is_paired and not alignment.is_proper_pair:
+                continue
+
+            # Non-clipped
+            if alignment.query_alignment_length != alignment.query_length:
+                continue
+
+            # Insert size at least the read length
+            if alignment.is_paired:
+                tlen = alignment.template_length
+                if abs(tlen) < alignment.query_length:
+                    continue
+
+            # Ignore reads with too many mismatches
+            if self.max_num_mismatches > 0:
+                num_mismatches = 0
+                if alignment.has_tag('NM'):
+                    num_mismatches = alignment.get_tag('NM')
+
+                if num_mismatches > self.max_num_mismatches:
+                    continue
+
+            scaffold = alignment.reference_name
+            call_data.inc_uniquely_mapped_reads(scaffold)
 
         logger.info("Processing pileups...")
         self.discarded_reads = set()

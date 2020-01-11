@@ -5,5 +5,5 @@ scipy
 h5py
 pysam
 matplotlib
-sckit-bio
+scikit-bio
 pyvcf

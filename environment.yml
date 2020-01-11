@@ -6,14 +6,15 @@ channels:
 dependencies:
     - "python>=3.6"
     - pybind11
+    - "scikit-bio>=0.5"
     - numpy
     - scipy
     - h5py
     - matplotlib
-    - biopython
     - pyvcf
     - pysam
     - samtools
     - bwa
+    - pip
     - pip:
         - intervaltree

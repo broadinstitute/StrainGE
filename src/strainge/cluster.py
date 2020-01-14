@@ -83,31 +83,38 @@ def pick_representative(clusters, similarities, priorities=None,
     if not priorities:
         priorities = {}
 
-    # Calculate for each label its mean distance to other cluster members
-    sim_per_label = defaultdict(list)
-    for cluster, entries in clusters.items():
-        if len(entries) == 1:
-            sim_per_label[entries[0]].append(1.0)
-        else:
-            for label1, label2 in itertools.combinations(entries, 2):
-                if (label1, label2) in similarities.index:
-                    similarity = similarities.loc[(label1, label2), metric]
-                else:
-                    similarity = similarities.loc[(label2, label1), metric]
+    if isinstance(metric, str):
+        # Calculate for each label its mean similarity to other cluster members
+        sim_per_label = defaultdict(list)
+        for cluster, entries in clusters.items():
+            if len(entries) == 1:
+                sim_per_label[entries[0]].append(1.0)
+            else:
+                for label1, label2 in itertools.combinations(entries, 2):
+                    if (label1, label2) in similarities.index:
+                        similarity = similarities.loc[(label1, label2), metric]
+                    else:
+                        similarity = similarities.loc[(label2, label1), metric]
 
-                sim_per_label[label1].append(similarity)
-                sim_per_label[label2].append(similarity)
+                    sim_per_label[label1].append(similarity)
+                    sim_per_label[label2].append(similarity)
 
-    entries_mean_dist = {
-        # Add priority in the tuple to give certain genomes priority when
-        # sorting
-        label: (priorities.get(label, 1), sum(sim)/len(sim))
-        for label, sim in sim_per_label.items()
-    }
+        sort_metric = {
+            # Add priority in the tuple to give certain genomes priority when
+            # sorting
+            label: (priorities.get(label, 1), sum(sim)/len(sim))
+            for label, sim in sim_per_label.items()
+        }
+    elif isinstance(metric, dict):
+        # It's also possible to specify the metric to sort by directly
+        sort_metric = metric
+    else:
+        raise ValueError(f"Invalid value for parameter 'metric': {metric}")
 
     # Sort clusters by size (report bigger ones first)
     sorted_clusters = sorted(clusters.items(), key=lambda e: len(e[1]),
                              reverse=True)
     for cluster, entries in sorted_clusters:
-        yield cluster, list(sorted(entries, key=entries_mean_dist.get,
+        # Report entries with higher mean similarity to other members first
+        yield cluster, list(sorted(entries, key=sort_metric.get,
                                    reverse=True))

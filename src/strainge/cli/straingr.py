@@ -29,19 +29,23 @@
 
 import csv
 import sys
+import json
 import logging
 import argparse
 import functools
 import itertools
 import multiprocessing
 from pathlib import Path
+from collections import Counter
 
 import numpy
 import pysam
 import skbio
+import pandas
 from skbio.stats.distance import DistanceMatrix
 
-from strainge.variant_caller import VariantCaller, Reference
+from strainge.variant_caller import (VariantCaller, Reference,
+                                     analyze_repetitiveness)
 from strainge.sample_compare import (SampleComparison, kimura_distance,
                                      count_ts_tv)
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
@@ -49,10 +53,213 @@ from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   generate_call_summary_tsv, array_to_wig)
 from strainge.io.comparisons import (generate_compare_summary_tsv,
                                      generate_compare_details_tsv)
-from strainge.io.utils import open_compressed
+from strainge.io.utils import open_compressed, parse_straingst
 from strainge.cli.registry import Subcommand
+from strainge import cluster
 
 logger = logging.getLogger()
+
+
+class PrepareRefSubcommand(Subcommand):
+    """
+    Prepare a concatenated reference for StrainGR variant calling.
+    """
+
+    def register_arguments(self, subparser: argparse.ArgumentParser):
+        io_group = subparser.add_argument_group(
+            "I/O", "Arguments to specify input and output files."
+        )
+        io_group.add_argument(
+            '-r', '--refs', nargs='*',
+            help="Force inclusion of given reference genome in the "
+                 "concatenated reference output (pre-clustering). The given "
+                 "name should match a reference genome in the StrainGST "
+                 "database. To be clear: the given argument should *not* be a "
+                 "filename. See --path-template how this command finds the "
+                 "corresponding FASTA files."
+        )
+
+        io_group.add_argument(
+            '-s', '--straingst-files', type=Path, nargs='*',
+            help="Read the list of StrainGST result files and collect all "
+                 "reported strains to include in the concatenated output. "
+                 "Use together with --path-template to specify how to "
+                 "determine the correct filename."
+        )
+
+        io_group.add_argument(
+            '-p', '--path-template', default="{ref}.fa",
+            help='Specify how to determine the path to the FASTA file of a '
+                 'reference strain as reported by StrainGST. This command '
+                 'will replace "{ref}" with the strain name. Example: '
+                 '"refs/{ref}.fa". Warning: in many shells { and } are '
+                 'special characters. Make sure to use quotes. Default: '
+                 '%(default)s.'
+        )
+
+        io_group.add_argument(
+            '-o', '--output', type=Path, required=True,
+            help="Output FASTA filename."
+        )
+
+        cluster_group = subparser.add_argument_group(
+            "Clustering", "Options to change clustering behaviour."
+        )
+
+        cluster_group.add_argument(
+            '-S', '--similarities', type=argparse.FileType('r'), default=None,
+            help="Enable clustering of closely related reference genomes by "
+                 "specifying the path to the k-mer similarity scores as "
+                 "created at the StrainGST database construction step."
+        )
+
+        cluster_group.add_argument(
+            '-t', '--threshold', type=float, default=0.9,
+            help="K-mer clustering threshold, the default (%(default)s) is a "
+                 "bit more lenient than the clustering step for database "
+                 "construction, because for a concatenated reference you'll "
+                 "want the included references not too closely related, "
+                 "due to increased shared content."
+        )
+
+        mummer_group = subparser.add_argument_group(
+            "MUMmer", "Settings for MUMmer, used to analyze the "
+                      "repetitiveness of a concatenated reference."
+        )
+
+        mummer_group.add_argument(
+            '-l', '--minmatch', type=int, default=12,
+            help="Mininum exact match size. Default: %(default)d."
+        )
+
+        mummer_group.add_argument(
+            '-c', '--mincluster', type=int, default=100,
+            help="MUMmer minimum cluster size. Default: %(default)d."
+        )
+        mummer_group.add_argument(
+            '-b', '--breaklen', type=int, default=40,
+            help="Maximum distance before aborting the alignment between "
+                 "clusters. Default: %(default)d."
+        )
+        mummer_group.add_argument(
+            '-g', '--maxgap', type=int, default=5,
+            help="Maximum distance between exact matches to form a cluster. "
+                 "Default: %(default)d."
+        )
+        mummer_group.add_argument(
+            '-I', '--aln-identity', type=float, default=99.0,
+            help="Minimum percentage of sequence indentity of an alignment "
+                 "to be reported. Passed to MUMmer's `show-coords`. Default: "
+                 "%(default)g%%."
+        )
+
+    def __call__(self, refs, straingst_files, path_template, output,
+                 similarities, threshold, minmatch, mincluster, breaklen,
+                 maxgap, aln_identity, *args, **kwargs):
+
+        logger.info("Determining which reference strains to include...")
+        refs = set(refs)
+        straingst_counter = Counter()
+
+        if straingst_files:
+            logger.info("Reading all given StrainGST result files and "
+                        "collecting reported reference genomes...")
+
+            for fpath in straingst_files:
+                logger.debug("Reading %s", fpath)
+                with open(fpath) as f:
+                    straingst_counter.update(strain['strain'] for strain in
+                                             parse_straingst(f))
+
+            logger.debug("StrainGST counts: %s", straingst_counter)
+
+        refs = refs | straingst_counter.keys()
+        logger.info("Found %d reference strains to include.", len(refs))
+
+        logger.info("Checking file paths...")
+        logger.info("Path template: %s", path_template)
+        ref_paths = {}
+        for ref in refs:
+            target_path = Path(path_template.format(ref=ref))
+            if not target_path.is_file():
+                logger.error("%s does not exist!", target_path)
+                return 1
+
+            ref_paths[ref] = target_path
+
+        if similarities:
+            logger.info("Load k-mer similarity scores for clustering...")
+            similarities = pandas.read_csv(similarities, sep='\t', comment='#')
+
+            ix = (similarities['kmerset1'].isin(refs) &
+                  similarities['kmerset2'].isin(refs))
+            similarities = similarities[ix].set_index(['kmerset1', 'kmerset2'])
+            similarities.sort_values(ascending=False, inplace=True)
+            labels = list(refs)
+
+            logger.info("K-mer similarity matrix of genomes before "
+                        "clustering:")
+            with pandas.option_context("display.max_rows", None,
+                                       "display.max_columns", None):
+                print(similarities.pivot("kmerset1", "kmerset2", "jaccard"),
+                      file=sys.stderr)
+
+            clusters = cluster.cluster_genomes(similarities, labels, threshold)
+
+            orig_refs = refs
+            refs = set()
+            metric = straingst_counter if straingst_files else 'jaccard'
+            for ix, sorted_entries in cluster.pick_representative(
+                    clusters, similarities, metric=metric):
+                if len(sorted_entries) > 1:
+                    logger.info("The reference strains %s are too closely "
+                                "related. Only keeping %s.", sorted_entries,
+                                sorted_entries[0])
+                refs.add(sorted_entries[0])
+
+            logger.info("After clustering %d/%d reference strains remain.",
+                        len(refs), len(orig_refs))
+
+        logger.info("Creating concatenated reference...")
+
+        concat_meta = {
+            'contig_to_strain': {},
+            'repetitiveness': {}
+        }
+        with output.open('w') as o:
+            for ref in refs:
+                with ref_paths[ref].open() as f:
+                    for record in skbio.io.read(f, "fasta", verify=False):
+                        contig = record.metadata['id']
+                        concat_meta['contig_to_strain'][contig] = ref
+
+                        skbio.io.write(record, "fasta", o)
+
+        logger.info("Wrote FASTA file to %s", output)
+        logger.info("Analyzing repetitiveness of concatenated reference...")
+        repeat_masks = analyze_repetitiveness(
+            output, minmatch, mincluster, breaklen, maxgap, aln_identity)
+
+        with output.with_suffix('.repetitive.bed').open('w') as o:
+            for contig, repeat_mask in repeat_masks.items():
+                boolean_array_to_bedfile(repeat_mask, o, contig)
+
+                pct_repetitive = repeat_mask.sum() / len(repeat_mask)
+                strain = concat_meta['contig_to_strain'][contig]
+                logger.info("%s, %s: %.2f%% repetitive content", strain,
+                            contig, pct_repetitive)
+                concat_meta['repetitiveness'][contig] = pct_repetitive
+
+        if max(concat_meta['repetitiveness'].values()) > 0.85:
+            logger.warning("One of the strains has more than 85% repetitive "
+                           "content, you may want to perform more broad "
+                           "clustering, and lower the threshold.")
+
+        with output.with_suffix('.meta.json').open('w') as o:
+            json.dump(concat_meta, o, indent=2)
+
+        logger.info("Done. Wrote concatenated reference metadata to %s",
+                    output.with_suffix('.meta.json'))
 
 
 def coverage_track(call_data, output_file, *args, **kwargs):

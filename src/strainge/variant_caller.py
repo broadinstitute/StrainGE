@@ -27,9 +27,14 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
+import io
+import csv
 import math
 import logging
+import tempfile
+import itertools
 import functools
+import subprocess
 from pathlib import Path
 from enum import IntFlag, auto
 from typing import Dict  # noqa
@@ -193,6 +198,77 @@ class Reference:
 
     def get_sequence(self, name, coord, length=1):
         return self.scaffolds[name].seq[coord-1:coord+length-1]
+
+
+def analyze_repetitiveness(fpath, minmatch=12, mincluster=100, breaklen=40,
+                           maxgap=5, min_aln_identity=99.0):
+    """
+    For StrainGR variant calling we often concatenate multiple reference
+    genomes into a single FASTA. These genomes, however, can have shared
+    gene content, and this introduces redundancy in the concatenated reference.
+    This function runs MUMmer to check how much content each genome shares
+    with other genomes.
+    """
+    if fpath.endswith('.gz'):
+        raise ValueError("Can't analyze gzipped FASTA files.")
+
+    ref = Reference(fpath)
+    repeat_masks = {
+        contig: numpy.zeros((length,))
+        for contig, length in zip(ref.scaffolds.keys(), ref.lengths)
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        prefix = f"{tmpdir}/nucmer"
+
+        cmd = ['nucmer', '--maxmatch', '--nosimplify',
+               '-l', str(minmatch), '-c', str(mincluster), '-g', str(maxgap),
+               '-b', str(breaklen), '-p', prefix,
+               fpath, fpath]
+
+        logger.info("Running nucmer...")
+        logger.info("%s", " ".join(cmd))
+
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        p.check_returncode()
+
+        p = subprocess.run(
+            ['show-coords', '-r', '-T', '-I', min_aln_identity,
+             f"{prefix}.delta"],
+            capture_output=True, text=True
+        )
+        p.check_returncode()
+
+        delta = p.stdout
+
+    fieldnames = ['start1', 'end1', 'start2', 'end2', 'len1', 'len2',
+                  'identity', 'contig1', 'contig2']
+    in_iter = itertools.islice(io.StringIO(delta), 4, None)
+    reader = csv.DictReader(in_iter, fieldnames, delimiter='\t')
+
+    for alignment in reader:
+        if alignment['contig1'] == alignment['contig2']:
+            if alignment['start1'] == alignment['start2']:
+                # Same element
+                continue
+
+        start1 = int(alignment['start1']) - 1
+        end1 = int(alignment['end1'])
+
+        start2 = int(alignment['start2'])
+        end2 = int(alignment['end2'])
+
+        if start2 > end2:
+            start2, end2 = end2, start2
+
+        start2 -= 1
+
+        contig1 = alignment['contig1']
+        contig2 = alignment['contig2']
+        repeat_masks[contig1][start1:end1] = True
+        repeat_masks[contig2][start2:end2] = True
+
+    return repeat_masks
 
 
 class VariantCallData:

@@ -36,9 +36,9 @@ from strainge.cli.kmersets import (KmerizeSubcommand, KmersimSubCommand,
                                    ClusterSubcommand, CreateDBSubcommand,
                                    PlotSubcommand, StatsSubcommand)
 from strainge.cli.straingst import StrainGSTSubCommand
-from strainge.cli.straingr import (CallSubcommand, ViewSubcommand,
-                                   CompareSubCommand, DistSubcommand,
-                                   TreeSubcommand)
+from strainge.cli.straingr import (PrepareRefSubcommand, CallSubcommand,
+                                   ViewSubcommand, CompareSubCommand,
+                                   DistSubcommand, TreeSubcommand)
 
 logger = logging.getLogger()
 
@@ -137,6 +137,8 @@ straingst_cli.register_subcommand('plot', subcommand=PlotSubcommand())
 straingst_cli.register_subcommand('run', subcommand=StrainGSTSubCommand())
 
 straingr_cli = StrainGECLI()
+straingr_cli.register_subcommand('prepare-ref',
+                                 subcommand=PrepareRefSubcommand())
 straingr_cli.register_subcommand('call', subcommand=CallSubcommand())
 straingr_cli.register_subcommand('view', subcommand=ViewSubcommand())
 straingr_cli.register_subcommand('compare', subcommand=CompareSubCommand())

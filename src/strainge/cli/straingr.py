@@ -228,7 +228,7 @@ class PrepareRefSubcommand(Subcommand):
         }
         with output.open('w') as o:
             for ref in refs:
-                with ref_paths[ref].open() as f:
+                with open_compressed(ref_paths[ref]) as f:
                     for record in skbio.io.read(f, "fasta", verify=False):
                         contig = record.metadata['id']
                         concat_meta['contig_to_strain'][contig] = ref

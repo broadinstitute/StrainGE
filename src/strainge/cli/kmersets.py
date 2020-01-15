@@ -245,7 +245,7 @@ class KmersimRunner:
                 for metric in scoring
             }
 
-            if 'jaccard' in scoring:
+            if 'jaccard' in scores:
                 k = self.kmersets[set1].k
                 scores['ani'] = comparison.ani(k, scores['jaccard'])
 

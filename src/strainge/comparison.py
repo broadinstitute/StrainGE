@@ -27,6 +27,8 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
+import math
+
 from strainge import kmerizer
 
 
@@ -34,35 +36,35 @@ def jaccard(kmers1, kmers2):
     """Computes jaccard similarity. Returns numerator and denominator
     separately."""
     intersection = kmerizer.count_common(kmers1, kmers2)
-    return intersection, kmers1.size + kmers2.size - intersection
+    return intersection / (kmers1.size + kmers2.size - intersection)
 
 
 def minsize(kmers1, kmers2):
     intersection = kmerizer.count_common(kmers1, kmers2)
-    return intersection, min(kmers1.size, kmers2.size)
+    return intersection / min(kmers1.size, kmers2.size)
 
 
 def meansize(kmers1, kmers2):
     intersection = kmerizer.count_common(kmers1, kmers2)
-    return intersection, (kmers1.size + kmers2.size) / 2
+    return intersection / ((kmers1.size + kmers2.size) / 2)
 
 
 def maxsize(kmers1, kmers2):
     intersection = kmerizer.count_common(kmers1, kmers2)
-    return intersection, max(kmers1.size, kmers2.size)
+    return intersection / max(kmers1.size, kmers2.size)
 
 
 def subset(kmers1, kmers2):
     """Calculate the fraction of k-mers in k-merset 1 that are also in k-merset
     2, useful to check whether k-merset 1 is a subset of another."""
     intersection = kmerizer.count_common(kmers1, kmers2)
-    return intersection, kmers1.size
+    return intersection / kmers1.size
 
 
 def reference(kmers1, kmers2):
     """Assume k-merset 2 is the k-merset of a reference genome."""
     intersection = kmerizer.count_common(kmers1, kmers2)
-    return intersection, kmers2.size
+    return intersection / kmers2.size
 
 
 def similarity_score(kmers1, kmers2, scoring="jaccard"):
@@ -73,6 +75,22 @@ def similarity_score(kmers1, kmers2, scoring="jaccard"):
         raise ValueError("Invalid scoring method '{}'".format(scoring))
 
     return SCORING_METHODS[scoring](kmers1, kmers2)
+
+
+def ani(k, j):
+    """Estimate average nucleotide identity from Jaccard distance between
+    two k-mer sets. Also known as mash [1] distance.
+
+    [1]: Mash: fast genome and metagenome distance estimation using MinHash.
+         Ondov BD, Treangen TJ, Melsted P, Mallonee AB, Bergman NH, Koren S,
+         Phillippy AM. Genome Biol. 2016 Jun 20;17(1):132.
+         doi: 10.1186/s13059-016-0997-x.
+    """
+
+    distance = -math.log(2 * j / (1.0 + j)) / k if j > 0 else 1
+
+    # Transform to ANI
+    return 1 - distance
 
 
 SCORING_FUNCS = (jaccard, minsize, meansize, maxsize, subset, reference)

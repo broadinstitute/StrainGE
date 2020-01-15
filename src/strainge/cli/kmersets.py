@@ -204,6 +204,56 @@ class KmerizeSubcommand(Subcommand):
         kmerset.save(output, compress=True)
 
 
+class KmersimRunner:
+    """
+    This class helps running the comparisons using multiprocessing. We cache
+    kmersets to make sure we don't have to reload them each time. It's
+    possible, however, that different processes have to cache the same
+    kmerset. By using a large enough chunksize (see
+    `KmersimSubcommand.__call__`) we aim to prevent that from happening too
+    often.
+    """
+
+    def __init__(self):
+        self.kmersets = {}
+
+    def __call__(self, kmersets, scoring, fingerprint=False):
+        try:
+            set1, set2 = kmersets
+
+            if not set1 in self.kmersets:
+                self.kmersets[set1] = kmertools.kmerset_from_hdf5(set1)
+
+            if not set2 in self.kmersets:
+                self.kmersets[set2] = kmertools.kmerset_from_hdf5(set2)
+
+            if self.kmersets[set1].k != self.kmersets[set2].k:
+                raise ValueError(f"Comparing two k-mer sets with different "
+                                 f"values for `k`!\n{set1}\n{set2}")
+
+            name1 = kmertools.name_from_path(set1)
+            name2 = kmertools.name_from_path(set2)
+
+            data_attr = 'fingerprint' if fingerprint else 'kmers'
+            data1 = getattr(self.kmersets[set1], data_attr)
+            data2 = getattr(self.kmersets[set2], data_attr)
+
+            logger.info("Comparing %s vs %s...", name1, name2)
+
+            scores = {
+                metric: comparison.similarity_score(data1, data2, metric)
+                for metric in scoring
+            }
+
+            if 'jaccard' in scoring:
+                k = self.kmersets[set1].k
+                scores['ani'] = comparison.ani(k, scores['jaccard'])
+
+            return [name1, name2, scores]
+        except KeyboardInterrupt:
+            pass
+
+
 class KmersimSubCommand(Subcommand):
     """
     Compare k-mer sets with each other. Both all-vs-all and one-vs-all is
@@ -250,22 +300,6 @@ class KmersimSubCommand(Subcommand):
             help="Filenames of k-mer set HDF5 files."
         )
 
-    def _do_compare(self, sets, scoring):
-        try:
-            set1, set2 = sets
-
-            name1, data1 = set1
-            name2, data2 = set2
-
-            logger.info("Comparing %s vs %s...", name1, name2)
-
-            scores = [comparison.similarity_score(data1, data2, metric)
-                      for metric in scoring]
-
-            return [name1, name2, *scores]
-        except KeyboardInterrupt:
-            pass
-
     def __call__(self, strains, output, all_vs_all=False, sample=None,
                  fingerprint=False, scoring=None, threads=1,
                  fraction=False, **kwargs):
@@ -273,21 +307,12 @@ class KmersimSubCommand(Subcommand):
         if not scoring:
             scoring = ["jaccard"]
 
-        # First, load all K-mer sets
-        loader = (kmertools.load_fingerprint if fingerprint
-                  else kmertools.load_kmers)
-        logger.info("Loading %d k-mer sets...", len(strains))
-        kmer_data = [(kmertools.name_from_path(strain), loader(strain))
-                     for strain in strains]
-        logger.info("Done.")
-
-        to_compute_iter = None
         if sample:
-            sample_data = (kmertools.name_from_path(sample), loader(sample))
-            logger.info("Start %s vs all comparison...", sample_data[0])
+            sample_name = kmertools.name_from_path(sample)
+            logger.info("Start %s vs all comparison...", sample_name)
 
             to_compute_iter = (
-                (sample_data, strain_data) for strain_data in kmer_data
+                (sample, strain) for strain in strains
             )
         elif all_vs_all:
             if scoring == "reference":
@@ -295,37 +320,42 @@ class KmersimSubCommand(Subcommand):
                                  " all-vs-all mode.")
 
             logger.info("Start computing pairwise similarities...")
-            to_compute_iter = itertools.combinations(kmer_data, 2)
+            to_compute_iter = itertools.combinations(strains, 2)
+        else:
+            logger.error("Either --sample or --all-vs-all required.")
+            return 1
 
+        runner = functools.partial(KmersimRunner(), scoring=scoring,
+                                   fingerprint=fingerprint)
         if threads > 1:
             pool = multiprocessing.Pool(threads)
 
-            scores = list(pool.imap_unordered(
-                functools.partial(self._do_compare, scoring=scoring),
-                to_compute_iter,
-                chunksize=2**5
-            ))
+            scores = list(pool.imap_unordered(runner, to_compute_iter,
+                                              chunksize=2**8))
         else:
-            scores = list(map(
-                functools.partial(self._do_compare, scoring=scoring),
-                to_compute_iter
-            ))
+            scores = list(map(runner, to_compute_iter))
 
         logger.info("Done.")
 
         # Sort results
         # We use the first given scoring metric for sorting
-        scores = sorted(scores, key=lambda e: e[2][0] / e[2][1],
-                        reverse=True)
+        first_metric = scoring[0]
+        scores = sorted(scores, key=lambda e: e[2][first_metric], reverse=True)
 
         # Write results
         logger.info("Writing results...")
-        writer = csv.writer(output, delimiter="\t", lineterminator="\n")
-        writer.writerow(["kmerset1", "kmerset2", *scoring])
-        for name1, name2, *scores in scores:
-            scores_fmt = ["{:.5f}".format(num / denum)
-                          for num, denum in scores]
-            writer.writerow([name1, name2, *scores_fmt])
+        scoring_keys = scores[0][2].keys()
+        fieldnames = ["kmerset1", "kmerset2", *scoring_keys]
+        writer = csv.DictWriter(output, fieldnames, delimiter="\t",
+                                lineterminator="\n")
+        writer.writeheader()
+        for name1, name2, pair_score in scores:
+            data = {metric: f"{value:.5f}"
+                    for metric, value in pair_score.items()}
+            data['kmerset1'] = name1
+            data['kmerset2'] = name2
+
+            writer.writerow(data)
 
         logger.info("Done.")
 

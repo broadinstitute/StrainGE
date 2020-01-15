@@ -114,7 +114,7 @@ class PrepareRefSubcommand(Subcommand):
         )
 
         cluster_group.add_argument(
-            '-t', '--threshold', type=float, default=0.9,
+            '-t', '--threshold', type=float, default=0.7,
             help="K-mer clustering threshold, the default (%(default)s) is a "
                  "bit more lenient than the clustering step for database "
                  "construction, because for a concatenated reference you'll "
@@ -158,7 +158,7 @@ class PrepareRefSubcommand(Subcommand):
                  maxgap, aln_identity, *args, **kwargs):
 
         logger.info("Determining which reference strains to include...")
-        refs = set(refs)
+        refs = set(refs) if refs else set()
         straingst_counter = Counter()
 
         if straingst_files:
@@ -194,15 +194,14 @@ class PrepareRefSubcommand(Subcommand):
             ix = (similarities['kmerset1'].isin(refs) &
                   similarities['kmerset2'].isin(refs))
             similarities = similarities[ix].set_index(['kmerset1', 'kmerset2'])
-            similarities.sort_values(ascending=False, inplace=True)
+            similarities.sort_values('jaccard', ascending=False, inplace=True)
             labels = list(refs)
 
-            logger.info("K-mer similarity matrix of genomes before "
+            logger.info("Pairwise k-mer similarities of genomes before "
                         "clustering:")
             with pandas.option_context("display.max_rows", None,
                                        "display.max_columns", None):
-                print(similarities.pivot("kmerset1", "kmerset2", "jaccard"),
-                      file=sys.stderr)
+                print(similarities, file=sys.stderr)
 
             clusters = cluster.cluster_genomes(similarities, labels, threshold)
 
@@ -238,7 +237,7 @@ class PrepareRefSubcommand(Subcommand):
         logger.info("Wrote FASTA file to %s", output)
         logger.info("Analyzing repetitiveness of concatenated reference...")
         repeat_masks = analyze_repetitiveness(
-            output, minmatch, mincluster, breaklen, maxgap, aln_identity)
+            str(output), minmatch, mincluster, breaklen, maxgap, aln_identity)
 
         with output.with_suffix('.repetitive.bed').open('w') as o:
             for contig, repeat_mask in repeat_masks.items():

@@ -233,7 +233,7 @@ def analyze_repetitiveness(fpath, minmatch=12, mincluster=100, breaklen=40,
         p.check_returncode()
 
         p = subprocess.run(
-            ['show-coords', '-r', '-T', '-I', min_aln_identity,
+            ['show-coords', '-r', '-T', '-I', str(min_aln_identity),
              f"{prefix}.delta"],
             capture_output=True, text=True
         )

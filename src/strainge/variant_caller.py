@@ -200,14 +200,18 @@ class Reference:
         return self.scaffolds[name].seq[coord-1:coord+length-1]
 
 
-def analyze_repetitiveness(fpath, minmatch=12, mincluster=100, breaklen=40,
-                           maxgap=5, min_aln_identity=99.0):
+def analyze_repetitiveness(fpath, minmatch=250):
     """
     For StrainGR variant calling we often concatenate multiple reference
     genomes into a single FASTA. These genomes, however, can have shared
     gene content, and this introduces redundancy in the concatenated reference.
     This function runs MUMmer to check how much content each genome shares
     with other genomes.
+
+    The minimum exact match size used for mummer, is pretty high, because we
+    try to identify regions where a read aligner cannot unambiguously place
+    reads, so set this value to your average insert size. We disable the
+    alignment step of nucmer.
     """
     if fpath.endswith('.gz'):
         raise ValueError("Can't analyze gzipped FASTA files.")
@@ -221,10 +225,8 @@ def analyze_repetitiveness(fpath, minmatch=12, mincluster=100, breaklen=40,
     with tempfile.TemporaryDirectory() as tmpdir:
         prefix = f"{tmpdir}/nucmer"
 
-        cmd = ['nucmer', '--maxmatch', '--nosimplify',
-               '-l', str(minmatch), '-c', str(mincluster), '-g', str(maxgap),
-               '-b', str(breaklen), '-p', prefix,
-               fpath, fpath]
+        cmd = ['nucmer', '--maxmatch', '--nosimplify', '--noextend',
+               '-l', str(minmatch), '-p', prefix, fpath, fpath]
 
         logger.info("Running nucmer...")
         logger.info("%s", " ".join(cmd))
@@ -232,11 +234,8 @@ def analyze_repetitiveness(fpath, minmatch=12, mincluster=100, breaklen=40,
         p = subprocess.run(cmd, capture_output=True, text=True)
         p.check_returncode()
 
-        p = subprocess.run(
-            ['show-coords', '-r', '-T', '-I', str(min_aln_identity),
-             f"{prefix}.delta"],
-            capture_output=True, text=True
-        )
+        p = subprocess.run(['show-coords', '-r', '-T', f"{prefix}.delta"],
+                           capture_output=True, text=True)
         p.check_returncode()
 
         delta = p.stdout

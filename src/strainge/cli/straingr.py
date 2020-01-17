@@ -128,34 +128,13 @@ class PrepareRefSubcommand(Subcommand):
         )
 
         mummer_group.add_argument(
-            '-l', '--minmatch', type=int, default=12,
-            help="Mininum exact match size. Default: %(default)d."
-        )
-
-        mummer_group.add_argument(
-            '-c', '--mincluster', type=int, default=100,
-            help="MUMmer minimum cluster size. Default: %(default)d."
-        )
-        mummer_group.add_argument(
-            '-b', '--breaklen', type=int, default=40,
-            help="Maximum distance before aborting the alignment between "
-                 "clusters. Default: %(default)d."
-        )
-        mummer_group.add_argument(
-            '-g', '--maxgap', type=int, default=5,
-            help="Maximum distance between exact matches to form a cluster. "
-                 "Default: %(default)d."
-        )
-        mummer_group.add_argument(
-            '-I', '--aln-identity', type=float, default=99.0,
-            help="Minimum percentage of sequence indentity of an alignment "
-                 "to be reported. Passed to MUMmer's `show-coords`. Default: "
-                 "%(default)g%%."
+            '-l', '--minmatch', type=int, default=250,
+            help="Mininum exact match size. Default: %(default)d. Set this "
+                 "to your library's average insert size."
         )
 
     def __call__(self, refs, straingst_files, path_template, output,
-                 similarities, threshold, minmatch, mincluster, breaklen,
-                 maxgap, aln_identity, *args, **kwargs):
+                 similarities, threshold, minmatch, *args, **kwargs):
 
         logger.info("Determining which reference strains to include...")
         refs = set(refs) if refs else set()
@@ -236,8 +215,7 @@ class PrepareRefSubcommand(Subcommand):
 
         logger.info("Wrote FASTA file to %s", output)
         logger.info("Analyzing repetitiveness of concatenated reference...")
-        repeat_masks = analyze_repetitiveness(
-            str(output), minmatch, mincluster, breaklen, maxgap, aln_identity)
+        repeat_masks = analyze_repetitiveness(str(output), minmatch)
 
         with output.with_suffix('.repetitive.bed').open('w') as o:
             for contig, repeat_mask in repeat_masks.items():

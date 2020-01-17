@@ -129,8 +129,9 @@ class PrepareRefSubcommand(Subcommand):
 
         mummer_group.add_argument(
             '-l', '--minmatch', type=int, default=250,
-            help="Mininum exact match size. Default: %(default)d. Set this "
-                 "to your library's average insert size."
+            help="Mininum exact match size. Default: %(default)d. For "
+                 "best estimation that resembles StrainGR's 'lowmq' field, "
+                 "set this to your library's average insert size."
         )
 
     def __call__(self, refs, straingst_files, path_template, output,
@@ -221,11 +222,11 @@ class PrepareRefSubcommand(Subcommand):
             for contig, repeat_mask in repeat_masks.items():
                 boolean_array_to_bedfile(repeat_mask, o, contig)
 
-                pct_repetitive = repeat_mask.sum() / len(repeat_mask)
+                frac_repetitive = repeat_mask.sum() / len(repeat_mask)
                 strain = concat_meta['contig_to_strain'][contig]
-                logger.info("%s, %s: %.2f%% repetitive content", strain,
-                            contig, pct_repetitive)
-                concat_meta['repetitiveness'][contig] = pct_repetitive
+                logger.info("%s, %s: %.1f%% repetitive content", strain,
+                            contig, frac_repetitive * 100)
+                concat_meta['repetitiveness'][contig] = frac_repetitive
 
         if max(concat_meta['repetitiveness'].values()) > 0.85:
             logger.warning("One of the strains has more than 85% repetitive "

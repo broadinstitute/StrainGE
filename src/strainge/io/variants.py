@@ -139,6 +139,7 @@ def call_data_to_hdf5(call_data, output_file):
             scaffold_grp.attrs["median_coverage"] = scaffold.median_coverage
             scaffold_grp.attrs["coverage_cutoff"] = scaffold.coverage_cutoff
             scaffold_grp.attrs["read_count"] = scaffold.read_count
+            scaffold_grp.attrs['repetitiveness'] = scaffold.repetitiveness
 
         h5.attrs['type'] = "VariantCallData"
         h5.attrs['min_gap_size'] = call_data.min_gap_size
@@ -211,6 +212,13 @@ def call_data_from_hdf5(hdf5_file):
             scaffold.read_count = hdf5[scaffold_name].attrs.get(
                 'read_count', 0)
 
+            if 'repetitiveness' not in hdf5[scaffold_name].attrs:
+                logger.warning("This is an old StrainGR hdf5 file. Scaffold "
+                               "repetitiveness information not available.")
+
+            scaffold.repetitiveness = hdf5[scaffold_name].attrs.get(
+                'repetitiveness', 0.0)
+
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']
         call_data.min_gap_size = hdf5.attrs['min_gap_size']
@@ -219,9 +227,8 @@ def call_data_from_hdf5(hdf5_file):
             logger.warning("This is an old StrainGR hdf5 file. Strain "
                            "abundance information not available.")
 
-        # 1 as default to prevent division by zero error
         call_data.uniquely_mapped_reads = hdf5.attrs.get(
-            'uniquely_mapped_reads', 1)
+            'uniquely_mapped_reads', 0)
 
         if 'reference_fasta' in hdf5.attrs:
             call_data.reference_fasta = hdf5.attrs['reference_fasta']

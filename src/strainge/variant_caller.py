@@ -29,6 +29,7 @@
 
 import io
 import csv
+import json
 import math
 import logging
 import tempfile
@@ -150,8 +151,7 @@ def scale_min_gap_size(min_gap, mean_coverage):
 
 class Reference:
     """
-    Holds reference sequence information...scaffolds in Biopython SeqRecord
-    objects.
+    Some helper function to manage coordinates on a concatenated reference.
     """
     def __init__(self, fasta):
         self.fasta = fasta
@@ -302,7 +302,7 @@ class VariantCallData:
         self.median_coverage = 0
         self.uniquely_mapped_reads = 0
 
-    def build_refmask(self, reference):
+    def load_reference(self, reference):
         for name, scaffold in reference.scaffolds.items():
             logger.info("Building refmask for scaffold %s", name)
 
@@ -312,6 +312,22 @@ class VariantCallData:
             for base, allele in zip(bases, alleles):
                 ix = scaffold.values == base
                 self.scaffolds_data[name].refmask[ix] = allele
+
+        # Try to load reference metadata, as created by `straingr prepare-ref`
+        metadata_file = Path(reference.fasta).with_suffix('.meta.json')
+        if metadata_file.is_file():
+            with metadata_file.open() as f:
+                meta = json.load(f)
+                for scaffold, repetitiveness in meta['repetitiveness'].items():
+                    logger.info("Scaffold %s repetitiveness: %.2f",
+                                scaffold, repetitiveness)
+                    self.scaffolds_data[
+                        scaffold].repetitiveness = repetitiveness
+        else:
+            logger.warning("Could not find a metadata file for reference %s, "
+                           "and therefore StrainGR has no sense of the "
+                           "repetitiveness of the concatenated reference. "
+                           "Abundance metrics may be skewed.")
 
         self.reference_fasta = str(Path(reference.fasta).resolve())
 
@@ -384,6 +400,23 @@ class VariantCallData:
         total_gaps = 0
         total_gap_length = 0
 
+        # Calculate normalization factor for strain abundances, based on
+        # genome length and how much repetitive content each genome has
+        scaffold_uniq_len = {
+            scaffold.name: scaffold.length - (scaffold.length *
+                                              scaffold.repetitiveness)
+            for scaffold in self.scaffolds_data.values()
+        }
+
+        abun = {
+            scaffold.name: (scaffold.read_count /
+                            scaffold_uniq_len[scaffold.name])
+            for scaffold in self.scaffolds_data.values()
+        }
+
+        summed_abun = sum(abun.values())
+        abun = {k: v / summed_abun for k, v in abun.items()}
+
         for scaffold in self.scaffolds_data.values():
             # Locations with strong evidence for the reference base
             confirmed = (scaffold.strong & scaffold.refmask)
@@ -446,10 +479,11 @@ class VariantCallData:
             yield {
                 "name": scaffold.name,
                 "length": scaffold.length,
+                "repetitiveness": scaffold.repetitiveness,
                 "coverage": coverage,
                 "median": median_coverage,
                 "uReads": scaffold.read_count,
-                "abundance": scaffold.read_count / self.uniquely_mapped_reads,
+                "abundance": abun[scaffold.name],
                 "callable": num_callable,
                 "callablePct": callable_pct,
                 "confirmed": num_confirmed,
@@ -470,10 +504,14 @@ class VariantCallData:
 
         # Return one last entry with all statistics for the genome as a whole
         lengths = [s.length for s in self.scaffolds_data.values()]
+        avg_repetitiveness = (sum(s.repetitiveness for s in
+                                  self.scaffolds_data.values()) /
+                              len(self.scaffolds_data))
 
         yield {
             "name": "TOTAL",
             "length": self.reference_length,
+            "repetitiveness": avg_repetitiveness,
             "coverage": (
                 # Weigh by scaffold length
                 sum(v * l for v, l in zip(all_coverages, lengths)) /
@@ -550,6 +588,7 @@ class ScaffoldCallData:
         self.mean_coverage = 0.0
         self.median_coverage = 0
         self.coverage_cutoff = 0
+        self.repetitiveness = 0.0
 
         self.gaps = []
 
@@ -706,7 +745,7 @@ class VariantCaller:
         """
         scaffolds = dict(zip(reference.scaffolds.keys(), reference.lengths))
         call_data = VariantCallData(scaffolds, self.min_gap_size)
-        call_data.build_refmask(reference)
+        call_data.load_reference(reference)
 
         logger.info("Estimating abundance...")
         for alignment in bamfile.fetch():

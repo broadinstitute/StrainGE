@@ -45,9 +45,10 @@ import pandas
 from skbio.stats.distance import DistanceMatrix
 
 from strainge.variant_caller import (VariantCaller, Reference,
-                                     analyze_repetitiveness)
-from strainge.sample_compare import (SampleComparison, kimura_distance,
-                                     count_ts_tv)
+                                     analyze_repetitiveness,
+                                     jukes_cantor_distance, count_ts_tv,
+                                     kimura_distance)
+from strainge.sample_compare import SampleComparison
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
                                   generate_call_summary_tsv, array_to_wig)
@@ -658,22 +659,138 @@ class CompareSubCommand(Subcommand):
             logger.info("Done.")
 
 
+class StrainComparer:
+    def __init__(self, ref_contigs, dist_correction, min_callable,
+                 min_abundance):
+        self.ref_contigs = ref_contigs
+        self.dist_correction = dist_correction
+        self.min_callable = min_callable
+        self.min_abundance = min_abundance
+
+    def compare_to_ref(self, sample):
+        try:
+            ref, sample = sample
+            logger.info("Loading %s", sample)
+            call_data = call_data_from_hdf5(sample)
+
+            # Only check metrics for contigs belonging to the given reference
+            ref_data = [d for d in call_data.summarize()
+                        if d['name'] in self.ref_contigs]
+
+            total_length = sum(d['length'] for d in ref_data)
+
+            if total_length == 0:
+                # Given reference not present in concatenated reference used
+                # for variant calling for this sample.
+                logger.info("Sample does not contain %s", ref)
+                return ref, sample, -1
+
+            callable = (sum(d['callablePct'] * d['length'] for d in ref_data)
+                        / total_length)
+
+            if callable < self.min_callable:
+                logger.info("Skipping %s, callable genome of %.1f%% is too "
+                            "low.", sample, callable)
+                return ref, sample, -1
+
+            abundance = sum(d['abundance'] for d in ref_data) / len(ref_data)
+
+            if abundance < self.min_abundance:
+                logger.info("Skipping %s, abundance %.2f too low.", sample,
+                            abundance)
+                return ref, sample, -1
+
+            logger.info("Comparing %s to %s (callable: %.2f, abundance: "
+                        "%.2f)", sample, ref, callable, abundance)
+
+            total_singles = sum(d['callable'] - d['multi'] for d in ref_data)
+
+            snp_rate = sum(d['pureSnpPct'] * (d['callable'] - d['multi'])
+                           for d in ref_data) / total_singles / 100
+
+            if self.dist_correction == 'jk':
+                dist = jukes_cantor_distance(snp_rate)
+            elif self.dist_correction == 'kimura':
+                ts_pct = sum(d['tsPct'] * (d['callable'] - d['multi'])
+                             for d in ref_data) / total_singles / 100
+                tv_pct = sum(d['tvPct'] * (d['callable'] - d['multi'])
+                             for d in ref_data) / total_singles / 100
+
+                dist = kimura_distance(ts_pct, tv_pct)
+            else:
+                dist = snp_rate
+
+            return ref, sample, dist
+        except KeyboardInterrupt:
+            pass
+
+    def compare_samples(self, samples):
+        try:
+            sample1, sample2 = samples
+            logger.info("Comparing %s to %s", sample1, sample2)
+
+            call_data1 = call_data_from_hdf5(sample1)
+            call_data2 = call_data_from_hdf5(sample2)
+
+            comparison = SampleComparison(call_data1, call_data2)
+            metrics = {k: v for k, v in comparison.metrics.items()
+                       if k in self.ref_contigs}
+            total_single = sum(m['single'] for m in metrics.values())
+
+            if total_single == 0:
+                return sample1, sample2, 0.0
+
+            snp_rate = sum(m['singleAgreePct'] * m['single'] / 100
+                           for m in metrics.values())
+            snp_rate = 1 - (snp_rate / 100)
+
+            if self.dist_correction == 'jk':
+                dist = jukes_cantor_distance(snp_rate)
+            elif self.dist_correction == 'kimura':
+                ts_pct = sum(m['tsPct'] * m['single'] / 100
+                             for m in metrics.values())
+                ts_pct /= total_single
+
+                tv_pct = sum(m['tvPct'] * m['single'] / 100
+                             for m in metrics.values())
+                tv_pct /= total_single
+
+                dist = kimura_distance(ts_pct, tv_pct)
+            else:
+                dist = snp_rate
+
+            return sample1, sample2, dist
+        except KeyboardInterrupt:
+            pass
+
+
 class DistSubcommand(Subcommand):
     """
-    Build a distance matrix using Kimura's two parameter model, for all strains
-    in samples close to a selected reference genome.
+    For all strains across multiple samples close to the same reference
+    genome, calculate the pairwise genetic distance and output it in matrix
+    form.
+
+    Can be used for ordination plots and approximate phylogenetic trees.
     """
 
     def register_arguments(self, subparser: argparse.ArgumentParser):
         subparser.add_argument(
             '-r', '--reference', type=Path,
-            help="The reference genome to base the tree on."
+            help="Analyze strains across samples close to this reference "
+                 "genome"
         )
 
         subparser.add_argument(
-            '-x', '--min-coverage', type=float, required=False, default=0.5,
-            help="Minimum coverage of the reference genome to consider a "
-                 "sample. Default %(default)sx."
+            '-d', '--dist-correction', default=None, choices=['jk', 'kimura'],
+            help="Genetic distance correction method, either Jukes Cantor ("
+                 "jk) or Kimura's two parameter model (kimura). If none "
+                 "given, then the SNP rate is used as distance."
+        )
+
+        subparser.add_argument(
+            '-c', '--min-callable', type=float, required=False, default=5,
+            help="Minimum percentage of callable genome to consider a strain "
+                 "for comparison. Default %(default)s%%."
         )
 
         subparser.add_argument(
@@ -697,117 +814,13 @@ class DistSubcommand(Subcommand):
             help="StrainGR call data HDF5 file for each sample."
         )
 
-    def _do_ref_compare(self, sample, ref_contigs, min_coverage,
-                        min_abundance):
-        try:
-            ref, sample = sample
-            logger.info("Loading %s", sample)
-            call_data = call_data_from_hdf5(sample)
-
-            total_length = sum(call_data.scaffolds_data[s].length for s in
-                               ref_contigs if s in call_data.scaffolds_data)
-
-            if total_length == 0:
-                # Strain not present in this sample
-                logger.info("Sample does not contain %s", ref)
-                return ref, sample, -1
-
-            # Sometimes our concatenated StrainGR reference does not include
-            # all scaffolds of the original reference, for example small
-            # plasmids are often filtered. Only analyse reference contigs that
-            # are actually present in our call data.
-            ref_contigs = {r for r in ref_contigs if r in
-                           call_data.scaffolds_data}
-
-            coverage = sum(
-                call_data.scaffolds_data[s].mean_coverage *
-                call_data.scaffolds_data[s].length
-                for s in ref_contigs
-            ) / total_length
-
-            if coverage < min_coverage:
-                logger.info("Skipping %s, coverage %.2f too low.", sample,
-                            coverage)
-                return ref, sample, -1
-
-            abundance = (sum(call_data.scaffolds_data[s].read_count
-                             for s in ref_contigs)
-                         / call_data.uniquely_mapped_reads)
-
-            if abundance < min_abundance:
-                logger.info("Skipping %s, abundance %.2f too low.", sample,
-                            abundance)
-                return ref, sample, -1
-
-            logger.info("Comparing %s to %s (mean coverage: %.2f, abundance: "
-                        "%.2f)", sample, ref, coverage, abundance)
-
-            total_singles = 0
-            total_ts = 0
-            total_tv = 0
-            for scaffold in call_data.scaffolds_data.values():
-                if scaffold.name not in ref_contigs:
-                    continue
-
-                singles = (scaffold.strong & (scaffold.strong - 1)) == 0
-                singles &= scaffold.strong > 0
-                total_singles += numpy.count_nonzero(singles)
-
-                snps = scaffold.strong & ~scaffold.refmask
-                single_snps = (singles & snps).astype(bool)
-                logger.info("Scaffold %s has %d single allele snps.",
-                            scaffold.name, numpy.count_nonzero(single_snps))
-
-                transitions, transversions = count_ts_tv(
-                    scaffold.refmask[single_snps],
-                    scaffold.strong[single_snps]
-                )
-
-                total_ts += transitions
-                total_tv += transversions
-
-            ts_pct = total_ts / total_singles
-            tv_pct = total_tv / total_singles
-
-            logger.info("Singles: %d, ts: %d (%.2f%%), tv: %d (%.2f%%)",
-                        total_singles, total_ts, ts_pct, total_tv, tv_pct)
-
-            return ref, sample, kimura_distance(ts_pct, tv_pct)
-        except KeyboardInterrupt:
-            pass
-
-    def _do_sample_compare(self, samples, ref_contigs):
-        try:
-            sample1, sample2 = samples
-            logger.info("Comparing %s to %s", sample1, sample2)
-
-            call_data1 = call_data_from_hdf5(sample1)
-            call_data2 = call_data_from_hdf5(sample2)
-
-            comparison = SampleComparison(call_data1, call_data2)
-            metrics = {k: v for k, v in comparison.metrics.items()
-                       if k in ref_contigs}
-            total_single = sum(m['single'] for m in metrics.values())
-
-            if total_single == 0:
-                return sample1, sample2, 0.0
-
-            ts_pct = sum(m['transitionsPct'] * m['single'] / 100
-                         for k, m in metrics.items())
-            ts_pct /= total_single
-
-            tv_pct = sum(m['transversionsPct'] * m['single'] / 100
-                         for m in metrics.values())
-            tv_pct /= total_single
-
-            return sample1, sample2, kimura_distance(ts_pct, tv_pct)
-        except KeyboardInterrupt:
-            pass
-
-    def __call__(self, reference, samples, min_coverage, min_abundance,
-                 processes, output, *args, **kwargs):
+    def __call__(self, reference, samples, dist_correction,
+                 min_callable, min_abundance, processes, output, *args,
+                 **kwargs):
         # Check which contigs belong to this reference genome
-        logger.info("Building tree for reference %s", reference.stem)
+        logger.info("Calculating distance matrix for reference %s",
+                    reference.stem)
+        logger.info("Genetic distance correction method: %s", dist_correction)
         logger.info("Loading reference scaffold IDs...")
         with open_compressed(reference) as f:
             ref_contigs = {r.metadata['id']
@@ -815,13 +828,13 @@ class DistSubcommand(Subcommand):
 
         logger.info("Inspecting scaffolds %s", ref_contigs)
 
+        comparer = StrainComparer(ref_contigs, dist_correction,
+                                  min_callable, min_abundance)
+
         with multiprocessing.Pool(processes) as p:
             logger.info("Comparing samples to reference...")
             ref_scores = list(p.imap_unordered(
-                functools.partial(self._do_ref_compare,
-                                  ref_contigs=ref_contigs,
-                                  min_coverage=min_coverage,
-                                  min_abundance=min_abundance),
+                comparer.compare_to_ref,
                 ((reference.stem, sample) for sample in samples),
                 chunksize=2**4
             ))
@@ -829,7 +842,8 @@ class DistSubcommand(Subcommand):
             exclude_samples = set(s[1] for s in ref_scores if s[2] == -1)
             for sample in exclude_samples:
                 logger.info("Excluding sample %s because the reference has "
-                            "too low coverage or too low abundance.", sample)
+                            "too low callable genome or is at too low "
+                            "abundance.", sample)
 
             samples = [s for s in samples if s not in exclude_samples]
             sample_ix = {s.stem: i+1 for i, s in enumerate(samples)}
@@ -838,6 +852,7 @@ class DistSubcommand(Subcommand):
 
             dm_array = numpy.zeros((len(names), len(names)))
 
+            # Fill in ref-to-sample scores
             for _, sample, score in ref_scores:
                 if sample in exclude_samples:
                     continue
@@ -848,11 +863,10 @@ class DistSubcommand(Subcommand):
                 dm_array[i, j] = score
                 dm_array[j, i] = score
 
-            logger.info("Comparing samples to eachother...")
+            logger.info("Comparing samples to each other...")
             pair_iter = itertools.combinations(samples, 2)
             sample_scores = list(p.imap_unordered(
-                functools.partial(self._do_sample_compare,
-                                  ref_contigs=ref_contigs),
+                comparer.compare_samples,
                 pair_iter,
                 chunksize=2**4
             ))
@@ -873,8 +887,12 @@ class DistSubcommand(Subcommand):
 
 class TreeSubcommand(Subcommand):
     """
-    Build an approximate phylogenetic tree based on Kimura's two parameter
-    model, for all strains close to a selected reference genome.
+    Build an approximate phylogenetic tree based on a given distance matrix,
+    using neighbour joining.
+
+    Because our pairwise distances are pretty rough (especially at lower
+    coverages), the triangle inequality may not hold, and the resulting tree
+    may not be accurate.
     """
 
     def register_arguments(self, subparser: argparse.ArgumentParser):

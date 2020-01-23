@@ -33,7 +33,7 @@ import logging
 import numpy
 from intervaltree import IntervalTree
 
-from strainge.variant_caller import Allele
+from strainge.variant_caller import count_ts_tv
 from strainge.utils import pct
 
 logger = logging.getLogger(__name__)
@@ -163,9 +163,9 @@ class SampleComparison:
             "BnotAweak": b_not_aweak_cnt,
             "BnotAweakPct": b_not_aweak_pct,
             "transitions": transitions,
-            "transitionsPct": transitions_pct * 100,
+            "tsPct": transitions_pct * 100,
             "transversions": transversions,
-            "transversionsPct": transversions_pct * 100
+            "tvPct": transversions_pct * 100
         }
 
     def compare_thing(self, common, thing):
@@ -222,39 +222,3 @@ class SampleComparison:
         }
 
 
-def count_ts_tv(array1, array2):
-    """Count number of transitions and transversions in an Allele array."""
-
-    assert len(array1) == len(array2)
-
-    transition_pairs = frozenset([
-        (Allele.A, Allele.G),
-        (Allele.G, Allele.A),
-        (Allele.C, Allele.T),
-        (Allele.T, Allele.C)
-    ])
-
-    transitions = 0
-    transversions = 0
-    for pair in zip(array1, array2):
-        if pair in transition_pairs:
-            transitions += 1
-        else:
-            transversions += 1
-
-    return transitions, transversions
-
-
-def kimura_distance(transitions, transversions):
-    """Calculate Kimura 2 parameter distance.
-
-    Parameters
-    ----------
-    transitions : float
-        Fraction of transitions
-    transversions : float
-        Fraction of transversions
-    """
-
-    return -0.5 * math.log((1 - 2*transitions - transversions) *
-                           math.sqrt(1 - 2*transversions))

@@ -149,6 +149,48 @@ def scale_min_gap_size(min_gap, mean_coverage):
     return int(min_gap / lw) if lw > 0 else min_gap
 
 
+def jukes_cantor_distance(snp_rate):
+    return -0.75 * math.log(1 - (4/3) * snp_rate)
+
+
+def count_ts_tv(array1, array2):
+    """Count number of transitions and transversions in an Allele array."""
+
+    assert len(array1) == len(array2)
+
+    transition_pairs = frozenset([
+        (Allele.A, Allele.G),
+        (Allele.G, Allele.A),
+        (Allele.C, Allele.T),
+        (Allele.T, Allele.C)
+    ])
+
+    transitions = 0
+    transversions = 0
+    for pair in zip(array1, array2):
+        if pair in transition_pairs:
+            transitions += 1
+        else:
+            transversions += 1
+
+    return transitions, transversions
+
+
+def kimura_distance(transitions, transversions):
+    """Calculate Kimura 2 parameter distance.
+
+    Parameters
+    ----------
+    transitions : float
+        Fraction of transitions
+    transversions : float
+        Fraction of transversions
+    """
+
+    return -0.5 * math.log((1 - 2*transitions - transversions) *
+                           math.sqrt(1 - 2*transversions))
+
+
 class Reference:
     """
     Some helper function to manage coordinates on a concatenated reference.
@@ -225,7 +267,7 @@ def analyze_repetitiveness(fpath, minmatch=250):
     with tempfile.TemporaryDirectory() as tmpdir:
         prefix = f"{tmpdir}/nucmer"
 
-        cmd = ['nucmer', '--maxmatch', '--nosimplify', '--noextend',
+        cmd = ['nucmer', '--maxmatch', '--nosimplify', '--noextend', '-g', '0',
                '-l', str(minmatch), '-p', prefix, fpath, fpath]
 
         logger.info("Running nucmer...")
@@ -398,6 +440,9 @@ class VariantCallData:
         total_high_cov = 0
         total_gaps = 0
         total_gap_length = 0
+        total_ts = 0
+        total_tv = 0
+        total_singles = 0
 
         # Calculate normalization factor for strain abundances, based on
         # genome length and how much repetitive content each genome has
@@ -475,6 +520,23 @@ class VariantCallData:
             total_gaps += num_gaps
             total_gap_length += gap_length
 
+            singles = (scaffold.strong & (scaffold.strong - 1)) == 0
+            singles &= scaffold.strong > 0
+            num_singles = numpy.count_nonzero(singles)
+
+            single_snps = (singles & snps).astype(bool)
+            transitions, transversions = count_ts_tv(
+                scaffold.refmask[single_snps],
+                scaffold.strong[single_snps]
+            )
+
+            ts_pct = pct(transitions, num_singles)
+            tv_pct = pct(transversions, num_singles)
+
+            total_ts += transitions
+            total_tv += transversions
+            total_singles += num_singles
+
             yield {
                 "name": scaffold.name,
                 "length": scaffold.length,
@@ -498,7 +560,11 @@ class VariantCallData:
                 "high": num_high_cov,
                 "highPct": high_pct,
                 "gapCount": num_gaps,
-                "gapLength": gap_length
+                "gapLength": gap_length,
+                "transitions": transitions,
+                "tsPct": ts_pct,
+                "transversions": transversions,
+                "tvPct": tv_pct
             }
 
         # Return one last entry with all statistics for the genome as a whole
@@ -534,7 +600,11 @@ class VariantCallData:
             "high": total_high_cov,
             "highPct": pct(total_high_cov, self.reference_length),
             "gapCount": total_gaps,
-            "gapLength": total_gap_length
+            "gapLength": total_gap_length,
+            "transitions": total_ts,
+            "tsPct": pct(total_ts, total_singles),
+            "transversions": total_tv,
+            "tvPct": pct(total_tv, total_singles)
         }
 
 

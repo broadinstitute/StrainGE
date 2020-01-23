@@ -61,8 +61,8 @@ A typical workflow using StrainGE is as follows:
 3. Run StrainGR to call SNPs and other variants, and to compare strains across
    samples.
 
-StrainGE is divided in two command line programs, `straingst` and `straingr`.
-An overview
+StrainGE is divided in two command line programs, `straingst` and `straingr`,
+which in itself are divided into subcommands:
 
 **Database creation**
 
@@ -83,6 +83,7 @@ An overview
 
 **StrainGR: Strain Genome Recovery**
 
+* `straingr prepare-ref`
 * `straingr call`
 * `straingr compare`
 * `straingr dist`
@@ -236,40 +237,59 @@ reference documentation below.
 
 ### StrainGR: strain-aware variant calling and sample comparisons
 
-#### 1. Inspect the StrainGST output and create a concatenated reference FASTA
+#### 1. Prepare a concatenated reference FASTA with `straingr prepare-ref`
 
-Before variant calling it's required to align reads from a metagenomic sample 
-to a reference. There are several options for what kind of reference to use:
+Our strategy to deconvolve strains in a mixture sample is to create a FASTA
+containing a close reference genome for each strain present in a sample, and
+then aligning the sample reads to this concatenated FASTA file. StrainGR
+provides a tool `straingr prepare-ref` to automatically create and analyze
+a concatenated reference genome from a list of StrainGST result files.
 
-1. A single reference genome from your database, for example the top strain
-   identified by StrainGST. This will present difficulties
-   if your sample has multiple strains, which will result in positions with
-   evidence for multiple alleles. Furthermore, to perform variant calling
-   comparisons across multiple samples, all samples will need to use the same
-   reference, which may not be ideal.
-2. Concatenate all reference genomes identified by StrainGST in a sample of 
-   interest to a single file. This will introduce redundancy in the
-   concatenated FASTA (because of shared sequence between strains), but the 
-   aligner will be able to place reads with strain specific alleles to the 
-   right location.
-3. In many cases, you have multiple related samples (for example multiple
-   samples from a patient at different time points). In many cases, you'll want
-   to compare these samples with each other. In such cases it makes sense to
-   collect all reference genomes identified by StrainGST across all these
-   samples, and concatenate them to a single file.
+By including multiple reference genomes into a single FASTA file, a read
+aligner will be able to place reads from unique portions of a strain's genome
+to the right place. On the other hand, including more genomes into a single 
+file will also introduce redundancy, from more conserved portions of each
+strain's genome. In those regions, a read aligner may not be able to
+unambiguously place reads. This is a trade-off: include as many reference
+genomes as required to deconvolve strains in a sample, without combining too
+closely related reference genomes that share a vast chunk of their genomes.
 
-StrainGR does not call variants in repetitive regions of the reference. By
-concatenating genomes you will introduce repetitive regions if two strains both
-have a collection of conserved genes for example. Reads from these regions will
-placed ambiguously by the aligner. StrainGR detects this and will ignore those
-locations. On the other hand, by concatenating reference genomes, reads with
-strain-specific alleles will be placed at the correct location. In the end,
-it's a trade off between how much of the genome will be ignored due to
-repetitiveness and being able to place strain-specific reads correctly. 
+The `prepare-ref` subcommand aids in building a concatenated reference from
+StrainGST result files. It determines which strains have been reported by
+StrainGST, and performs another clustering step on the reported strains to
+ensure the included reference strains are not too closely related. For 
+example, sometimes it happens that a patient has a strain that's somewhat
+in the middle between two reference genomes sitting next to each other on the
+tree. Due to sampling noise, StrainGST may report one reference genome in one
+sample, while reporting the other reference in the other sample with the same
+strain, but taken at a different time point. Here the clustering step ensures
+that only one of these two closely related strains gets included in the
+concatenated reference.
 
-It will depend on the project what option will be the best. The rest of the
-tutorial assumes that a file `refs_concat.fasta` exists with the reference
-genomes of interest.
+After concatenating the selected references, `prepare-ref` runs `nucmer` from
+the [MUMmer][mummer] toolkit to analyze how "repetitive" the concatenated
+reference is, i.e. how much sequence do the genomes concatenated share. These
+values are used to normalize strain abundances in a later step.
+
+To create a concatenated reference, use `straingr prepare-ref` as follows:
+
+```bash
+straingr prepare-ref -s path/to/straingst/*.tsv \
+   -p "path/to/refdir/{ref}.fa.gz" \
+   -S path/to/straingst_db/similarities.tsv
+   -o refs_concat.fasta
+```
+
+We give multiple StrainGST TSV result files to `prepare-ref` with the `-s`
+flag. Usually these are all StrainGST results file belonging to a single
+patient, or an other related set of samples. Next, we need to specify how
+`prepare-ref` can find the actual FASTA files belonging to strains reported by
+StrainGST, this is done using the "path-template" switch `-p`: in this given
+path "{ref}" will be replaced with the actual strain name. Don't forgot to use
+quotes, because { and } are special characters in many shells. We specify the
+similarities.tsv file created at the StrainGST database construction step, to
+reuse the calculated k-mer similarities again for clustering. The resulting
+concatenated reference will be written to `refs_concat.fasta`.
 
 #### 2. Align reads to the reference
 
@@ -281,12 +301,18 @@ The following command aligns the reads with `bwa mem` and outputs a sorted BAM
 file:
 
 ```bash
-bwa mem -t 2 refs_concat.fasta sample1.1.fq.gz sample1.2.fq.gz \
+bwa mem -I 300 -t 2 refs_concat.fasta sample1.1.fq.gz sample1.2.fq.gz \
     | samtools sort -@ 2 -O BAM -o sample1.bam -
 
 # Also create BAM index
 samtools index sample1.bam
 ```
+
+We specify a fixed insert size to `bwa mem`, because if the species of interest
+in a metagenomic sample is at low abundance, there may be not enough reads per
+batch for `bwa mem` to infer the mean insert size, and reads in such a batch 
+will be marked as improperly paired. Optionally you can run `picard
+MarkDuplicates` on your alignment file.
 
 #### 3. Analyze read alignments to call variants
 
@@ -303,11 +329,8 @@ to output this table to a TSV file with the `-s` switch in the above command.
 There are more options for data output, it can output VCF files, BED tracks 
 and more, see the CLI reference documentation below.
 
-While the output to HDF5 is optional, it's strongly recommended to include this
-output file. It will serve as input for sample comparisons, and all other 
-output files (VCF, BED, summary stats) can be recreated at a later time using 
+You can recreate many of the additional data files from the HDF5 file using
 `straingr view`.
-
 
 #### 4. Compare strains across samples
 

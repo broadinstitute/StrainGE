@@ -32,7 +32,6 @@ import sys
 import json
 import logging
 import argparse
-import functools
 import itertools
 import multiprocessing
 from pathlib import Path
@@ -46,8 +45,7 @@ from skbio.stats.distance import DistanceMatrix
 
 from strainge.variant_caller import (VariantCaller, Reference,
                                      analyze_repetitiveness,
-                                     jukes_cantor_distance, count_ts_tv,
-                                     kimura_distance)
+                                     jukes_cantor_distance, kimura_distance)
 from strainge.sample_compare import SampleComparison
 from strainge.io.variants import (call_data_from_hdf5, call_data_to_hdf5,
                                   boolean_array_to_bedfile,  write_vcf,
@@ -705,10 +703,13 @@ class StrainComparer:
 
             total_singles = sum(d['callable'] - d['multi'] for d in ref_data)
 
-            snp_rate = sum(d['pureSnpPct'] * (d['callable'] - d['multi'])
+            snp_rate = sum(d['snpPct'] * (d['callable'] - d['multi'])
                            for d in ref_data) / total_singles / 100
 
-            if self.dist_correction == 'jk':
+            logger.debug("SNP rate: %.4f (total single calls: %d)", snp_rate,
+                         total_singles)
+
+            if self.dist_correction == 'jc':
                 dist = jukes_cantor_distance(snp_rate)
             elif self.dist_correction == 'kimura':
                 ts_pct = sum(d['tsPct'] * (d['callable'] - d['multi'])
@@ -740,20 +741,21 @@ class StrainComparer:
             if total_single == 0:
                 return sample1, sample2, 0.0
 
-            snp_rate = sum(m['singleAgreePct'] * m['single'] / 100
-                           for m in metrics.values())
+            snp_rate = sum(m['singleAgreePct'] * m['single']
+                           for m in metrics.values()) / total_single
             snp_rate = 1 - (snp_rate / 100)
 
-            if self.dist_correction == 'jk':
+            logger.debug("SNP rate: %.4f (total single calls: %d)", snp_rate,
+                         total_single)
+
+            if self.dist_correction == 'jc':
                 dist = jukes_cantor_distance(snp_rate)
             elif self.dist_correction == 'kimura':
-                ts_pct = sum(m['tsPct'] * m['single'] / 100
-                             for m in metrics.values())
-                ts_pct /= total_single
+                ts_pct = sum(m['tsPct'] * m['single']
+                             for m in metrics.values()) / total_single / 100
 
-                tv_pct = sum(m['tvPct'] * m['single'] / 100
-                             for m in metrics.values())
-                tv_pct /= total_single
+                tv_pct = sum(m['tvPct'] * m['single']
+                             for m in metrics.values()) / total_single / 100
 
                 dist = kimura_distance(ts_pct, tv_pct)
             else:
@@ -781,9 +783,9 @@ class DistSubcommand(Subcommand):
         )
 
         subparser.add_argument(
-            '-d', '--dist-correction', default=None, choices=['jk', 'kimura'],
+            '-d', '--dist-correction', default=None, choices=['jc', 'kimura'],
             help="Genetic distance correction method, either Jukes Cantor ("
-                 "jk) or Kimura's two parameter model (kimura). If none "
+                 "jc) or Kimura's two parameter model (kimura). If none "
                  "given, then the SNP rate is used as distance."
         )
 

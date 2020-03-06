@@ -49,8 +49,8 @@ TSV_FIELDS = (
     ("uReads", "%d"), ("abundance", "%.3f"),
     ("median", "%d"), ("callable", "%d"), ("callablePct", "%.3f"),
     ("confirmed", "%d"), ("confirmedPct", "%.3f"),
-    ("snps", "%d"), ("snpPct", "%.3f"), ("pureSnps", "%d"),
-    ("pureSnpPct", "%.3f"), ("lowmq", "%d"), ("lowmqPct", "%.3f"),
+    ("snps", "%d"), ("snpPct", "%.3f"), ("multi", "%d"),
+    ("multiPct", "%.3f"), ("lowmq", "%d"), ("lowmqPct", "%.3f"),
     ("high", "%d"), ("highPct", "%.3f"), ("gapCount", "%d"),
     ("gapLength", "%d")
 )

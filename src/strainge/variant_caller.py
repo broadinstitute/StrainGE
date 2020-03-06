@@ -150,7 +150,7 @@ def scale_min_gap_size(min_gap, mean_coverage):
 
 
 def jukes_cantor_distance(snp_rate):
-    return -0.75 * math.log(1 - (4/3) * snp_rate)
+    return -0.75 * math.log(1 - ((4/3) * snp_rate))
 
 
 def count_ts_tv(array1, array2):
@@ -435,7 +435,6 @@ class VariantCallData:
         total_confirmed = 0
         total_snps = 0
         total_multi = 0
-        total_pure = 0
         total_lowmq = 0
         total_high_cov = 0
         total_gaps = 0
@@ -465,15 +464,22 @@ class VariantCallData:
             # Locations with strong evidence for the reference base
             confirmed = (scaffold.strong & scaffold.refmask)
 
+            # Positions with only a single allele (whether it's the reference
+            # or not)
+            # (x & (x - 1)) turns of highest bit in x, this will result in a
+            # non-zero value if we have multiple alleles (that is, multiple
+            # bits set)
+            singles = (scaffold.strong & (scaffold.strong - 1)) == 0
+            singles &= scaffold.strong > 0
+            num_singles = numpy.count_nonzero(singles)
+            total_singles += num_singles
+
             # Locations where we have strong evidence something else than the
-            # reference (not mutually exclusive with the above!)
-            snps = (scaffold.strong & ~scaffold.refmask)
+            # reference
+            snps = (scaffold.strong & ~scaffold.refmask) & singles
 
             # Locations where we have strong evidence for multiple bases (could
             # be both reference or not)
-            # (x & (x - 1)) turns of highest bit in x, will result in a
-            # non-zero value if we have multiple alleles (that is, multiple
-            # bits set)
             multi = (scaffold.strong & (scaffold.strong - 1)) > 0
 
             # Consider a locus callable if we have a strong call
@@ -500,12 +506,8 @@ class VariantCallData:
             total_snps += num_snps
 
             num_multi = numpy.count_nonzero(multi)
-            multi_pct = pct(num_multi, num_snps)
+            multi_pct = pct(num_multi, num_callable)
             total_multi += num_multi
-
-            pure_snps = num_snps - num_multi
-            pure_snp_pct = pct(pure_snps, num_callable)
-            total_pure += pure_snps
 
             num_lowmq = numpy.count_nonzero(scaffold.lowmq)
             lowmq_pct = pct(num_lowmq, scaffold.length)
@@ -520,14 +522,9 @@ class VariantCallData:
             total_gaps += num_gaps
             total_gap_length += gap_length
 
-            singles = (scaffold.strong & (scaffold.strong - 1)) == 0
-            singles &= scaffold.strong > 0
-            num_singles = numpy.count_nonzero(singles)
-
-            single_snps = (singles & snps).astype(bool)
             transitions, transversions = count_ts_tv(
-                scaffold.refmask[single_snps],
-                scaffold.strong[single_snps]
+                scaffold.refmask[snps],
+                scaffold.strong[snps]
             )
 
             ts_pct = pct(transitions, num_singles)
@@ -535,7 +532,6 @@ class VariantCallData:
 
             total_ts += transitions
             total_tv += transversions
-            total_singles += num_singles
 
             yield {
                 "name": scaffold.name,
@@ -551,8 +547,6 @@ class VariantCallData:
                 "confirmedPct": confirmed_pct,
                 "snps": num_snps,
                 "snpPct": snp_pct,
-                "pureSnps": pure_snps,
-                "pureSnpPct": pure_snp_pct,
                 "multi": num_multi,
                 "multiPct": multi_pct,
                 "lowmq": num_lowmq,
@@ -592,9 +586,7 @@ class VariantCallData:
             "snps": total_snps,
             "snpPct": pct(total_snps, total_callable),
             "multi": total_multi,
-            "multiPct": pct(total_multi, total_snps),
-            "pureSnps": total_pure,
-            "pureSnpPct": pct(total_pure, total_callable),
+            "multiPct": pct(total_multi, total_callable),
             "lowmq": total_lowmq,
             "lowmqPct": pct(total_lowmq, self.reference_length),
             "high": total_high_cov,

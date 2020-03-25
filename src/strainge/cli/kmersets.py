@@ -240,10 +240,7 @@ class KmermergeSubcommand(Subcommand):
             logger.info('Merging KmerSet file %s...', ksfile)
             ks = kmertools.kmerset_from_hdf5(ksfile)
             assert ks.k == k, "Incompatible kmer size {}".format(ks.k)
-            if kmerset:
-                kmerset = kmerset.merge_kmerset(ks)
-            else:
-                kmerset = ks
+            kmerset = kmerset.merge_kmerset(ks) if kmerset else ks
 
         if fingerprint:
             kmerset.min_hash(sketch_fraction)

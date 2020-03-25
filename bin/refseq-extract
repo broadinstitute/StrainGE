@@ -49,6 +49,7 @@ def extract(seqFile, outputDir):
     for seq in open_seq_file(seqFile):
         #print seq.description
         # remove all after comma
+        print(seq.description)
         name = seq.description.split(',')[0]
         name = name.replace("Escherichia coli", "E_coli")
         name = name.replace("Escherichia ", "E_")

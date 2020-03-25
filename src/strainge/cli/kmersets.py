@@ -204,6 +204,54 @@ class KmerizeSubcommand(Subcommand):
         kmerset.save(output, compress=True)
 
 
+class KmermergeSubcommand(Subcommand):
+    """Merge k-mer set files."""
+
+    def register_arguments(self, subparser: argparse.ArgumentParser):
+        subparser.add_argument(
+            'kmerfiles', nargs='+',
+            help='Input KmerSet files to be merged (hdf5 files)'
+        )
+        subparser.add_argument(
+            "-k", "--k", type=int, default=23,
+            help="K-mer size (default %(default)s)",
+        )
+        subparser.add_argument(
+            "-o", "--output",
+            help="Filename of the output HDF5."
+        )
+        subparser.add_argument(
+            "-f", "--fingerprint", action="store_true",
+            help="Compute and save min-hash fingerprint (sketch)."
+        )
+        subparser.add_argument(
+            '-s', '--sketch-fraction', type=float, default=0.01,
+            help="Fraction of k-mers to keep for a minhash sketch. Default: "
+                 "%(default)s"
+        )
+
+    def __call__(self, k, kmerfiles, output, limit=None, prune=None,
+                 fingerprint=False, sketch_fraction=0.002, filter=False,
+                 **kwargs):
+
+        kmerset = None
+
+        for ksfile in kmerfiles:
+            logger.info('Merging KmerSet file %s...', ksfile)
+            ks = kmertools.kmerset_from_hdf5(ksfile)
+            assert ks.k == k, "Incompatible kmer size {}".format(ks.k)
+            if kmerset:
+                kmerset = kmerset.merge_kmerset(ks)
+            else:
+                kmerset = ks
+
+        if fingerprint:
+            kmerset.min_hash(sketch_fraction)
+
+        logger.info("Writing k-merset to %s", output)
+        kmerset.save(output, compress=True)
+
+
 class KmersimRunner:
     """
     This class helps running the comparisons using multiprocessing. We cache

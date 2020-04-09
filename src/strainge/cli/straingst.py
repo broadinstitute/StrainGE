@@ -106,6 +106,10 @@ class StrainGSTSubCommand(Subcommand):
             help="minimum evenness (default: %(default).2f)"
         )
         subparser.add_argument(
+            "-u", "--universal", type=float, default=0.95,
+            help="Kmers in more than this fraction of genomes in the pan-genome database will be excluded from scoring (default: %(default).2f)"
+        )
+        subparser.add_argument(
             "-S", "--score-strains", action='append',
             help="only score these strains (primarily for debugging)"
         )
@@ -119,7 +123,7 @@ class StrainGSTSubCommand(Subcommand):
         )
 
     def __call__(self, pan, sample, output, debug_out, iterations, top,
-                 fingerprint, minfrac, score, evenness, score_strains,
+                 fingerprint, minfrac, score, evenness, universal, score_strains,
                  *args, **kwargs):
 
         logger.info("Running StrainGST on sample %s with database %s",
@@ -136,7 +140,7 @@ class StrainGSTSubCommand(Subcommand):
             return 1
 
         straingst = StrainGST(pandb, fingerprint, iterations, top, score,
-                              evenness, minfrac, debug_out)
+                              evenness, universal, minfrac, debug_out)
 
         results = straingst.find_close_references(sample_kmerset,
                                                   score_strains=score_strains)

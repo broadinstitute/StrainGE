@@ -142,7 +142,7 @@ Strain = namedtuple('Strain', [
 
 class StrainGST:
     def __init__(self, pangenome, use_fingerprint, iterations, top,
-                 min_score, min_evenness, min_frac, debug_hdf5=None):
+                 min_score, min_evenness, universal, min_frac, debug_hdf5=None):
         self.use_fingerprint = use_fingerprint
         self.iterations = iterations
         self.top = top
@@ -150,6 +150,7 @@ class StrainGST:
         self.min_score = min_score
         self.min_evenness = min_evenness
         self.min_frac = min_frac
+        self.universal = universal
 
         self.pangenome = pangenome
         self.debug_hdf5 = debug_hdf5
@@ -171,6 +172,14 @@ class StrainGST:
         sample.kmers = s.kmers
         sample.counts = s.counts
 
+        # Excludes will contain kmers removed from consideration because they
+        # are too common or they were in a found in a previous strain
+        n_genomes = len(self.pangenome.strain_names)
+        universal_limit = int(self.universal * n_genomes)
+
+        excludes = self.pangenome.kmers[self.pangenome.counts > universal_limit]
+        sample.exclude(excludes)
+
         # Metrics for Sample kmers in pan genome
         sample_pan_kmers = sample.counts.sum()
         sample_pan_kcov = sample_pan_kmers / sample.kmers.size
@@ -184,6 +193,7 @@ class StrainGST:
                     "database (%.2f%%)", sample.name, sample_pan_kmers,
                     sample_pan_pct)
 
+
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
                                  sample_pan_pct)
 
@@ -191,9 +201,7 @@ class StrainGST:
         if self.debug_hdf5:
             h5 = h5py.File(self.debug_hdf5, 'w')
 
-        # Excludes will contain kmers removed from consideration because they
-        # were in a found in a previous strain
-        excludes = None
+
 
         for i in range(self.iterations):
             # Output the remaining sample k-mers per iteration for debugging

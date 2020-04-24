@@ -27,7 +27,6 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
-import math
 import logging
 
 import numpy
@@ -222,7 +221,10 @@ class SampleComparison:
         for g in b.gaps:
             gaps_b[g.start:g.end] = True
 
-        jaccard = (gaps_a & gaps_b).sum() / (gaps_a | gaps_b).sum()
+        if (a_length + b_length) > 0:
+            jaccard = (gaps_a & gaps_b).sum() / (gaps_a | gaps_b).sum()
+        else:
+            jaccard = 1.0
 
         return {
             "Agaps": a_length,

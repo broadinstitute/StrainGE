@@ -212,13 +212,24 @@ class SampleComparison:
         a_shared_length = sum(g.length for g in a_shared)
         b_shared_length = sum(g.length for g in b_shared)
 
+        # Calculate gap similarity between two samples using jaccard
+        gaps_a = numpy.zeros((a.length,), dtype=bool)
+        gaps_b = numpy.zeros((b.length,), dtype=bool)
+
+        for g in a.gaps:
+            gaps_a[g.start:g.end] = True
+
+        for g in b.gaps:
+            gaps_b[g.start:g.end] = True
+
+        jaccard = (gaps_a & gaps_b).sum() / (gaps_a | gaps_b).sum()
+
         return {
             "Agaps": a_length,
             "AsharedGaps": a_shared_length,
             "AgapPct": pct(a_shared_length, a_length),
             "Bgaps": b_length,
             "BsharedGaps": b_shared_length,
-            "BgapPct": pct(b_shared_length, b_length)
+            "BgapPct": pct(b_shared_length, b_length),
+            "gapJaccardSim": jaccard
         }
-
-

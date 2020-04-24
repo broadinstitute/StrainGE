@@ -33,18 +33,19 @@ from strainge.variant_caller import Allele
 
 COMPARE_TSV_FIELDS = (
     ("scaffold", "%s"), ("common", "%d"),
-    ("commonPct", "%.2f"), ("single", "%d"),
-    ("singlePct", "%.2f"), ("singleAgree", "%d"), ("singleAgreePct", "%.2f"),
-    ("variants", "%d"), ("variantPct", "%.2f"), ("commonVariant", "%d"),
-    ("commonVariantPct", "%.2f"), ("variantAgree", "%d"),
-    ("variantAgreePct", "%.2f"),
-    ("transitions", "%d"), ("tsPct", "%.2f"),
-    ("transversions", "%d"), ("tvPct", "%.2f"),
-    ("AnotB", "%d"), ("AnotBpct", "%.2f"),
-    ("AnotBweak", "%d"), ("AnotBweakPct", "%.2f"), ("BnotA", "%d"),
-    ("BnotApct", "%.2f"), ("BnotAweak", "%d"), ("BnotAweakPct", "%.2f"),
-    ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.2f"),
-    ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.2f"),
+    ("commonPct", "%.3f"), ("single", "%d"),
+    ("singlePct", "%.3f"), ("singleAgree", "%d"), ("singleAgreePct", "%.3f"),
+    ("variants", "%d"), ("variantPct", "%.3f"), ("commonVariant", "%d"),
+    ("commonVariantPct", "%.3f"), ("variantAgree", "%d"),
+    ("variantAgreePct", "%.3f"),
+    ("transitions", "%d"), ("tsPct", "%.3f"),
+    ("transversions", "%d"), ("tvPct", "%.3f"),
+    ("AnotB", "%d"), ("AnotBpct", "%.3f"),
+    ("AnotBweak", "%d"), ("AnotBweakPct", "%.3f"), ("BnotA", "%d"),
+    ("BnotApct", "%.3f"), ("BnotAweak", "%d"), ("BnotAweakPct", "%.3f"),
+    ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.3f"),
+    ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.3f"),
+    ("gapJaccardSim", "%.3f"),
 )
 
 

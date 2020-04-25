@@ -145,7 +145,7 @@ def analyze_all(minscore = 0):
     total_df = None
     for cov in ['0.1x', '0.5x', '1x', '10x']:
         print("Old")
-        old = analyze(os.path.join(cov, '*-' + cov + '.tsv'), label=cov)
+        old = analyze(os.path.join(cov, '*-' + cov + '-bg.tsv'), label=cov)
         print("New")
         df = analyze(os.path.join(cov, '*-' + cov + '-bg-test.tsv'), minscore=minscore, label=cov)
         old_df = old_df.append(old) if old_df is not None else old

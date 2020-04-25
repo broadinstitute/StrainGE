@@ -29,6 +29,7 @@
 import csv
 import glob
 import re
+import pandas as pd
 
 #
 # Analyzes StrainGST benchmark output
@@ -62,7 +63,7 @@ def load_sample_refs(ref_list = "samples/ref_list.txt"):
 
 
 def load_db_refs(clusters = "db/clusters.tsv"):
-    return load_first_column(clusters)
+    return set(load_first_column(clusters))
 
 
 def sample_closest_db(sample_ref, db_refs, similarities):
@@ -92,18 +93,37 @@ def eval_stats(truth, results, sample_refs, sample_closest):
     truth_strains = set([sample_refs[t] for t in truth])
     closest_strains = set([sample_closest[t] for t in truth])
     strains = set([r['strain'] for r in results])
-    print(truth, truth_strains, closest_strains, strains)
-    return len(truth_strains), len(strains)
+    db = truth_strains & closest_strains
+    tp = strains & closest_strains
+    fn = closest_strains - strains
+    fp = strains - closest_strains
+    return len(tp), len(fn), len(fp), len(db)
+
+
+def summarize_stats(df):
+    n = len(df)
+    tp = df['TP'].sum()
+    fn = df['FN'].sum()
+    fp = df['FP'].sum()
+    p = tp / (tp + fp)
+    r = tp / (tp + fn)
+    f = 2 * p * r / (p + r)
+    return tp, fn, fp, p, r, f
 
 
 def analyze(tsvfiles):
     sref = load_sample_refs()
-    print(sref)
     dref = load_db_refs()
     sims = load_similarities()
     closest = [sample_closest_db(s, dref, sims) for s in sref]
-    print(closest)
+    allstats = []
     for tsv in glob.glob(tsvfiles):
         truth = sample_index_from_name(tsv)
         results = load_straingst_results(tsv)
         stats = eval_stats(truth, results, sref, closest)
+        allstats.append(stats)
+    df = pd.DataFrame(allstats, columns=['TP', 'FN', 'FP', 'DB'])
+    for indb in df['DB'].unique():
+        subset = df[df['DB'] == indb]
+        tp, fn, fp, p, r, f = summarize_stats(subset)
+        print("{:3d}: {:3d} {:3d} {:3d} {:.3f} {:.3f} {:.3f}".format(indb, tp, fn, fp, p, r, f))

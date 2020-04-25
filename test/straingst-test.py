@@ -28,6 +28,7 @@
 #
 import csv
 import glob
+import os
 import re
 import pandas as pd
 
@@ -75,12 +76,12 @@ def sample_closest_db(sample_ref, db_refs, similarities):
     return None
 
 
-def load_straingst_results(tsvfile):
+def load_straingst_results(tsvfile, minscore):
     with open(tsvfile, 'r') as tsv:
         tsv.__next__()
         tsv.__next__()
         reader = csv.DictReader(tsv, delimiter="\t")
-        resultlines = [line for line in reader]
+        resultlines = [line for line in reader if float(line['score']) >= minscore]
     return resultlines
 
 
@@ -100,7 +101,7 @@ def eval_stats(truth, results, sample_refs, sample_closest):
     return len(tp), len(fn), len(fp), len(db)
 
 
-def summarize_stats(df):
+def summarize_stats(df, label):
     n = len(df)
     tp = df['TP'].sum()
     fn = df['FN'].sum()
@@ -108,22 +109,55 @@ def summarize_stats(df):
     p = tp / (tp + fp)
     r = tp / (tp + fn)
     f = 2 * p * r / (p + r)
-    return tp, fn, fp, p, r, f
+    print("{:8s} {:3d} {:3d} {:3d} {:.3f} {:.3f} {:.3f}".format(label, tp, fn, fp, r, p, f))
+    return tp, fn, fp, r, p, f
 
 
-def analyze(tsvfiles):
+def report_stats(df, label):
+    indb_values = df['DB'].unique()
+    indb_values.sort()
+    for indb in indb_values:
+        subset = df[df['DB'] == indb]
+        summarize_stats(subset, label + ' ' + str(indb))
+    summarize_stats(df, label)
+
+
+def analyze(tsvfiles, label='All', minscore=0):
     sref = load_sample_refs()
     dref = load_db_refs()
     sims = load_similarities()
     closest = [sample_closest_db(s, dref, sims) for s in sref]
     allstats = []
     for tsv in glob.glob(tsvfiles):
-        truth = sample_index_from_name(tsv)
-        results = load_straingst_results(tsv)
-        stats = eval_stats(truth, results, sref, closest)
+        try:
+            truth = sample_index_from_name(tsv)
+            results = load_straingst_results(tsv, minscore)
+            stats = eval_stats(truth, results, sref, closest)
+        except:
+            stats = 0, 0, 0, 0
         allstats.append(stats)
     df = pd.DataFrame(allstats, columns=['TP', 'FN', 'FP', 'DB'])
-    for indb in df['DB'].unique():
-        subset = df[df['DB'] == indb]
-        tp, fn, fp, p, r, f = summarize_stats(subset)
-        print("{:3d}: {:3d} {:3d} {:3d} {:.3f} {:.3f} {:.3f}".format(indb, tp, fn, fp, p, r, f))
+    report_stats(df, label)
+    return df
+
+def analyze_all(minscore = 0):
+    old_df = None
+    total_df = None
+    for cov in ['0.1x', '0.5x', '1x', '10x']:
+        print("Old")
+        old = analyze(os.path.join(cov, '*-' + cov + '.tsv'), label=cov)
+        print("New")
+        df = analyze(os.path.join(cov, '*-' + cov + '-bg-test.tsv'), minscore=minscore, label=cov)
+        old_df = old_df.append(old) if old_df is not None else old
+        total_df = total_df.append(df) if total_df is not None else df
+    report_stats(old_df, 'Old All')
+    report_stats(total_df, 'New All')
+    print()
+
+
+def analyze_minscore(minmin = 0.01, maxmin = 0.02):
+    minscore = minmin
+    while minscore <= maxmin:
+        print("Minscore: " + str(minscore))
+        analyze_all(minscore)
+        minscore = round(minscore + 0.001, 3)

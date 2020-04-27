@@ -142,7 +142,7 @@ Strain = namedtuple('Strain', [
 
 class StrainGST:
     def __init__(self, pangenome, use_fingerprint, iterations, top,
-                 min_score, min_evenness, universal, min_frac, debug_hdf5=None):
+                 min_score, min_evenness, universal, min_frac, min_acct, debug_hdf5=None):
         self.use_fingerprint = use_fingerprint
         self.iterations = iterations
         self.top = top
@@ -150,6 +150,7 @@ class StrainGST:
         self.min_score = min_score
         self.min_evenness = min_evenness
         self.min_frac = min_frac
+        self.min_acct = min_acct
         self.universal = universal
 
         self.pangenome = pangenome
@@ -295,6 +296,13 @@ class StrainGST:
 
         sample_count = sample_counts.sum()
 
+        # converse of covered: what fraction of pan genome sample kmers are
+        # accounted for by this sample?
+        accounted = sample_count / sample.counts.sum()
+
+        if accounted < self.min_acct:
+            return None
+
         # Compute metrics
         # what fraction of the distinct strain kmers are in the sample?
         covered = kmers.size / strain_kmerset.kmers.size
@@ -305,10 +313,6 @@ class StrainGST:
 
         # mean genome coverage from all my kmers
         genome_coverage = sample_count / strain_kmerset.counts.sum()
-
-        # converse of covered: what fraction of pan genome sample kmers are
-        # accounted for by this sample?
-        accounted = sample_count / sample.counts.sum()
 
         # Lander-Waterman estimate of percentage covered if randomly
         # distributed across genome

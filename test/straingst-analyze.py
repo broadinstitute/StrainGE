@@ -36,6 +36,11 @@ import pandas as pd
 # Analyzes StrainGST benchmark output
 #
 
+coverages = ('10x', '1x', '0.5x', '0.1x')
+
+def cov_combinations():
+    return [(coverages[i], coverages[j]) for i in range(len(coverages)) for j in range(i, len(coverages))]
+
 
 def load_first_column(filename):
     with open(filename, 'r') as f:
@@ -90,7 +95,7 @@ def sample_index_from_name(filename):
     return [int(m)-1 for m in regex.findall(filename)]
 
 
-def eval_stats(truth, results, sample_refs, sample_closest):
+def eval_stats(truth, results, sample_refs, sample_closest, verbose=0):
     truth_strains = set([sample_refs[t] for t in truth])
     closest_strains = set([sample_closest[t] for t in truth])
     strains = set([r['strain'] for r in results])
@@ -98,6 +103,8 @@ def eval_stats(truth, results, sample_refs, sample_closest):
     tp = strains & closest_strains
     fn = closest_strains - strains
     fp = strains - closest_strains
+    if verbose > 1 and (fn or fp):
+        print(f"Expected: {closest_strains} Found: {strains}")
     return len(tp), len(fn), len(fp), len(db)
 
 
@@ -109,7 +116,7 @@ def summarize_stats(df, label):
     p = tp / (tp + fp)
     r = tp / (tp + fn)
     f = 2 * p * r / (p + r)
-    print("{:8s} {:3d} {:3d} {:3d} {:.3f} {:.3f} {:.3f}".format(label, tp, fn, fp, r, p, f))
+    print("{:s},{:d},{:d},{:d},{:f},{:f},{:f}".format(label, tp, fn, fp, r, p, f))
     return tp, fn, fp, r, p, f
 
 
@@ -118,11 +125,11 @@ def report_stats(df, label):
     indb_values.sort()
     for indb in indb_values:
         subset = df[df['DB'] == indb]
-        summarize_stats(subset, label + ' ' + str(indb))
-    summarize_stats(df, label)
+        summarize_stats(subset, label + ',' + str(indb))
+    summarize_stats(df, label + ',All')
 
 
-def analyze(tsvfiles, label='All', minscore=0):
+def analyze(tsvfiles, label='All', minscore=0, verbose=0):
     sref = load_sample_refs()
     dref = load_db_refs()
     sims = load_similarities()
@@ -132,26 +139,29 @@ def analyze(tsvfiles, label='All', minscore=0):
         try:
             truth = sample_index_from_name(tsv)
             results = load_straingst_results(tsv, minscore)
-            stats = eval_stats(truth, results, sref, closest)
+            stats = eval_stats(truth, results, sref, closest, verbose=verbose)
         except:
+            print("Error reading: " + tsv)
             stats = 0, 0, 0, 0
+        if verbose:
+            print(f"{stats[0]} {stats[1]} {stats[2]} {stats[3]} {tsv}")
         allstats.append(stats)
     df = pd.DataFrame(allstats, columns=['TP', 'FN', 'FP', 'DB'])
     report_stats(df, label)
     return df
 
-def analyze_all(minscore = 0):
+
+def analyze_1strain(verbose=0, minscore=0):
     old_df = None
     total_df = None
-    for cov in ['0.1x', '0.5x', '1x', '10x']:
-        print("Old")
-        old = analyze(os.path.join(cov, '*-' + cov + '-bg.tsv'), label=cov)
-        print("New")
-        df = analyze(os.path.join(cov, '*-' + cov + '-bg-test.tsv'), minscore=minscore, label=cov)
+    print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
+    for cov in coverages:
+        old = analyze(os.path.join(cov, '*-' + cov + '-bg-old.tsv'), label='Old,' + cov, verbose=verbose)
+        df = analyze(os.path.join(cov, '*-' + cov + '-bg.tsv'), minscore=minscore, label='New,' + cov, verbose=verbose)
         old_df = old_df.append(old) if old_df is not None else old
         total_df = total_df.append(df) if total_df is not None else df
-    report_stats(old_df, 'Old All')
-    report_stats(total_df, 'New All')
+    report_stats(old_df, 'Old,All')
+    report_stats(total_df, 'New,All')
     print()
 
 
@@ -159,5 +169,18 @@ def analyze_minscore(minmin = 0.01, maxmin = 0.02):
     minscore = minmin
     while minscore <= maxmin:
         print("Minscore: " + str(minscore))
-        analyze_all(minscore)
+        analyze_single(minscore)
         minscore = round(minscore + 0.001, 3)
+
+
+def analyze_2strain(minscore = 0):
+    total_df = None
+    print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
+    for cov in cov_combinations():
+        covdir = f"{cov[0]}-{cov[1]}"
+        df = analyze(os.path.join(covdir, "*.tsv"), minscore=minscore, label='2S,' + covdir)
+        total_df = total_df.append(df) if total_df is not None else df
+    report_stats(total_df, '2S,All')
+    print()
+
+\

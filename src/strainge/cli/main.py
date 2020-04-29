@@ -32,7 +32,7 @@ import argparse
 
 import strainge
 from strainge.cli.registry import SubcommandRegistry
-from strainge.cli.kmersets import (KmerizeSubcommand, KmersimSubCommand,
+from strainge.cli.kmersets import (KmerizeSubcommand, KmersimSubCommand, KmermergeSubcommand,
                                    ClusterSubcommand, CreateDBSubcommand,
                                    PlotSubcommand, StatsSubcommand)
 from strainge.cli.straingst import StrainGSTSubCommand
@@ -130,6 +130,7 @@ strainge_cli.register_subcommand('plot', subcommand=PlotSubcommand())
 straingst_cli = StrainGECLI()
 straingst_cli.register_subcommand('kmerize', subcommand=KmerizeSubcommand())
 straingst_cli.register_subcommand('kmersim', subcommand=KmersimSubCommand())
+straingst_cli.register_subcommand('kmermerge', subcommand=KmermergeSubcommand())
 straingst_cli.register_subcommand('cluster', subcommand=ClusterSubcommand())
 straingst_cli.register_subcommand('createdb', subcommand=CreateDBSubcommand())
 straingst_cli.register_subcommand('stats', subcommand=StatsSubcommand())

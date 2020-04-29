@@ -142,7 +142,7 @@ Strain = namedtuple('Strain', [
 
 class StrainGST:
     def __init__(self, pangenome, use_fingerprint, iterations, top,
-                 min_score, min_evenness, min_frac, debug_hdf5=None):
+                 min_score, min_evenness, universal, min_frac, min_acct, debug_hdf5=None):
         self.use_fingerprint = use_fingerprint
         self.iterations = iterations
         self.top = top
@@ -150,6 +150,8 @@ class StrainGST:
         self.min_score = min_score
         self.min_evenness = min_evenness
         self.min_frac = min_frac
+        self.min_acct = min_acct
+        self.universal = universal
 
         self.pangenome = pangenome
         self.debug_hdf5 = debug_hdf5
@@ -171,6 +173,14 @@ class StrainGST:
         sample.kmers = s.kmers
         sample.counts = s.counts
 
+        # Excludes will contain kmers removed from consideration because they
+        # are too common or they were in a found in a previous strain
+        n_genomes = len(self.pangenome.strain_names)
+        universal_limit = int(self.universal * n_genomes)
+
+        excludes = self.pangenome.kmers[self.pangenome.counts > universal_limit]
+        sample.exclude(excludes)
+
         # Metrics for Sample kmers in pan genome
         sample_pan_kmers = sample.counts.sum()
         sample_pan_kcov = sample_pan_kmers / sample.kmers.size
@@ -184,6 +194,7 @@ class StrainGST:
                     "database (%.2f%%)", sample.name, sample_pan_kmers,
                     sample_pan_pct)
 
+
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
                                  sample_pan_pct)
 
@@ -191,9 +202,7 @@ class StrainGST:
         if self.debug_hdf5:
             h5 = h5py.File(self.debug_hdf5, 'w')
 
-        # Excludes will contain kmers removed from consideration because they
-        # were in a found in a previous strain
-        excludes = None
+
 
         for i in range(self.iterations):
             # Output the remaining sample k-mers per iteration for debugging
@@ -287,6 +296,13 @@ class StrainGST:
 
         sample_count = sample_counts.sum()
 
+        # converse of covered: what fraction of pan genome sample kmers are
+        # accounted for by this sample?
+        accounted = sample_count / sample.counts.sum()
+
+        if accounted < self.min_acct:
+            return None
+
         # Compute metrics
         # what fraction of the distinct strain kmers are in the sample?
         covered = kmers.size / strain_kmerset.kmers.size
@@ -297,10 +313,6 @@ class StrainGST:
 
         # mean genome coverage from all my kmers
         genome_coverage = sample_count / strain_kmerset.counts.sum()
-
-        # converse of covered: what fraction of pan genome sample kmers are
-        # accounted for by this sample?
-        accounted = sample_count / sample.counts.sum()
 
         # Lander-Waterman estimate of percentage covered if randomly
         # distributed across genome

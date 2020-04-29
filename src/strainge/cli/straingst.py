@@ -106,7 +106,7 @@ class StrainGSTSubCommand(Subcommand):
             help="minimum evenness (default: %(default).2f)"
         )
         subparser.add_argument(
-            "-a", "--minacct", type=float, default=0.2,
+            "-a", "--minacct", type=float, default=0.0,
             help="minimum fraction of pan genome kmers accounted for by genome to be considered (default: %(default).2f)"
         )
         subparser.add_argument(

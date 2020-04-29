@@ -156,8 +156,8 @@ def analyze_1strain(verbose=0, minscore=0):
     total_df = None
     print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
     for cov in coverages:
-        old = analyze(os.path.join(cov, '*-' + cov + '-bg-old.tsv'), label='Old,' + cov, verbose=verbose)
-        df = analyze(os.path.join(cov, '*-' + cov + '-bg.tsv'), minscore=minscore, label='New,' + cov, verbose=verbose)
+        old = analyze(os.path.join(cov, '*-' + cov + '-bg.tsv'), label='Old,' + cov, verbose=verbose)
+        df = analyze(os.path.join(cov, '*-' + cov + '-bg-test.tsv'), minscore=minscore, label='New,' + cov, verbose=verbose)
         old_df = old_df.append(old) if old_df is not None else old
         total_df = total_df.append(df) if total_df is not None else df
     report_stats(old_df, 'Old,All')
@@ -175,12 +175,16 @@ def analyze_minscore(minmin = 0.01, maxmin = 0.02):
 
 def analyze_2strain(minscore = 0):
     total_df = None
+    old_df = None
     print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
     for cov in cov_combinations():
         covdir = f"{cov[0]}-{cov[1]}"
-        df = analyze(os.path.join(covdir, "*.tsv"), minscore=minscore, label='2S,' + covdir)
+        old = analyze(os.path.join(covdir, "*x.tsv"), minscore=minscore, label='Old2S,' + covdir)
+        df = analyze(os.path.join(covdir, "*-test.tsv"), minscore=minscore, label='New2S,' + covdir)
+        old_df = old_df.append(old) if old_df is not None else old
         total_df = total_df.append(df) if total_df is not None else df
-    report_stats(total_df, '2S,All')
+    report_stats(old_df, 'Old2S,All')
+    report_stats(total_df, 'New2S,All')
     print()
 
 \

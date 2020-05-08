@@ -170,7 +170,7 @@ def count_ts_tv(array1, array2):
     for pair in zip(array1, array2):
         if pair in transition_pairs:
             transitions += 1
-        else:
+        elif pair[0] != pair[1]:
             transversions += 1
 
     return transitions, transversions
@@ -476,7 +476,7 @@ class VariantCallData:
 
             # Locations where we have strong evidence something else than the
             # reference
-            snps = (scaffold.strong & ~scaffold.refmask) & singles
+            snps = ((scaffold.strong & ~scaffold.refmask) > 0) & singles
 
             # Locations where we have strong evidence for multiple bases (could
             # be both reference or not)
@@ -502,7 +502,7 @@ class VariantCallData:
             total_confirmed += num_confirmed
 
             num_snps = numpy.count_nonzero(snps)
-            snp_pct = pct(num_snps, num_callable)
+            snp_pct = pct(num_snps, num_singles)
             total_snps += num_snps
 
             num_multi = numpy.count_nonzero(multi)
@@ -545,6 +545,8 @@ class VariantCallData:
                 "callablePct": callable_pct,
                 "confirmed": num_confirmed,
                 "confirmedPct": confirmed_pct,
+                "single": num_singles,
+                "singlePct": pct(num_singles, scaffold.length),
                 "snps": num_snps,
                 "snpPct": snp_pct,
                 "multi": num_multi,
@@ -583,8 +585,10 @@ class VariantCallData:
             "callablePct": pct(total_callable, self.reference_length),
             "confirmed": total_confirmed,
             "confirmedPct": pct(total_confirmed, total_callable),
+            "single": total_singles,
+            "singlePct": pct(total_singles, self.reference_length),
             "snps": total_snps,
-            "snpPct": pct(total_snps, total_callable),
+            "snpPct": pct(total_snps, total_singles),
             "multi": total_multi,
             "multiPct": pct(total_multi, total_callable),
             "lowmq": total_lowmq,

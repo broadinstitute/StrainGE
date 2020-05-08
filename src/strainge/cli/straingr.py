@@ -701,21 +701,21 @@ class StrainComparer:
             logger.info("Comparing %s to %s (callable: %.2f, abundance: "
                         "%.2f)", sample, ref, callable, abundance)
 
-            total_singles = sum(d['callable'] - d['multi'] for d in ref_data)
+            total_singles = sum(d['single'] for d in ref_data)
 
-            snp_rate = sum(d['snpPct'] * (d['callable'] - d['multi'])
-                           for d in ref_data) / total_singles / 100
+            snp_rate = (sum(d['snpPct'] * d['single'] for d in ref_data)
+                        / total_singles / 100)
 
-            logger.debug("SNP rate: %.4f (total single calls: %d)", snp_rate,
-                         total_singles)
+            logger.info("SNP rate: %.4f (total single calls: %d)", snp_rate,
+                        total_singles)
 
             if self.dist_correction == 'jc':
                 dist = jukes_cantor_distance(snp_rate)
             elif self.dist_correction == 'kimura':
-                ts_pct = sum(d['tsPct'] * (d['callable'] - d['multi'])
-                             for d in ref_data) / total_singles / 100
-                tv_pct = sum(d['tvPct'] * (d['callable'] - d['multi'])
-                             for d in ref_data) / total_singles / 100
+                ts_pct = (sum(d['tsPct'] * d['single'] for d in ref_data)
+                          / total_singles / 100)
+                tv_pct = (sum(d['tvPct'] * d['single'] for d in ref_data)
+                          / total_singles / 100)
 
                 dist = kimura_distance(ts_pct, tv_pct)
             else:

@@ -790,7 +790,7 @@ class DistSubcommand(Subcommand):
         )
 
         subparser.add_argument(
-            '-c', '--min-callable', type=float, required=False, default=5,
+            '-c', '--min-callable', type=float, required=False, default=2.5,
             help="Minimum percentage of callable genome to consider a strain "
                  "for comparison. Default %(default)s%%."
         )

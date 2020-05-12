@@ -242,7 +242,7 @@ class Reference:
         return self.scaffolds[name].seq[coord-1:coord+length-1]
 
 
-def analyze_repetitiveness(fpath, minmatch=250):
+def analyze_repetitiveness(fpath, minmatch=300):
     """
     For StrainGR variant calling we often concatenate multiple reference
     genomes into a single FASTA. These genomes, however, can have shared
@@ -445,15 +445,15 @@ class VariantCallData:
 
         # Calculate normalization factor for strain abundances, based on
         # genome length and how much repetitive content each genome has
-        scaffold_uniq_len = {
-            scaffold.name: scaffold.length - (scaffold.length *
-                                              scaffold.repetitiveness)
+        avg_cov_uniq = {
+            scaffold.name: scaffold.read_count / (
+                scaffold.length - (scaffold.length * scaffold.repetitiveness))
             for scaffold in self.scaffolds_data.values()
         }
 
         abun = {
-            scaffold.name: (scaffold.read_count /
-                            scaffold_uniq_len[scaffold.name])
+            scaffold.name: ((avg_cov_uniq[scaffold.name] * scaffold.length) /
+                            self.reference_length)
             for scaffold in self.scaffolds_data.values()
         }
 

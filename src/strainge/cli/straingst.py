@@ -98,8 +98,8 @@ class StrainGSTSubCommand(Subcommand):
                  "default).2f)"
         )
         subparser.add_argument(
-            "-s", "--score", type=float, default=0.014,
-            help="minimum score (default: %(default).3f)"
+            "-s", "--score", type=float, default=0.01,
+            help="minimum score (default: %(default).2f)"
         )
         subparser.add_argument(
             "-e", "--evenness", type=float, default=0.6,

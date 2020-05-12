@@ -102,7 +102,7 @@ def pick_representative(clusters, similarities, priorities=None,
         sort_metric = {
             # Add priority in the tuple to give certain genomes priority when
             # sorting; all else being equal, use shortest label
-            label: (priorities.get(label, -len(label)), sum(sim)/len(sim))
+            label: (priorities.get(label, 1), sum(sim)/len(sim), -len(label))
             for label, sim in sim_per_label.items()
         }
     elif isinstance(metric, dict):

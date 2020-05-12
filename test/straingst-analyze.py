@@ -63,6 +63,36 @@ def load_similarities(similarity_file = "db/similarities.tsv"):
             similarities[s2] = sims2
     return similarities
 
+def load_anis(similarity_file = "db/similarities.tsv"):
+    anis = {}
+    with open(similarity_file, 'r') as sim:
+        reader = csv.DictReader(sim, delimiter="\t")
+        for s in reader:
+            s1 = s['kmerset1']
+            s2 = s['kmerset2']
+            if s1 > s2: s1, s2 = s2, s1
+            ani = float(s['ani'])
+            anis[(s1, s2)] = ani
+    return anis
+
+
+def get_ani(s1, s2, anis):
+    if s1 > s2: s1, s2 = s2, s1
+    return anis.get((s1, s2))
+
+
+def ref_distances():
+    refs = list(load_db_refs())
+    anis = load_anis()
+    results = []
+    for i in range(len(refs)):
+        for j in range(i + 1, len(refs)):
+            s1 = refs[i]
+            s2 = refs[j]
+            ani = get_ani(s1, s2, anis)
+            results.append((ani, s1, s2))
+    results.sort()
+    return results
 
 def load_sample_refs(ref_list = "samples/ref_list.txt"):
     return load_first_column(ref_list)
@@ -86,7 +116,7 @@ def load_straingst_results(tsvfile, minscore):
         tsv.__next__()
         tsv.__next__()
         reader = csv.DictReader(tsv, delimiter="\t")
-        resultlines = [line for line in reader if float(line['score']) >= minscore]
+        resultlines = [line for line in reader if float(line['score']) >= minscore and (len(line['i']) < 3 or line['i'][2] == '0')]
     return resultlines
 
 
@@ -103,9 +133,9 @@ def eval_stats(truth, results, sample_refs, sample_closest, verbose=0):
     tp = strains & closest_strains
     fn = closest_strains - strains
     fp = strains - closest_strains
-    if verbose > 1 and (fn or fp):
+    if verbose > 2 and (fn or fp):
         print(f"Expected: {closest_strains} Found: {strains}")
-    return len(tp), len(fn), len(fp), len(db)
+    return tp, fn, fp, db
 
 
 def summarize_stats(df, label):
@@ -129,35 +159,45 @@ def report_stats(df, label):
     summarize_stats(df, label + ',All')
 
 
-def analyze(tsvfiles, label='All', minscore=0, verbose=0):
+def analyze(tsvfiles, label='All', clusters="db/clusters.tsv", minscore=0, verbose=0):
     sref = load_sample_refs()
-    dref = load_db_refs()
+    dref = load_db_refs(clusters)
     sims = load_similarities()
+    anis = load_anis()
     closest = [sample_closest_db(s, dref, sims) for s in sref]
     allstats = []
     for tsv in glob.glob(tsvfiles):
         try:
             truth = sample_index_from_name(tsv)
             results = load_straingst_results(tsv, minscore)
-            stats = eval_stats(truth, results, sref, closest, verbose=verbose)
+            tp, fn, fp, db = eval_stats(truth, results, sref, closest, verbose=verbose)
+            stats = len(tp), len(fn), len(fp), len(db)
         except:
             print("Error reading: " + tsv)
             stats = 0, 0, 0, 0
-        if verbose:
+        if verbose > 2:
             print(f"{stats[0]} {stats[1]} {stats[2]} {stats[3]} {tsv}")
+        if fp and verbose > 1:
+            tstrains = [sref[t] for t in truth]
+            for f in fp:
+                dist = [get_ani(t, f, anis) for t in tstrains]
+                print(f"{tsv} FP {f} {max(dist)}")
         allstats.append(stats)
     df = pd.DataFrame(allstats, columns=['TP', 'FN', 'FP', 'DB'])
     report_stats(df, label)
     return df
 
 
-def analyze_1strain(verbose=0, minscore=0):
+def analyze_1strain(verbose=0, minscore=0, suffix="test", clusters="db/clusters.tsv"):
     old_df = None
     total_df = None
     print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
     for cov in coverages:
-        old = analyze(os.path.join(cov, '*-' + cov + '-bg.tsv'), label='Old,' + cov, verbose=verbose)
-        df = analyze(os.path.join(cov, '*-' + cov + '-bg-test.tsv'), minscore=minscore, label='New,' + cov, verbose=verbose)
+        old = analyze(os.path.join(cov, f"*-{cov}-bg-test"
+                                        f".tsv"), label='Old,' + cov, verbose=verbose,
+                      clusters="db/clusters.tsv", minscore=minscore)
+        df = analyze(os.path.join(cov, f"*-{cov}-bg-{suffix}.tsv"), minscore=minscore,
+                     label='New,' + cov, verbose=verbose, clusters=clusters)
         old_df = old_df.append(old) if old_df is not None else old
         total_df = total_df.append(df) if total_df is not None else df
     report_stats(old_df, 'Old,All')
@@ -166,25 +206,40 @@ def analyze_1strain(verbose=0, minscore=0):
 
 
 def analyze_minscore(minmin = 0.01, maxmin = 0.02):
-    minscore = minmin
+    minscore = minminp
     while minscore <= maxmin:
         print("Minscore: " + str(minscore))
         analyze_single(minscore)
         minscore = round(minscore + 0.001, 3)
 
 
-def analyze_2strain(minscore = 0):
+def analyze_2strain(minscore = 0, verbose = 0, suffix="test", clusters="db/clusters.tsv"):
     total_df = None
     old_df = None
     print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
     for cov in cov_combinations():
         covdir = f"{cov[0]}-{cov[1]}"
-        old = analyze(os.path.join(covdir, "*x.tsv"), minscore=minscore, label='Old2S,' + covdir)
-        df = analyze(os.path.join(covdir, "*-test.tsv"), minscore=minscore, label='New2S,' + covdir)
+        old = analyze(os.path.join(covdir, "*x-test.tsv"), minscore=minscore, label='Old2S,' + covdir,
+                      verbose = verbose, clusters="db/clusters.tsv")
+        df = analyze(os.path.join(covdir, f"*-{suffix}.tsv"), minscore=minscore, label='New2S,' + covdir,
+                     verbose = verbose, clusters=clusters)
         old_df = old_df.append(old) if old_df is not None else old
         total_df = total_df.append(df) if total_df is not None else df
     report_stats(old_df, 'Old2S,All')
     report_stats(total_df, 'New2S,All')
     print()
 
-\
+def analyze_db(db, minscore = 0):
+    dbstr = str(db)
+    print("1-strain")
+    analyze_1strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+    #print("2-strain")
+    #analyze_2strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+
+def db_score_test(db):
+    for n in range(10,20):
+        s = n / 1000
+        print(f"minscore {s}")
+        analyze_db(db, minscore=n/1000)
+        print()
+

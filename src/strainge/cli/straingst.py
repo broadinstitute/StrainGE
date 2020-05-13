@@ -133,7 +133,7 @@ class StrainGSTSubCommand(Subcommand):
         logger.info("Running StrainGST on sample %s with database %s",
                     sample, pan)
 
-        pandb = PanGenome(pan)
+        pandb = PanGenome(pan, fingerprint)
         sample_kmerset = Sample(sample)
 
         if pandb.k != sample_kmerset.k:

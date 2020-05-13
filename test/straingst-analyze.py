@@ -233,8 +233,8 @@ def analyze_db(db, minscore = 0):
     dbstr = str(db)
     print("1-strain")
     analyze_1strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
-    #print("2-strain")
-    #analyze_2strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+    print("2-strain")
+    analyze_2strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
 
 def db_score_test(db):
     for n in range(10,20):

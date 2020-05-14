@@ -556,6 +556,9 @@ class CreateDBSubcommand(Subcommand):
             return 1
 
         pankmerset = None
+        panfingerprint = None
+        fpf = None
+
         with h5py.File(output, 'w') as h5:
             for fname in kmersets:
                 name = kmertools.name_from_path(fname)
@@ -570,8 +573,18 @@ class CreateDBSubcommand(Subcommand):
                 else:
                     pankmerset = pankmerset.merge_kmerset(kset)
 
+                if fingerprint:
+                    fp = kset.fingerprint_as_kmerset()
+                    if not panfingerprint:
+                        panfingerprint = fp
+                        fpf = fp.fingerprint_fraction
+                    else:
+                        panfingerprint = panfingerprint.merge_kmerset(fp)
+
             if fingerprint:
-                pankmerset.min_hash()
+                pankmerset.fingerprint = panfingerprint.kmers
+                pankmerset.fingerprint_counts = panfingerprint.counts
+                pankmerset.fingerprint_fraction = fpf
 
             logger.info("Saving pan-genome database")
             pankmerset.save_hdf5(h5, compress="gzip")

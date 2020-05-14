@@ -409,11 +409,19 @@ class KmerSet(object):
         self.fingerprint.sort()
 
         ix = kmerizer.intersect_ix(self.kmers, self.fingerprint)
-        self.fingerprint_counts = self.kmers[ix]
+        self.fingerprint_counts = self.counts[ix]
 
-        self.finderprint_fraction = frac
+        self.fingerprint_fraction = frac
 
         return self.fingerprint
+
+
+    def fingerprint_override(self):
+        """Use the fingerprint instead of the full KmerSet"""
+        assert self.fingerprint is not None, "Can't use fingerprint if it's not there!"
+        self.kmers = self.fingerprint
+        self.counts = self.fingerprint_counts
+
 
     def fingerprint_as_kmerset(self):
         assert self.fingerprint is not None

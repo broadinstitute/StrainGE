@@ -31,6 +31,7 @@ import glob
 import os
 import re
 import pandas as pd
+from contextlib import redirect_stdout
 
 #
 # Analyzes StrainGST benchmark output
@@ -112,11 +113,18 @@ def sample_closest_db(sample_ref, db_refs, similarities):
 
 
 def load_straingst_results(tsvfile, minscore):
+    resultlines = []
     with open(tsvfile, 'r') as tsv:
         tsv.__next__()
         tsv.__next__()
         reader = csv.DictReader(tsv, delimiter="\t")
-        resultlines = [line for line in reader if float(line['score']) >= minscore and (len(line['i']) < 3 or line['i'][2] == '0')]
+        for line in reader:
+            i = line['i']
+            if not (len(i) == 1 or i[-1] == '0'):
+                continue
+            if float(line['score']) < minscore:
+                break
+            resultlines.append(line)
     return resultlines
 
 
@@ -188,58 +196,52 @@ def analyze(tsvfiles, label='All', clusters="db/clusters.tsv", minscore=0, verbo
     return df
 
 
-def analyze_1strain(verbose=0, minscore=0, suffix="test", clusters="db/clusters.tsv"):
-    old_df = None
+def analyze_1strain(suffix="test", verbose=0, minscore=0, clusters="db/clusters.tsv"):
     total_df = None
-    print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
+    print(f"Suffix,Cov,InDB,TP,FN,FP,R,P,F")
     for cov in coverages:
-        old = analyze(os.path.join(cov, f"*-{cov}-bg-test"
-                                        f".tsv"), label='Old,' + cov, verbose=verbose,
-                      clusters="db/clusters.tsv", minscore=minscore)
         df = analyze(os.path.join(cov, f"*-{cov}-bg-{suffix}.tsv"), minscore=minscore,
-                     label='New,' + cov, verbose=verbose, clusters=clusters)
-        old_df = old_df.append(old) if old_df is not None else old
+                     label=f"{suffix},{cov}", verbose=verbose, clusters=clusters)
         total_df = total_df.append(df) if total_df is not None else df
-    report_stats(old_df, 'Old,All')
-    report_stats(total_df, 'New,All')
-    print()
+    report_stats(total_df, f"{suffix},All")
 
 
-def analyze_minscore(minmin = 0.01, maxmin = 0.02):
-    minscore = minminp
-    while minscore <= maxmin:
-        print("Minscore: " + str(minscore))
-        analyze_single(minscore)
-        minscore = round(minscore + 0.001, 3)
 
-
-def analyze_2strain(minscore = 0, verbose = 0, suffix="test", clusters="db/clusters.tsv"):
+def analyze_2strain(suffix="test", minscore = 0, verbose = 0, clusters="db/clusters.tsv"):
     total_df = None
-    old_df = None
-    print("OldNew,Cov,InDB,TP,FN,FP,R,P,F")
+    print("Suffix,Cov,InDB,TP,FN,FP,R,P,F")
     for cov in cov_combinations():
         covdir = f"{cov[0]}-{cov[1]}"
-        old = analyze(os.path.join(covdir, "*x-test.tsv"), minscore=minscore, label='Old2S,' + covdir,
-                      verbose = verbose, clusters="db/clusters.tsv")
-        df = analyze(os.path.join(covdir, f"*-{suffix}.tsv"), minscore=minscore, label='New2S,' + covdir,
+        df = analyze(os.path.join(covdir, f"*-{suffix}.tsv"), minscore=minscore, label=f"{suffix},{covdir}",
                      verbose = verbose, clusters=clusters)
-        old_df = old_df.append(old) if old_df is not None else old
         total_df = total_df.append(df) if total_df is not None else df
-    report_stats(old_df, 'Old2S,All')
-    report_stats(total_df, 'New2S,All')
-    print()
+    report_stats(total_df, f"{suffix},All")
 
-def analyze_db(db, minscore = 0):
-    dbstr = str(db)
-    print("1-strain")
-    analyze_1strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
-    print("2-strain")
-    analyze_2strain(suffix=dbstr, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
 
-def db_score_test(db):
+
+def analyze_db(db, minscore = 0.0, fingerprint=False):
+    suffix = dbstr = str(db)
+    if fingerprint:
+        suffix += "-f"
+    if minscore:
+        outfile = f"analyze-{suffix}-{minscore}.csv"
+    else:
+        outfile = f"analyze-{suffix}.csv"
+    with redirect_stdout(open(outfile, 'w')):
+        print(f"1-strain minscore={minscore} fingerprint={fingerprint}")
+        analyze_1strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+        print(f"\n2-strain minscore={minscore} fingerprint={fingerprint}")
+        analyze_2strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+
+
+def db_score_test(db, fingerprint=False):
     for n in range(10,20):
         s = n / 1000
         print(f"minscore {s}")
-        analyze_db(db, minscore=n/1000)
-        print()
+        analyze_db(db, minscore=n/1000, fingerprint=fingerprint)
+
+def closest_sample(db):
+    clusters = f"db/clusters{db}.tsv"
+    refs = load_db_refs(clusters)
+
 

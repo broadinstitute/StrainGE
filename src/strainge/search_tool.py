@@ -190,7 +190,7 @@ class StrainGST:
 
         sorted_sample_counts = sample.counts.copy()
         sorted_sample_counts.sort()
-        logger.info(f"Before excludes: median {median_sample_count}, highest {sorted_sample_counts[-50:]}")
+        logger.info(f"Before excludes: n {sorted_sample_counts.size}, median {median_sample_count}, highest {sorted_sample_counts[-50:]}")
 
         # Excludes will contain kmers removed from consideration because they
         # are too common or they were in a found in a previous strain
@@ -216,7 +216,7 @@ class StrainGST:
 
         sorted_sample_counts = sample.counts.copy()
         sorted_sample_counts.sort()
-        logger.info(f"After excludes: median {np.median(sorted_sample_counts)}, highest {sorted_sample_counts[-50:]}")
+        logger.info(f"After excludes: n {sorted_sample_counts.size}, median {np.median(sorted_sample_counts)}, highest {sorted_sample_counts[-50:]}")
 
 
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,

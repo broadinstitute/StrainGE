@@ -179,10 +179,10 @@ def analyze(tsvfiles, label='All', clusters="db/clusters.tsv", minscore=0, verbo
             truth = sample_index_from_name(tsv)
             results = load_straingst_results(tsv, minscore)
             tp, fn, fp, db = eval_stats(truth, results, sref, closest, verbose=verbose)
-            stats = len(tp), len(fn), len(fp), len(db)
+            stats = tsv, len(tp), len(fn), len(fp), len(db)
         except:
             print("Error reading: " + tsv)
-            stats = 0, 0, 0, 0
+            stats = tsv, 0, 0, 0, 0
         if verbose > 2:
             print(f"{stats[0]} {stats[1]} {stats[2]} {stats[3]} {tsv}")
         if fp and verbose > 1:
@@ -191,7 +191,7 @@ def analyze(tsvfiles, label='All', clusters="db/clusters.tsv", minscore=0, verbo
                 dist = [get_ani(t, f, anis) for t in tstrains]
                 print(f"{tsv} FP {f} {max(dist)}")
         allstats.append(stats)
-    df = pd.DataFrame(allstats, columns=['TP', 'FN', 'FP', 'DB'])
+    df = pd.DataFrame(allstats, columns=['TSV', 'TP', 'FN', 'FP', 'DB'])
     report_stats(df, label)
     return df
 
@@ -204,6 +204,7 @@ def analyze_1strain(suffix="test", verbose=0, minscore=0, clusters="db/clusters.
                      label=f"{suffix},{cov}", verbose=verbose, clusters=clusters)
         total_df = total_df.append(df) if total_df is not None else df
     report_stats(total_df, f"{suffix},All")
+    return total_df
 
 
 
@@ -216,6 +217,7 @@ def analyze_2strain(suffix="test", minscore = 0, verbose = 0, clusters="db/clust
                      verbose = verbose, clusters=clusters)
         total_df = total_df.append(df) if total_df is not None else df
     report_stats(total_df, f"{suffix},All")
+    return total_df
 
 
 
@@ -229,10 +231,10 @@ def analyze_db(db, minscore = 0.0, fingerprint=False):
         outfile = f"analyze-{suffix}.csv"
     with redirect_stdout(open(outfile, 'w')):
         print(f"1-strain minscore={minscore} fingerprint={fingerprint}")
-        analyze_1strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+        df1 = analyze_1strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
         print(f"\n2-strain minscore={minscore} fingerprint={fingerprint}")
-        analyze_2strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
-
+        df2 = analyze_2strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+    return df1, df2
 
 def db_score_test(db, fingerprint=False):
     for n in range(10,20):
@@ -240,8 +242,43 @@ def db_score_test(db, fingerprint=False):
         print(f"minscore {s}")
         analyze_db(db, minscore=n/1000, fingerprint=fingerprint)
 
-def closest_sample(db):
+
+def dump_closest_refs(db):
     clusters = f"db/clusters{db}.tsv"
-    refs = load_db_refs(clusters)
+    sref = load_sample_refs()
+    dref = load_db_refs(clusters)
+    sims = load_similarities()
+    closest = [sample_closest_db(s, dref, sims) for s in sref]
+    with redirect_stdout(open(f"sample-refs-{db}.tsv", 'w')):
+        for i, s in enumerate(sref):
+            print(f"{s}\t{sref[i]}\t{closest[i]}")
+    return sref, closest
 
 
+def df_to_lookup_dict(df):
+    lookup = {}
+    pattern = re.compile(".*sample[0-9]+-")
+    for i in range(len(df)):
+        row = df.iloc[i]
+        tsv = row['TSV']
+        prefix = pattern.findall(tsv)[0]
+        lookup[prefix] = (row['TP'], row['FN'], row['FP'])
+    return lookup
+
+def compare_lookup_dict(d1, d2):
+    for k in d1:
+        if d1[k] != d2[k]:
+            print(f"{k}\t{d1[k]}\t{d2[k]}")
+
+
+
+def compare_fingerprint(db):
+    full1, full2 = analyze_db(db, fingerprint=False)
+    full1 = df_to_lookup_dict(full1)
+    full2 = df_to_lookup_dict(full2)
+    fp1, fp2 = analyze_db(db, fingerprint=True)
+    fp1 = df_to_lookup_dict(fp1)
+    fp2 = df_to_lookup_dict(fp2)
+    with redirect_stdout(open(f"fingerprint-diffs-{db}.tsv", 'w')):
+        compare_lookup_dict(full1, fp1)
+        compare_lookup_dict(full2, fp2)

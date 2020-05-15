@@ -185,6 +185,7 @@ class StrainGST:
         sample.kmers = s.kmers
         sample.counts = s.counts
 
+
         # Excludes will contain kmers removed from consideration because they
         # are too common or they were in a found in a previous strain
         n_genomes = len(self.pangenome.strain_names)
@@ -206,6 +207,10 @@ class StrainGST:
                     "database (%.2f%%)", sample.name, sample_pan_kmers,
                     sample_pan_pct)
 
+
+        sorted_sample_counts = sample.counts.copy()
+        sorted_sample_counts.sort()
+        logger.info(f"Highest sample counts: {sorted_sample_counts[-50:]}")
 
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
                                  sample_pan_pct)
@@ -305,7 +310,6 @@ class StrainGST:
         # how many times did each kmers occur in sample?
         ix = kmerizer.intersect_ix(sample.kmers, kmers)
         sample_counts = sample.counts[ix]
-
         sample_count = sample_counts.sum()
 
         # converse of covered: what fraction of pan genome sample kmers are

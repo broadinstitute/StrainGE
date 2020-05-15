@@ -31,6 +31,7 @@ import math
 import logging
 from collections import namedtuple
 import h5py
+import numpy as np
 
 from strainge import kmertools, kmerizer
 
@@ -210,7 +211,7 @@ class StrainGST:
 
         sorted_sample_counts = sample.counts.copy()
         sorted_sample_counts.sort()
-        logger.info(f"Highest sample counts: {sorted_sample_counts[-50:]}")
+        logger.info(f"Sample counts: median {np.median(sorted_sample_counts)}, highest {sorted_sample_counts[-50:]}")
 
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
                                  sample_pan_pct)

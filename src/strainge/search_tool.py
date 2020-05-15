@@ -186,17 +186,19 @@ class StrainGST:
         sample.kmers = s.kmers
         sample.counts = s.counts
 
+        median_sample_count = np.median(sample.counts)
+
         sorted_sample_counts = sample.counts.copy()
         sorted_sample_counts.sort()
-        logger.info(f"Before excludes: median {np.median(sorted_sample_counts)}, highest {sorted_sample_counts[-50:]}")
-
+        logger.info(f"Before excludes: median {median_sample_count}, highest {sorted_sample_counts[-50:]}")
 
         # Excludes will contain kmers removed from consideration because they
         # are too common or they were in a found in a previous strain
-        n_genomes = len(self.pangenome.strain_names)
-        universal_limit = int(self.universal * n_genomes)
+        #n_genomes = len(self.pangenome.strain_names)
+        #universal_limit = int(self.universal * n_genomes)
+        #excludes = self.pangenome.kmers[self.pangenome.counts > universal_limit]
 
-        excludes = self.pangenome.kmers[self.pangenome.counts > universal_limit]
+        excludes = sample.kmers[sample.counts > median_sample_count * 10]
         sample.exclude(excludes)
 
         # Metrics for Sample kmers in pan genome

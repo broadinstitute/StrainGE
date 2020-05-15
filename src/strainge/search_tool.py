@@ -204,7 +204,7 @@ class StrainGST:
             sample_pan_pct /= self.pangenome.fingerprint_fraction
 
         logger.info("Sample %s has %d k-mers (%d distinct) in common with pan-genome "
-                    "database (%.2f%%)", sample.name, sample_pan_kmers, sample.kmers.size,
+                    "database (%.3f%%)", sample.name, sample_pan_kmers, sample.kmers.size,
                     sample_pan_pct)
 
         result = StrainGSTResult(sample.kmers.size, sample_pan_kcov, sample_pan_pct)

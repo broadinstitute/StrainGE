@@ -186,19 +186,12 @@ class StrainGST:
         sample.kmers = s.kmers
         sample.counts = s.counts
 
-        median_sample_count = np.median(sample.counts)
-
-        sorted_sample_counts = sample.counts.copy()
-        sorted_sample_counts.sort()
-        logger.info(f"Before excludes: n {sorted_sample_counts.size}, median {median_sample_count}, highest {sorted_sample_counts[-50:]}")
-
         # Excludes will contain kmers removed from consideration because they
-        # are too common or they were in a found in a previous strain
-        #n_genomes = len(self.pangenome.strain_names)
-        #universal_limit = int(self.universal * n_genomes)
-        #excludes = self.pangenome.kmers[self.pangenome.counts > universal_limit]
-
-        excludes = sample.kmers[sample.counts > median_sample_count * 10]
+        # are too common or they were in a found in a previous strain. We exclude
+        # and kmers occurring in the sample more than a multiple of the median pangenome
+        # kmer frequency.
+        universal_limit = np.median(sample.counts) * self.universal
+        excludes = sample.kmers[sample.counts > universal_limit]
         sample.exclude(excludes)
 
         # Metrics for Sample kmers in pan genome
@@ -210,17 +203,11 @@ class StrainGST:
             # really minHash fraction
             sample_pan_pct /= self.pangenome.fingerprint_fraction
 
-        logger.info("Sample %s has %d k-mers in common with pan-genome "
-                    "database (%.2f%%)", sample.name, sample_pan_kmers,
+        logger.info("Sample %s has %d k-mers (%d distinct) in common with pan-genome "
+                    "database (%.2f%%)", sample.name, sample_pan_kmers, sample.kmers.size,
                     sample_pan_pct)
 
-        sorted_sample_counts = sample.counts.copy()
-        sorted_sample_counts.sort()
-        logger.info(f"After excludes: n {sorted_sample_counts.size}, median {np.median(sorted_sample_counts)}, highest {sorted_sample_counts[-50:]}")
-
-
-        result = StrainGSTResult(sample.kmers.size, sample_pan_kcov,
-                                 sample_pan_pct)
+        result = StrainGSTResult(sample.kmers.size, sample_pan_kcov, sample_pan_pct)
 
         h5 = None
         if self.debug_hdf5:

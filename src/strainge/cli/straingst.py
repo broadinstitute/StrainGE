@@ -110,8 +110,8 @@ class StrainGSTSubCommand(Subcommand):
             help="minimum fraction of pan genome kmers accounted for by genome to be considered (default: %(default).2f)"
         )
         subparser.add_argument(
-            "-u", "--universal", type=float, default=0.95,
-            help="Kmers in more than this fraction of genomes in the pan-genome database will be excluded from scoring (default: %(default).2f)"
+            "-u", "--universal", type=float, default=10.0,
+            help="exclude Kmers occurring more often in the sample than this times the median pangenome kmer frequency"
         )
         subparser.add_argument(
             "-S", "--score-strains", action='append',

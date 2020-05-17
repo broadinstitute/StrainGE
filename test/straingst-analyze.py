@@ -221,10 +221,12 @@ def analyze_2strain(suffix="test", minscore = 0, verbose = 0, clusters="db/clust
 
 
 
-def analyze_db(db, minscore = 0.0, fingerprint=False):
-    suffix = dbstr = str(db)
-    if fingerprint:
-        suffix += "-f"
+def analyze_db(db, minscore = 0.0, fingerprint=False, suffix=""):
+    dbstr = str(db)
+    if not suffix:
+        suffix = dbstr
+        if fingerprint:
+            suffix += "-f"
     if minscore:
         outfile = "analyze-{}-{:.3f}.csv".format(suffix, minscore)
     else:
@@ -236,11 +238,11 @@ def analyze_db(db, minscore = 0.0, fingerprint=False):
         df2 = analyze_2strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
     return df1, df2
 
-def db_score_test(db, fingerprint=False):
+def db_score_test(db, fingerprint=False, suffix=""):
     for n in range(10,55,5):
         s = n / 1000
         print(f"minscore {s}")
-        analyze_db(db, minscore=n/1000, fingerprint=fingerprint)
+        analyze_db(db, minscore=n/1000, fingerprint=fingerprint, suffix=suffix)
 
 
 def dump_closest_refs(db):
@@ -272,12 +274,12 @@ def compare_lookup_dict(d1, d2):
             print(f"{k}\t{d1[k]}\t{d2[k]}")
 
 
-def report_misses(db, fingerprint=False, minscore=0.0):
-    fp1, fp2 = analyze_db(db, fingerprint=fingerprint, minscore=minscore)
+def report_misses(db, fingerprint=False, minscore=0.0, suffix=""):
+    fp1, fp2 = analyze_db(db, fingerprint=fingerprint, minscore=minscore, suffix=suffix)
     misses1 = fp1[fp1['FN'] + fp1['FP'] > 0]
     misses2 = fp2[fp2['FN'] + fp2['FP'] > 0]
-    misses1.to_csv(f"misses-1strain-{db}-{fingerprint}-{minscore}.csv")
-    misses2.to_csv(f"misses-2strain-{db}-{fingerprint}-{minscore}.csv")
+    misses1.to_csv(f"misses-1strain-{db}{suffix}-{fingerprint}-{minscore}.csv")
+    misses2.to_csv(f"misses-2strain-{db}{suffix}-{fingerprint}-{minscore}.csv")
     return misses1, misses2
 
 

@@ -156,7 +156,9 @@ class StrainGST:
         self.iterations = iterations
         self.top = top
 
-        self.min_score = min_score
+        self.alt_score = min_score < 0
+        self.min_score = abs(min_score)
+
         self.min_evenness = min_evenness
         self.min_frac = min_frac
         self.min_acct = min_acct
@@ -235,17 +237,18 @@ class StrainGST:
                 and s.even >= self.min_evenness
             )
 
-            strain_scores.sort(key=lambda e: e.score, reverse=True)
+            strain_scores.sort(key=lambda e: e.score0 if self.alt_score else e.score, reverse=True)
 
             if not strain_scores:
                 logger.info("No good strains found, quiting.")
                 break
 
             winner = strain_scores[0]
+            winner_score = winner.score0 if self.alt_score else winner.score
             # if best score isn't good enough, we're done
-            if winner.score < self.min_score:
+            if winner_score < self.min_score:
                 logger.info("Score %.3f for %s below min score %.3f, quiting.",
-                            winner.score, winner.strain, self.min_score)
+                            winner_score, winner.strain, self.min_score)
                 break
 
             # Collect the winning strain (and additional extra high scoring
@@ -332,7 +335,7 @@ class StrainGST:
         evenness = covered / est_covered if covered < est_covered else est_covered / covered
 
         # original panstrain simple scoring metric
-        score = covered * accounted * evenness * evenness
+        score = covered * accounted * evenness # * evenness
 
         # Weight each of my kmers by inverse of times it occurs in pan genome
         # relative to this genome

@@ -335,7 +335,7 @@ class StrainGST:
         evenness = covered / est_covered if covered < est_covered else est_covered / covered
 
         # original panstrain simple scoring metric
-        score = covered * accounted * evenness # * evenness
+        score = covered * accounted * evenness * evenness
 
         # Weight each of my kmers by inverse of times it occurs in pan genome
         # relative to this genome

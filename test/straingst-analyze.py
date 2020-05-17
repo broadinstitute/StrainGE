@@ -114,6 +114,7 @@ def sample_closest_db(sample_ref, db_refs, similarities):
 
 def load_straingst_results(tsvfile, minscore):
     resultlines = []
+    scorekey = "score" if minscore >= 0 else "score0"
     with open(tsvfile, 'r') as tsv:
         tsv.__next__()
         tsv.__next__()
@@ -122,7 +123,7 @@ def load_straingst_results(tsvfile, minscore):
             i = line['i']
             if not (len(i) == 1 or i[-1] == '0'):
                 continue
-            if float(line['score']) < minscore:
+            if float(line[scorekey]) < minscore:
                 break
             resultlines.append(line)
     return resultlines
@@ -238,10 +239,12 @@ def analyze_db(db, minscore = 0.0, fingerprint=False, suffix=""):
         df2 = analyze_2strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
     return df1, df2
 
-def db_score_test(db, fingerprint=False, suffix=""):
+def db_score_test(db, fingerprint=False, suffix="", alt=False):
     for n in range(10,55,5):
         s = n / 1000
         print(f"minscore {s}")
+        minscore = n / 1000.0
+        if alt: minscore = -minscore
         analyze_db(db, minscore=n/1000, fingerprint=fingerprint, suffix=suffix)
 
 

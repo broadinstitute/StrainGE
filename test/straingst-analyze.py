@@ -226,7 +226,7 @@ def analyze_db(db, minscore = 0.0, fingerprint=False):
     if fingerprint:
         suffix += "-f"
     if minscore:
-        outfile = f"analyze-{suffix}-{minscore}.csv"
+        outfile = "analyze-{}-{:.3f}.csv".format(suffix, minscore)
     else:
         outfile = f"analyze-{suffix}.csv"
     with redirect_stdout(open(outfile, 'w')):
@@ -237,7 +237,7 @@ def analyze_db(db, minscore = 0.0, fingerprint=False):
     return df1, df2
 
 def db_score_test(db, fingerprint=False):
-    for n in range(10,20):
+    for n in range(10,55,5):
         s = n / 1000
         print(f"minscore {s}")
         analyze_db(db, minscore=n/1000, fingerprint=fingerprint)
@@ -251,7 +251,7 @@ def dump_closest_refs(db):
     closest = [sample_closest_db(s, dref, sims) for s in sref]
     with redirect_stdout(open(f"sample-refs-{db}.tsv", 'w')):
         for i, s in enumerate(sref):
-            print(f"{s}\t{sref[i]}\t{closest[i]}")
+            print(f"sample{i+1}\t{s}\t{closest[i]}")
     return sref, closest
 
 
@@ -265,18 +265,27 @@ def df_to_lookup_dict(df):
         lookup[prefix] = (row['TP'], row['FN'], row['FP'])
     return lookup
 
+
 def compare_lookup_dict(d1, d2):
     for k in d1:
         if d1[k] != d2[k]:
             print(f"{k}\t{d1[k]}\t{d2[k]}")
 
 
+def report_misses(db, fingerprint=False, minscore=0.0):
+    fp1, fp2 = analyze_db(db, fingerprint=fingerprint, minscore=minscore)
+    misses1 = fp1[fp1['FN'] + fp1['FP'] > 0]
+    misses2 = fp2[fp2['FN'] + fp2['FP'] > 0]
+    misses1.to_csv(f"misses-1strain-{db}-{fingerprint}-{minscore}.csv")
+    misses2.to_csv(f"misses-2strain-{db}-{fingerprint}-{minscore}.csv")
+    return misses1, misses2
 
-def compare_fingerprint(db):
-    full1, full2 = analyze_db(db, fingerprint=False)
+
+def compare_fingerprint(db, minscore=0):
+    full1, full2 = analyze_db(db, fingerprint=False, minscore=minscore)
     full1 = df_to_lookup_dict(full1)
     full2 = df_to_lookup_dict(full2)
-    fp1, fp2 = analyze_db(db, fingerprint=True)
+    fp1, fp2 = analyze_db(db, fingerprint=True, minscore=minscore)
     fp1 = df_to_lookup_dict(fp1)
     fp2 = df_to_lookup_dict(fp2)
     with redirect_stdout(open(f"fingerprint-diffs-{db}.tsv", 'w')):

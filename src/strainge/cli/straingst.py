@@ -111,7 +111,7 @@ class StrainGSTSubCommand(Subcommand):
         )
         subparser.add_argument(
             "-u", "--universal", type=int, default=10.0,
-            help="exclude Kmers occurring more often in the sample than this times the median pangenome kmer frequency (default: %(default).d)"
+            help="exclude Kmers occurring more often in the sample than this times the mean pangenome kmer frequency (default: %(default).d)"
         )
         subparser.add_argument(
             "-S", "--score-strains", action='append',

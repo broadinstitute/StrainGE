@@ -190,9 +190,10 @@ class StrainGST:
 
         # Excludes will contain kmers removed from consideration because they
         # are too common or they were in a found in a previous strain. We exclude
-        # and kmers occurring in the sample more than a multiple of the median pangenome
+        # and kmers occurring in the sample more than a multiple of the mean pangenome
         # kmer frequency.
-        universal_limit = np.median(sample.counts) * self.universal
+        universal_limit = int(np.mean(sample.counts) * self.universal)
+        logger.info(f"sample kmer frequency cutoff: {universal_limit}")
         excludes = sample.kmers[sample.counts > universal_limit]
         sample.exclude(excludes)
 

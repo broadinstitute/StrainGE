@@ -237,6 +237,9 @@ def analyze_db(db, minscore = 0.0, fingerprint=False, suffix=""):
         df1 = analyze_1strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
         print(f"\n2-strain minscore={minscore} fingerprint={fingerprint}")
         df2 = analyze_2strain(suffix=suffix, clusters=f"db/clusters{dbstr}.tsv", minscore=minscore)
+        combined_df = df1.append(df2)
+        print(f"\nCombined minscore={minscore} fingerprint={fingerprint}")
+        report_stats(combined_df, f"Combined,All")
     return df1, df2
 
 def db_score_test(db, fingerprint=False, suffix="", alt=False):
@@ -245,7 +248,7 @@ def db_score_test(db, fingerprint=False, suffix="", alt=False):
         print(f"minscore {s}")
         minscore = n / 1000.0
         if alt: minscore = -minscore
-        analyze_db(db, minscore=n/1000, fingerprint=fingerprint, suffix=suffix)
+        df1, df2 = analyze_db(db, minscore=n/1000, fingerprint=fingerprint, suffix=suffix)
 
 
 def dump_closest_refs(db):

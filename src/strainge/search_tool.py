@@ -376,6 +376,6 @@ class StrainGST:
             even=evenness,
             wcov=weighted_coverage,
             spec=specificity,
-            score0=score,
-            score=weighted_score
+            score0=weighted_score,
+            score=score
         )

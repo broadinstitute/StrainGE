@@ -102,6 +102,11 @@ class SampleComparison:
         single_agree, single_agree_cnt, single_agree_pct = self.compare_thing(
             singles, a.strong == b.strong)
 
+        # Common locations where they share at least one allele (other alleles
+        # may be present)
+        _, shared_alleles_cnt, shared_alleles_pct = self.compare_thing(
+            common, (a.strong & b.strong) > 0)
+
         # common locations where either has a variant from reference
         variants, variant_cnt, variant_pct = self.compare_thing(
             common, ((a.strong | b.strong) & ~a.refmask) > 0)
@@ -141,18 +146,21 @@ class SampleComparison:
         transversions_pct = transitions / single_cnt if single_cnt else 0.0
 
         return {
+            "length": a.length,
             "common": common_cnt,
             "commonPct": common_pct,
             "single": single_cnt,
             "singlePct": single_pct,
             "singleAgree": single_agree_cnt,
             "singleAgreePct": single_agree_pct,
+            "sharedAlleles": shared_alleles_cnt,
+            "sharedAllelesPct": shared_alleles_pct,
             "variants": variant_cnt,
             "variantPct": variant_pct,
             "commonVariant": common_var_cnt,
             "commonVariantPct": common_var_pct,
-            "variantAgree": var_agree_cnt,
-            "variantAgreePct": var_agree_pct,
+            "variantExact": var_agree_cnt,
+            "variantExactPct": var_agree_pct,
             "AnotB": a_not_b_cnt,
             "AnotBpct": a_not_b_pct,
             "AnotBweak": a_not_bweak_cnt,

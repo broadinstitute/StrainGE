@@ -146,7 +146,10 @@ def call_data_to_hdf5(call_data, output_file):
         h5.attrs['mean_coverage'] = call_data.mean_coverage
         h5.attrs['median_coverage'] = call_data.median_coverage
         h5.attrs['reference_fasta'] = call_data.reference_fasta
-        h5.attrs['uniquely_mapped_reads'] = call_data.uniquely_mapped_reads
+
+        h5.attrs['total_reads'] = call_data.total_reads
+        h5.attrs['passing_reads'] = call_data.passing_reads
+        h5.attrs['lowmq_reads'] = call_data.lowmq_reads
 
 
 def call_data_from_hdf5(hdf5_file):
@@ -223,12 +226,23 @@ def call_data_from_hdf5(hdf5_file):
         call_data.median_coverage = hdf5.attrs['median_coverage']
         call_data.min_gap_size = hdf5.attrs['min_gap_size']
 
-        if 'uniquely_mapped_reads' not in hdf5.attrs:
+        if 'total_reads' not in hdf5.attrs:
             logger.warning("This is an old StrainGR hdf5 file. Strain "
                            "abundance information not available.")
 
-        call_data.uniquely_mapped_reads = hdf5.attrs.get(
-            'uniquely_mapped_reads', 0)
+        call_data.total_reads = hdf5.attrs.get('total_reads', 0)
+
+        if 'passing_reads' not in hdf5.attrs:
+            logger.warning("This is an old StrainGR hdf5 file. Strain "
+                           "abundance information not available.")
+
+        call_data.passing_reads = hdf5.attrs.get('passing_reads', 0)
+
+        if 'lowmq_reads' not in hdf5.attrs:
+            logger.warning("This is an old StrainGR hdf5 file. Strain "
+                           "abundance information not available.")
+
+        call_data.lowmq_reads = hdf5.attrs.get('lowmq_reads', 0)
 
         if 'reference_fasta' in hdf5.attrs:
             call_data.reference_fasta = hdf5.attrs['reference_fasta']

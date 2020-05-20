@@ -37,8 +37,8 @@ import itertools
 import functools
 import subprocess
 from pathlib import Path
-from enum import IntFlag, auto
-from typing import Dict  # noqa
+from enum import Enum, IntFlag, auto
+from typing import Dict, Tuple, Iterable  # noqa
 
 import numpy
 import skbio
@@ -191,6 +191,94 @@ def kimura_distance(transitions, transversions):
                            math.sqrt(1 - 2*transversions))
 
 
+class CIGAROperation(Enum):
+    MATCH = 'M'
+    INSERTION = 'I'
+    DELETION = 'D'
+    SKIP = 'N'
+    SOFT_CLIP = 'S'
+    HARD_CLIP = 'H'
+    PADDING = 'P'
+    SEQ_MATCH = '='
+    SEQ_MISMATCH = 'X'
+
+    @classmethod
+    @functools.lru_cache(maxsize=1)
+    def value_map(cls):
+        return {v.value: v for v in cls.__members__.values()}
+
+    @classmethod
+    def from_str(cls, op):
+        if op in cls.value_map():
+            return cls.value_map()[op]
+
+        raise ValueError(f"Invalid CIGAR operation '{op}'")
+
+
+CIGAROpWithLength = Tuple[int, CIGAROperation]
+
+
+def parse_cigar_string(cigar: str) -> Iterable[CIGAROpWithLength]:
+    """Yield each CIGAR operation with its length."""
+
+    curr_digits = []
+
+    for char in cigar:
+        if char.isalpha():
+            op_len = "".join(curr_digits)
+
+            if not op_len:
+                raise ValueError(f"Invalid CIGAR string, operation '{char}' "
+                                 f"has no length.")
+
+            yield int(op_len), CIGAROperation.from_str(char)
+            curr_digits = []
+        elif char.isdigit():
+            curr_digits.append(char)
+        else:
+            raise ValueError(f"Invalid character in CIGAR string: '{char}'")
+
+
+def get_aligned_pairs_cigar(cigar, scaffold_pos):
+    """
+    Get tuples of (refpos, querypos) based on the cigar string.
+    """
+
+    query_pos = 0
+    for op_len, cigar_op in parse_cigar_string(cigar):
+        if cigar_op == CIGAROperation.SOFT_CLIP:
+            yield from zip(
+                range(query_pos, query_pos+op_len),
+                [None]*op_len
+            )
+
+            query_pos += op_len
+        elif cigar_op in {CIGAROperation.MATCH,
+                          CIGAROperation.SEQ_MISMATCH,
+                          CIGAROperation.SEQ_MATCH}:
+            yield from zip(
+                range(query_pos, query_pos+op_len),
+                range(scaffold_pos, scaffold_pos+op_len)
+            )
+
+            query_pos += op_len
+            scaffold_pos += op_len
+        elif cigar_op == CIGAROperation.INSERTION:
+            yield from zip(
+                range(query_pos, query_pos+op_len),
+                [None]*op_len
+            )
+
+            query_pos += op_len
+        elif cigar_op == CIGAROperation.DELETION:
+            yield from zip(
+                [None]*op_len,
+                range(scaffold_pos, scaffold_pos+op_len)
+            )
+
+            scaffold_pos += op_len
+
+
 class Reference:
     """
     Some helper function to manage coordinates on a concatenated reference.
@@ -341,7 +429,10 @@ class VariantCallData:
 
         self.mean_coverage = 0.0
         self.median_coverage = 0
-        self.uniquely_mapped_reads = 0
+
+        self.total_reads = 0
+        self.passing_reads = 0
+        self.lowmq_reads = 0
 
     def load_reference(self, reference):
         for name, scaffold in reference.scaffolds.items():
@@ -372,24 +463,64 @@ class VariantCallData:
 
         self.reference_fasta = str(Path(reference.fasta).resolve())
 
-    def inc_uniquely_mapped_reads(self, scaffold):
-        self.uniquely_mapped_reads += 1
+    def discard_read(self, alignment):
+        """
+        A read that gets discarded, update the `bad` counter at each reference
+        position where it aligns.
+        """
+
+        scaffold = alignment.reference_name
+        for querypos, refpos in alignment.get_aligned_pairs():
+            if refpos is not None:
+                self.scaffolds_data[scaffold].bad[refpos] += 1
+
+    def lowmq_read(self, alignment):
+        """
+        A read with low mapping quality, i.e. likely a read that can be placed
+        at multiple locations. Update the `lowmq_count` counter where this read
+        aligns, and additionally, identify all alternative alignments with the
+        same alignment score as the primary alignment and mark the
+        `lowmq_count` there too.
+        """
+
+        self.lowmq_reads += 1
+
+        scaffold = alignment.reference_name
+        for querypos, refpos in alignment.get_aligned_pairs():
+            if refpos is not None:
+                self.scaffolds_data[scaffold].lowmq_count[refpos] += 1
+
+        # Check alternative alignments and mark as lowmq too
+        for alt_aln in self._alternative_alignments(alignment):
+            scaffold, pos, cigar, *_ = alt_aln
+
+            for querypos, refpos in get_aligned_pairs_cigar(cigar, pos):
+                if refpos is not None:
+                    self.scaffolds_data[scaffold].lowmq_count[refpos] += 1
+
+    def _alternative_alignments(self, alignment):
+        if alignment.has_tag("XA"):
+            xa = alignment.get_tag("XA")
+            nm = int(alignment.get_tag("NM"))
+
+            for aln in xa.split(';'):
+                if not aln:
+                    continue
+
+                scaffold, pos, cigar, alt_nm = aln.split(',')
+                pos = int(pos)
+                alt_nm = int(alt_nm)
+                alt_rc = pos < 0
+
+                if alt_nm <= nm:
+                    yield scaffold, abs(pos) - 1, cigar, alt_nm, alt_rc
+
+    def passing_read(self, scaffold):
+        self.passing_reads += 1
         self.scaffolds_data[scaffold].read_count += 1
 
-    def bad_read(self, scaffold, pos):
+    def bad_allele(self, scaffold, pos):
         self.scaffolds_data[scaffold].bad[pos] += 1
-
-    def low_mapping_quality(self, scaffold, pos):
-        if pos >= self.scaffolds_data[scaffold].length:
-            logger.warning("Position %d for scaffold %s of length %d out of "
-                           "bounds, ignoring!", pos, scaffold,
-                           self.scaffolds_data[scaffold].length)
-            return
-
-        self.scaffolds_data[scaffold].lowmq_count[pos] += 1
-
-    def update_mapping_quality(self, scaffold, pos, mapping_quality):
-        self.scaffolds_data[scaffold].mq_sum[pos] += mapping_quality
 
     def good_read(self, scaffold, pos, allele, base_quality, mapping_quality,
                   rc):
@@ -407,7 +538,11 @@ class VariantCallData:
 
         all_coverage = numpy.concatenate([s.coverage for s in
                                           self.scaffolds_data.values()])
-        self.mean_coverage = numpy.sum(all_coverage) / self.reference_length
+        all_high_cov = numpy.concatenate([s.high_coverage for s in
+                                          self.scaffolds_data.values()])
+        all_normal_cov = all_coverage[~all_high_cov]
+
+        self.mean_coverage = numpy.sum(all_normal_cov) / len(all_normal_cov)
         self.median_coverage = numpy.median(all_coverage)
 
         return self
@@ -431,7 +566,6 @@ class VariantCallData:
         """
 
         total_callable = 0
-        all_coverages = []
         total_confirmed = 0
         total_snps = 0
         total_multi = 0
@@ -460,6 +594,15 @@ class VariantCallData:
         summed_abun = sum(abun.values())
         abun = {k: v / summed_abun for k, v in abun.items()}
 
+        # abundance of all references relative to whole metagenome
+        total_aln_reads = self.passing_reads + self.lowmq_reads
+        rel_abun_all = total_aln_reads / self.total_reads
+
+        rel_abun_scaffolds = {
+            scaffold: abundance * rel_abun_all
+            for scaffold, abundance in abun.items()
+        }
+
         for scaffold in self.scaffolds_data.values():
             # Locations with strong evidence for the reference base
             confirmed = (scaffold.strong & scaffold.refmask)
@@ -486,16 +629,6 @@ class VariantCallData:
             num_callable = numpy.count_nonzero(scaffold.strong)
             callable_pct = pct(num_callable, scaffold.length)
             total_callable += num_callable
-
-            # Don't take abnormal high coverage regions into account when
-            # calculating mean coverage
-            normal_coverage = ~scaffold.high_coverage
-            summed_coverage = (scaffold.coverage[normal_coverage].sum() +
-                               scaffold.lowmq.sum())
-            coverage = summed_coverage / scaffold.length
-
-            median_coverage = numpy.median(scaffold.coverage + scaffold.lowmq)
-            all_coverages.append(coverage)
 
             num_confirmed = numpy.count_nonzero(confirmed)
             confirmed_pct = pct(num_confirmed, num_callable)
@@ -537,10 +670,10 @@ class VariantCallData:
                 "name": scaffold.name,
                 "length": scaffold.length,
                 "repetitiveness": scaffold.repetitiveness,
-                "coverage": coverage,
-                "median": median_coverage,
+                "coverage": scaffold.mean_coverage,
+                "median": scaffold.median_coverage,
                 "uReads": scaffold.read_count,
-                "abundance": abun[scaffold.name],
+                "abundance": rel_abun_scaffolds[scaffold.name] * 100,
                 "callable": num_callable,
                 "callablePct": callable_pct,
                 "confirmed": num_confirmed,
@@ -564,7 +697,6 @@ class VariantCallData:
             }
 
         # Return one last entry with all statistics for the genome as a whole
-        lengths = [s.length for s in self.scaffolds_data.values()]
         avg_repetitiveness = (sum(s.repetitiveness for s in
                                   self.scaffolds_data.values()) /
                               len(self.scaffolds_data))
@@ -573,14 +705,10 @@ class VariantCallData:
             "name": "TOTAL",
             "length": self.reference_length,
             "repetitiveness": avg_repetitiveness,
-            "coverage": (
-                # Weigh by scaffold length
-                sum(v * l for v, l in zip(all_coverages, lengths)) /
-                self.reference_length
-            ),
+            "coverage": self.mean_coverage,
             "median": self.median_coverage,
-            "uReads": self.uniquely_mapped_reads,
-            "abundance": 1.0,
+            "uReads": self.passing_reads,
+            "abundance": rel_abun_all * 100,
             "callable": total_callable,
             "callablePct": pct(total_callable, self.reference_length),
             "confirmed": total_confirmed,
@@ -683,6 +811,13 @@ class ScaffoldCallData:
                     self.median_coverage, self.coverage_cutoff)
 
         self.high_coverage = self.coverage > self.coverage_cutoff
+
+        # Recalculate mean coverage without too high coverage regions
+        normal_coverage = self.coverage[~self.high_coverage]
+        self.mean_coverage = normal_coverage.sum() / len(normal_coverage)
+
+        logger.info("Recalculated mean coverage (excluding too high coverage "
+                    "regions: %.2f", self.mean_coverage)
 
     def call_alleles(self, min_pileup_qual, min_qual_frac):
         quals = self.alleles[:, 1]
@@ -812,37 +947,20 @@ class VariantCaller:
         call_data = VariantCallData(scaffolds, self.min_gap_size)
         call_data.load_reference(reference)
 
-        logger.info("Estimating abundance...")
+        call_data.total_reads = bamfile.mapped + bamfile.unmapped
+
+        if bamfile.unmapped == 0:
+            logger.warning("BAM file doesn't contain unmapped reads. Relative "
+                           "abundance estimates may be incorrect.")
+
+        logger.info("Performing read QC and estimating abundance...")
         for alignment in bamfile.fetch():
-            # Only count uniquely mapped reads
-            if alignment.mapping_quality < 3 or alignment.has_tag('XA'):
-                continue
+            # The names of discarded reads are remembered and used later
+            qc_result = self.read_qc(call_data, alignment)
 
-            # Properly paired
-            if alignment.is_paired and not alignment.is_proper_pair:
-                continue
-
-            # Non-clipped
-            if alignment.query_alignment_length != alignment.query_length:
-                continue
-
-            # Insert size at least the read length
-            if alignment.is_paired:
-                tlen = alignment.template_length
-                if abs(tlen) < alignment.query_length:
-                    continue
-
-            # Ignore reads with too many mismatches
-            if self.max_num_mismatches > 0:
-                num_mismatches = 0
-                if alignment.has_tag('NM'):
-                    num_mismatches = alignment.get_tag('NM')
-
-                if num_mismatches > self.max_num_mismatches:
-                    continue
-
-            scaffold = alignment.reference_name
-            call_data.inc_uniquely_mapped_reads(scaffold)
+            if qc_result:
+                scaffold = alignment.reference_name
+                call_data.passing_read(scaffold)
 
         logger.info("Processing pileups...")
         self.discarded_reads = set()
@@ -851,7 +969,7 @@ class VariantCaller:
             refpos = column.reference_pos
 
             for read in column.pileups:
-                self._assess_read(call_data, scaffold, refpos, read)
+                self._assess_allele(call_data, scaffold, refpos, read)
 
         logger.info("Done.")
         logger.info("Analyzing coverage...")
@@ -866,35 +984,54 @@ class VariantCaller:
 
         return call_data
 
-    def _assess_read(self, call_data, scaffold, refpos, read):
-        alignment = read.alignment
+    def read_qc(self, call_data, alignment):
+        """
+        Perform quality control on reads.
+
+        Reads are discarded if:
+        - They're improperly paired
+        - Mapping quality < min_mapping_quality
+        - The alignment is clipped
+        - Inferred insert size is smaller than the alignment length. If this is
+          the case it may have read into an adapter.
+        - the reads contains a higher number of mismatches than a given
+          threshold.
+
+        If a read is discarded, we update a counter to keep track of the number
+        of discarded reads per position in the genome.
+        """
 
         if alignment.query_name in self.discarded_reads:
-            # Query name is the same for both pairs, so if its mate is
-            # discarded then discard this read too.
-            call_data.bad_read(scaffold, refpos)
-            return
+            # It's mate was discarded, discard this read too
+            call_data.discard_read(alignment)
+            return False
 
         # if this is a paired read, make sure the pairs are properly aligned
         if alignment.is_paired and not alignment.is_proper_pair:
             self.discarded_reads.add(alignment.query_name)
-            call_data.bad_read(scaffold, refpos)
-            return
+            call_data.discard_read(alignment)
+            return False
 
         # restrict ourselves to full-length alignments (not clipped)
         if alignment.query_alignment_length != alignment.query_length:
             # alignment is clipped
             self.discarded_reads.add(alignment.query_name)
-            call_data.bad_read(scaffold, refpos)
-            return
+            call_data.discard_read(alignment)
+            return False
 
         # check that inferred insert size is at least read length
         if alignment.is_paired:
             tlen = alignment.template_length
             if abs(tlen) < alignment.query_length:
                 self.discarded_reads.add(alignment.query_name)
-                call_data.bad_read(scaffold, refpos)
-                return
+                call_data.discard_read(alignment)
+                return False
+
+        if alignment.mapping_quality < self.min_mapping_quality:
+            # We're not adding this read to `discarded_reads` because its mate
+            # may be mapped properly
+            call_data.lowmq_read(alignment)
+            return False
 
         if self.max_num_mismatches > 0:
             num_mismatches = 0
@@ -903,8 +1040,17 @@ class VariantCaller:
 
             if num_mismatches > self.max_num_mismatches:
                 self.discarded_reads.add(alignment.query_name)
-                call_data.bad_read(scaffold, refpos)
-                return
+                call_data.discard_read(alignment)
+                return False
+
+        return True
+
+    def _assess_allele(self, call_data, scaffold, refpos, read):
+        alignment = read.alignment
+
+        if alignment.query_name in self.discarded_reads:
+            # Ignore reads removed in earlier QC step
+            return
 
         # get base quality (note this is next base if deletion, but we won't
         # use that)
@@ -924,49 +1070,30 @@ class VariantCaller:
             # base call must be real base (e.g., not N)
             base = Allele.from_str(alignment.query_sequence[pos])
             if not base:
-                call_data.bad_read(scaffold, refpos)
+                call_data.bad_allele(scaffold, refpos)
                 return
 
-        # check for decent mapping quality
         mq = alignment.mapping_quality
 
-        # we keep track of otherwise good reads with low mapping quality;
-        # that probably means this is a repeat
         if mq < self.min_mapping_quality:
-            call_data.low_mapping_quality(scaffold, refpos)
-            self._assess_alternative_locations(call_data, refpos, read)
             return
 
         # We're good! Update the pileup stats...
         call_data.good_read(scaffold, refpos, base, qual, mq, False)
 
-        if mq <= 3:
-            # If we're here, we're scoring low mapping quality reads; make
-            # sure we do so for other alternative alignment locations
-            for scaffold, pos, rc in self._alternative_locations(alignment,
-                                                                 refpos):
+        if mq <= 3 and self.min_mapping_quality == 0:
+            # If we reach here the min_mapping_quality filter is disabed, and
+            # it means that this read likely aligns at multiple places. Make
+            # sure the allele in this read is counted at every alignment
+            # location.
+            for scaffold, pos, rc in self._alternative_aln_pos(alignment,
+                                                               refpos):
                 call_data.good_read(scaffold, pos, base, qual, mq, rc)
 
-    def _assess_alternative_locations(self, call_data, refpos, read):
-        """
-        Assess alternative alignment locations of a read.
+    def _alternative_aln_pos(self, read, loc):
+        """Translate a location of the read's primary alignment to a scaffold
+        position of an alternative alignment."""
 
-        We keep track of otherwise good reads with low mapping
-        quality; that probably means this is a repeat.
-
-        The code below updates "low mapping quality" counts for
-        every location where this read maps equally well. This
-        influences gap prediction.
-        """
-
-        alignment = read.alignment
-        mq = alignment.mapping_quality
-        if mq < self.min_mapping_quality:
-            for scaffold, pos, rc in self._alternative_locations(alignment,
-                                                                 refpos):
-                call_data.low_mapping_quality(scaffold, pos)
-
-    def _alternative_locations(self, read, loc):
         if read.has_tag("XA"):
             xa = read.get_tag("XA")
             nm = int(read.get_tag("NM"))

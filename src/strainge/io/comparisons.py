@@ -32,20 +32,19 @@ import csv
 from strainge.variant_caller import Allele
 
 COMPARE_TSV_FIELDS = (
-    ("scaffold", "%s"), ("common", "%d"),
-    ("commonPct", "%.3f"), ("single", "%d"),
-    ("singlePct", "%.3f"), ("singleAgree", "%d"), ("singleAgreePct", "%.3f"),
-    ("variants", "%d"), ("variantPct", "%.3f"), ("commonVariant", "%d"),
-    ("commonVariantPct", "%.3f"), ("variantAgree", "%d"),
-    ("variantAgreePct", "%.3f"),
-    ("transitions", "%d"), ("tsPct", "%.3f"),
-    ("transversions", "%d"), ("tvPct", "%.3f"),
-    ("AnotB", "%d"), ("AnotBpct", "%.3f"),
-    ("AnotBweak", "%d"), ("AnotBweakPct", "%.3f"), ("BnotA", "%d"),
-    ("BnotApct", "%.3f"), ("BnotAweak", "%d"), ("BnotAweakPct", "%.3f"),
-    ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.3f"),
-    ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.3f"),
-    ("gapJaccardSim", "%.3f"),
+    ("scaffold", "%s"), ("length", "%d"), ("common", "%d"),
+    ("commonPct", "%.4f"), ("single", "%d"),
+    ("singlePct", "%.4f"), ("singleAgree", "%d"), ("singleAgreePct", "%.4f"),
+    ("sharedAlleles", "%d"), ("sharedAllelesPct", "%.4f"),
+    ("variants", "%d"), ("variantPct", "%.4f"), ("commonVariant", "%d"),
+    ("commonVariantPct", "%.4f"), ("variantExact", "%d"),
+    ("variantExactPct", "%.4f"),
+    ("AnotB", "%d"), ("AnotBpct", "%.4f"),
+    ("AnotBweak", "%d"), ("AnotBweakPct", "%.4f"), ("BnotA", "%d"),
+    ("BnotApct", "%.4f"), ("BnotAweak", "%d"), ("BnotAweakPct", "%.4f"),
+    ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.4f"),
+    ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.4f"),
+    ("gapJaccardSim", "%.4f"),
 )
 
 

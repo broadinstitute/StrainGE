@@ -57,9 +57,9 @@ strain_tsv_columns = dict([
     ("gcov", "%.3f"),
     ("acct", "%.3f"),
     ("even", "%.3f"),
-    ("score0", "%.3f"),
     ("spec", "%.3f"),
-    ("wcov", "%.3f"),
+    ("rapct", "%.3f"),
+    ("wscore", "%.3f"),
     ("score", "%.3f"),
 ])
 

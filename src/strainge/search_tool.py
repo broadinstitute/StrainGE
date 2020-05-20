@@ -82,7 +82,6 @@ class PanGenome(kmertools.KmerSet):
         self.use_fingerprint = use_fingerprint
         if self.use_fingerprint:
             self.fingerprint_override()
-            logger.info("fingerprint_fraction=%f", self.fingerprint_fraction)
 
         # Strains are groups within hdf5 file
         self.strain_names = [name for name in list(self.h5.keys())
@@ -145,7 +144,7 @@ class StrainGSTResult:
 
 Strain = namedtuple('Strain', [
     'strain', 'gkmers', 'ikmers', 'skmers', 'cov', 'kcov', 'gcov',
-    'acct', 'even', 'wcov', 'spec', 'score0', 'score'
+    'acct', 'even', 'rapct', 'spec', 'wscore', 'score'
 ])
 
 
@@ -193,7 +192,7 @@ class StrainGST:
         # and kmers occurring in the sample more than a multiple of the mean pangenome
         # kmer frequency.
         universal_limit = int(np.mean(sample.counts) * self.universal)
-        logger.info(f"sample kmer frequency cutoff: {universal_limit}")
+        logger.info(f"Sample kmer frequency cutoff: {universal_limit}")
         excludes = sample.kmers[sample.counts > universal_limit]
         sample.exclude(excludes)
 
@@ -238,14 +237,14 @@ class StrainGST:
                 and s.even >= self.min_evenness
             )
 
-            strain_scores.sort(key=lambda e: e.score0 if self.alt_score else e.score, reverse=True)
+            strain_scores.sort(key=lambda e: e.wscore  if self.alt_score else e.score, reverse=True)
 
             if not strain_scores:
                 logger.info("No good strains found, quiting.")
                 break
 
             winner = strain_scores[0]
-            winner_score = winner.score0 if self.alt_score else winner.score
+            winner_score = winner.wscore  if self.alt_score else winner.score
             # if best score isn't good enough, we're done
             if winner_score < self.min_score:
                 logger.info("Score %.3f for %s below min score %.3f, quiting.",
@@ -365,6 +364,13 @@ class StrainGST:
         # higher or lower is worse)
         weighted_score = score * min(specificity, 1.0 / specificity)
 
+        # Estimated relative abundance of this strain
+        relative_abundance = 100.0 * genome_coverage * strain_kmerset.total_kmers / sample.total_kmers
+
+        if self.use_fingerprint:
+            # really minHash fraction
+            relative_abundance /= self.pangenome.fingerprint_fraction
+
         return Strain(
             strain=strain_name,
             gkmers=strain_kmerset.distinct_kmers,
@@ -375,8 +381,8 @@ class StrainGST:
             gcov=genome_coverage,
             acct=accounted,
             even=evenness,
-            wcov=weighted_coverage,
             spec=specificity,
-            score0=weighted_score,
+            rapct=relative_abundance,
+            wscore =weighted_score,
             score=score
         )

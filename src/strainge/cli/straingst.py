@@ -89,8 +89,8 @@ class StrainGSTSubCommand(Subcommand):
                  "default)d)"
         )
         subparser.add_argument(
-            "-f", "--fingerprint", action='store_true',
-            help="Using fingerprint rather than whole kmer set"
+            "-f", "--fulldb", action='store_true',
+            help="Using full pan-genome kmer database rather than pan-genome fingerprint kmer db"
         )
         subparser.add_argument(
             "-F", "--minfrac", type=float, default=0.01,
@@ -127,13 +127,13 @@ class StrainGSTSubCommand(Subcommand):
         )
 
     def __call__(self, pan, sample, output, debug_out, iterations, top,
-                 fingerprint, minfrac, score, evenness, minacct, universal, score_strains,
+                 fulldb, minfrac, score, evenness, minacct, universal, score_strains,
                  *args, **kwargs):
 
         logger.info("Running StrainGST on sample %s with database %s",
                     sample, pan)
 
-        pandb = PanGenome(pan, fingerprint)
+        pandb = PanGenome(pan, fulldb)
         sample_kmerset = Sample(sample)
 
         if pandb.k != sample_kmerset.k:
@@ -143,7 +143,7 @@ class StrainGSTSubCommand(Subcommand):
 
             return 1
 
-        straingst = StrainGST(pandb, fingerprint, iterations, top, score,
+        straingst = StrainGST(pandb, fulldb, iterations, top, score,
                               evenness, universal, minfrac, minacct, debug_out)
 
         results = straingst.find_close_references(sample_kmerset,

@@ -154,11 +154,7 @@ class KmerizeSubcommand(Subcommand):
             help="Filename of the output HDF5."
         )
         subparser.add_argument(
-            "-f", "--fingerprint", action="store_true",
-            help="Compute and save min-hash fingerprint (sketch)."
-        )
-        subparser.add_argument(
-            '-s', '--sketch-fraction', type=float, default=0.01,
+            '-f', '--fingerprint-fraction', type=float, default=kmertools.DEFAULT_FINGERPRINT_FRACTION,
             help="Fraction of k-mers to keep for a minhash sketch. Default: "
                  "%(default)s"
         )
@@ -179,7 +175,7 @@ class KmerizeSubcommand(Subcommand):
         )
 
     def __call__(self, k, sequences, output, limit=None, prune=None,
-                 fingerprint=False, sketch_fraction=0.002, filter=False,
+                 fingerprint_fraction=kmertools.DEFAULT_FINGERPRINT_FRACTION, filter=False,
                  **kwargs):
 
         kmerset = kmertools.KmerSet(k)
@@ -197,8 +193,8 @@ class KmerizeSubcommand(Subcommand):
                 logger.info("Filtered kmerset. Only k-mers within frequency "
                             "range [%d, %d] are kept.", *thresholds)
 
-        if fingerprint:
-            kmerset.min_hash(sketch_fraction)
+        if fingerprint_fraction:
+            kmerset.min_hash(fingerprint_fraction)
 
         logger.info("Writing k-merset to %s", output)
         kmerset.save(output, compress=True)
@@ -221,17 +217,13 @@ class KmermergeSubcommand(Subcommand):
             help="Filename of the output HDF5."
         )
         subparser.add_argument(
-            "-f", "--fingerprint", action="store_true",
-            help="Compute and save min-hash fingerprint (sketch)."
-        )
-        subparser.add_argument(
-            '-s', '--sketch-fraction', type=float, default=0.01,
+            '-f', '--fingerprint-fraction', type=float, default=kmertools.DEFAULT_FINGERPRINT_FRACTION,
             help="Fraction of k-mers to keep for a minhash sketch. Default: "
                  "%(default)s"
         )
 
     def __call__(self, k, kmerfiles, output, limit=None, prune=None,
-                 fingerprint=False, sketch_fraction=0.002, filter=False,
+                 fingerprint_fraction=kmertools.DEFAULT_FINGERPRINT_FRACTION, filter=False,
                  **kwargs):
 
         kmerset = None
@@ -242,8 +234,8 @@ class KmermergeSubcommand(Subcommand):
             assert ks.k == k, "Incompatible kmer size {}".format(ks.k)
             kmerset = kmerset.merge_kmerset(ks) if kmerset else ks
 
-        if fingerprint:
-            kmerset.min_hash(sketch_fraction)
+        if fingerprint_fraction:
+            kmerset.min_hash(fingerprint_fraction)
 
         logger.info("Writing k-merset to %s", output)
         kmerset.save(output, compress=True)
@@ -529,10 +521,6 @@ class CreateDBSubcommand(Subcommand):
             help="Pan-genome database output HDF5 file."
         )
         subparser.add_argument(
-            '-F', '--fingerprint', action="store_true", default=False,
-            help="Create fingerprint for the pan-genome database."
-        )
-        subparser.add_argument(
             '-f', '--from-file', type=argparse.FileType('r'), default=None,
             metavar='FILE',
             help="Read list of HDF5 filenames to include in the database from "
@@ -544,7 +532,7 @@ class CreateDBSubcommand(Subcommand):
             help="The HDF5 filenames of the kmerized reference strains."
         )
 
-    def __call__(self, kmersets, from_file, output, fingerprint=False,
+    def __call__(self, kmersets, from_file, output,
                  **kwargs):
         if from_file:
             for line in from_file:
@@ -556,6 +544,7 @@ class CreateDBSubcommand(Subcommand):
             return 1
 
         pankmerset = None
+        fingerprint = True
         panfingerprint = None
         fpf = None
 
@@ -574,14 +563,19 @@ class CreateDBSubcommand(Subcommand):
                     pankmerset = pankmerset.merge_kmerset(kset)
 
                 if fingerprint:
-                    fp = kset.fingerprint_as_kmerset()
-                    if not panfingerprint:
-                        panfingerprint = fp
-                        fpf = fp.fingerprint_fraction
+                    if kset.fingerprint is not None:
+                        fp = kset.fingerprint_as_kmerset()
+                        if not panfingerprint:
+                            panfingerprint = fp
+                            fpf = fp.fingerprint_fraction
+                        else:
+                            panfingerprint = panfingerprint.merge_kmerset(fp)
                     else:
-                        panfingerprint = panfingerprint.merge_kmerset(fp)
+                        logger.warning("Not all input kmersets have fingerprints, so no pan genome fingerprint will be generated")
+                        fingerprint = False
 
-            if fingerprint:
+            if fingerprint and panfingerprint is not None:
+                logger.info("Adding pan-genome fingerprint (%d distinct kmers)", panfingerprint.kmers.size)
                 pankmerset.fingerprint = panfingerprint.kmers
                 pankmerset.fingerprint_counts = panfingerprint.counts
                 pankmerset.fingerprint_fraction = fpf

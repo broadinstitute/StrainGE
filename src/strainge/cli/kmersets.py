@@ -156,7 +156,7 @@ class KmerizeSubcommand(Subcommand):
         subparser.add_argument(
             '-f', '--fingerprint-fraction', type=float, default=kmertools.DEFAULT_FINGERPRINT_FRACTION,
             help="Fraction of k-mers to keep for a minhash sketch. Default: "
-                 "%(default)s"
+                 "%(default)s. No fingerprint will be created if set to zero."
         )
         subparser.add_argument(
             "-F", "--filter", action="store_true",
@@ -219,7 +219,7 @@ class KmermergeSubcommand(Subcommand):
         subparser.add_argument(
             '-f', '--fingerprint-fraction', type=float, default=kmertools.DEFAULT_FINGERPRINT_FRACTION,
             help="Fraction of k-mers to keep for a minhash sketch. Default: "
-                 "%(default)s"
+                 "%(default)s. No fingerprint will be created if set to zero."
         )
 
     def __call__(self, k, kmerfiles, output, limit=None, prune=None,

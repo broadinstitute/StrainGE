@@ -811,13 +811,13 @@ class DistSubcommand(Subcommand):
         )
 
         subparser.add_argument(
-            '-c', '--min-callable', type=float, required=False, default=2.5,
+            '-c', '--min-callable', type=float, required=False, default=0.5,
             help="Minimum percentage of callable genome to consider a strain "
                  "for comparison. Default %(default)s%%."
         )
 
         subparser.add_argument(
-            '-a', '--min-abundance', type=float, required=False, default=0.05,
+            '-a', '--min-abundance', type=float, required=False, default=0.005,
             help="Minimum abundance fraction of this strain in a sample. "
                  "Default %(default)s."
         )

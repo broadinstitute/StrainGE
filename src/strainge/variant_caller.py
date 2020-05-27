@@ -42,7 +42,7 @@ from typing import Dict, Tuple, Iterable  # noqa
 
 import numpy
 import skbio
-from scipy.stats import poisson
+from scipy.stats import poisson, norm
 
 from strainge import utils
 from strainge.utils import pct
@@ -297,6 +297,27 @@ class Reference:
         logger.info("Reference %s has %d scaffolds with a total of %d bases.",
                     fasta, len(self.scaffolds), self.length)
 
+        # Try to load reference metadata, as created by `straingr prepare-ref`
+        self.repetitiveness = {}
+        self.ref_name = {}
+
+        metadata_file = Path(fasta).with_suffix('.meta.json')
+        if metadata_file.is_file():
+            with metadata_file.open() as f:
+                meta = json.load(f)
+                for scaffold, repetitiveness in meta['repetitiveness'].items():
+                    logger.info("Scaffold %s repetitiveness: %.2f",
+                                scaffold, repetitiveness)
+                    self.repetitiveness[scaffold] = repetitiveness
+
+                for scaffold, ref_name in meta['contig_to_strain'].items():
+                    self.ref_name[scaffold] = ref_name
+        else:
+            logger.warning("Could not find a metadata file for reference %s, "
+                           "and therefore StrainGR has no sense of the "
+                           "repetitiveness of the concatenated reference. "
+                           "Abundance metrics may be skewed.")
+
     def scaffold_coord(self, coord):
         """
         Turn a zero-based genome-wide coordinate into a scaffold & coordinate
@@ -445,21 +466,11 @@ class VariantCallData:
                 ix = scaffold.values == base
                 self.scaffolds_data[name].refmask[ix] = allele
 
-        # Try to load reference metadata, as created by `straingr prepare-ref`
-        metadata_file = Path(reference.fasta).with_suffix('.meta.json')
-        if metadata_file.is_file():
-            with metadata_file.open() as f:
-                meta = json.load(f)
-                for scaffold, repetitiveness in meta['repetitiveness'].items():
-                    logger.info("Scaffold %s repetitiveness: %.2f",
-                                scaffold, repetitiveness)
-                    self.scaffolds_data[
-                        scaffold].repetitiveness = repetitiveness
-        else:
-            logger.warning("Could not find a metadata file for reference %s, "
-                           "and therefore StrainGR has no sense of the "
-                           "repetitiveness of the concatenated reference. "
-                           "Abundance metrics may be skewed.")
+        for scaffold, repetitiveness in reference.repetitiveness.items():
+            self.scaffolds_data[scaffold].repetitiveness = repetitiveness
+
+        for scaffold, ref_name in reference.ref_name.items():
+            self.scaffolds_data[scaffold].ref_name = ref_name
 
         self.reference_fasta = str(Path(reference.fasta).resolve())
 
@@ -667,6 +678,7 @@ class VariantCallData:
             total_tv += transversions
 
             yield {
+                "ref": scaffold.ref_name if scaffold.ref_name else "na",
                 "name": scaffold.name,
                 "length": scaffold.length,
                 "repetitiveness": scaffold.repetitiveness,
@@ -702,7 +714,8 @@ class VariantCallData:
                               len(self.scaffolds_data))
 
         yield {
-            "name": "TOTAL",
+            "ref": "TOTAL",
+            "name": "-",
             "length": self.reference_length,
             "repetitiveness": avg_repetitiveness,
             "coverage": self.mean_coverage,
@@ -738,6 +751,7 @@ class ScaffoldCallData:
     """
 
     def __init__(self, name, length):
+        self.ref_name = ""
         self.name = name
         self.length = length
         self.read_count = 0
@@ -961,6 +975,10 @@ class VariantCaller:
             if qc_result:
                 scaffold = alignment.reference_name
                 call_data.passing_read(scaffold)
+
+        logger.info("%d read pairs discarded", len(self.discarded_reads))
+        logger.info("%d passing reads", call_data.passing_reads)
+        logger.info("%d low mapping quality reads", call_data.lowmq_reads)
 
         logger.info("Processing pileups...")
         self.discarded_reads = set()

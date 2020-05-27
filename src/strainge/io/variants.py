@@ -45,7 +45,7 @@ from strainge.variant_caller import Allele, VariantCallData
 logger = logging.getLogger(__name__)
 
 TSV_FIELDS = (
-    ("name", "%s"), ("length", "%d"), ("coverage", "%.3f"),
+    ("ref", "%s"), ("name", "%s"), ("length", "%d"), ("coverage", "%.3f"),
     ("uReads", "%d"), ("abundance", "%.3f"),
     ("median", "%d"), ("callable", "%d"), ("callablePct", "%.3f"),
     ("confirmed", "%d"), ("confirmedPct", "%.3f"),
@@ -139,7 +139,8 @@ def call_data_to_hdf5(call_data, output_file):
             scaffold_grp.attrs["median_coverage"] = scaffold.median_coverage
             scaffold_grp.attrs["coverage_cutoff"] = scaffold.coverage_cutoff
             scaffold_grp.attrs["read_count"] = scaffold.read_count
-            scaffold_grp.attrs['repetitiveness'] = scaffold.repetitiveness
+            scaffold_grp.attrs["repetitiveness"] = scaffold.repetitiveness
+            scaffold_grp.attrs["ref_name"] = scaffold.ref_name
 
         h5.attrs['type'] = "VariantCallData"
         h5.attrs['min_gap_size'] = call_data.min_gap_size
@@ -221,6 +222,9 @@ def call_data_from_hdf5(hdf5_file):
 
             scaffold.repetitiveness = hdf5[scaffold_name].attrs.get(
                 'repetitiveness', 0.0)
+
+            scaffold.ref_name = hdf5[scaffold_name].attrs.get(
+                'ref_name', "na")
 
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']

@@ -32,6 +32,7 @@ import csv
 from strainge.variant_caller import Allele
 
 COMPARE_TSV_FIELDS = (
+    ("sample1", "%s"), ("sample2", "%s"),
     ("scaffold", "%s"), ("length", "%d"), ("common", "%d"),
     ("commonPct", "%.4f"), ("single", "%d"),
     ("singlePct", "%.4f"), ("singleAgree", "%d"), ("singleAgreePct", "%.4f"),
@@ -48,7 +49,7 @@ COMPARE_TSV_FIELDS = (
 )
 
 
-def generate_compare_summary_tsv(sample_comparison, output_file):
+def generate_compare_summary_tsv(name1, name2, sample_comparison, output_file):
     """
     Generate a TSV summarizing the results of a sample comparison
 
@@ -64,6 +65,8 @@ def generate_compare_summary_tsv(sample_comparison, output_file):
 
     for scaffold, metrics in sample_comparison.metrics.items():
         metrics['scaffold'] = scaffold
+        metrics['sample1'] = name1
+        metrics['sample2'] = name2
         writer.writerow([f[1] % metrics.get(f[0], 0)
                          for f in COMPARE_TSV_FIELDS])
 

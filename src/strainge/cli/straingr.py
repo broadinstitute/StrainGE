@@ -668,7 +668,8 @@ class CompareSubCommand(Subcommand):
 
             comparison = SampleComparison(call_data1, call_data2)
 
-            generate_compare_summary_tsv(comparison, summary_out)
+            generate_compare_summary_tsv(samples[0].stem, samples[1].stem,
+                                         comparison, summary_out)
 
             if details_out:
                 logger.info("Generating details file...")

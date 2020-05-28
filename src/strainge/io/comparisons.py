@@ -45,7 +45,7 @@ COMPARE_TSV_FIELDS = (
     ("BnotApct", "%.4f"), ("BnotAweak", "%d"), ("BnotAweakPct", "%.4f"),
     ("Agaps", "%d"), ("AsharedGaps", "%d"), ("AgapPct", "%.4f"),
     ("Bgaps", "%d"), ("BsharedGaps", "%d"), ("BgapPct", "%.4f"),
-    ("gapJaccardSim", "%.4f"),
+    ("gapJaccardSim", "%.4f")
 )
 
 

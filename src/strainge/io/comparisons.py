@@ -32,7 +32,7 @@ import csv
 from strainge.variant_caller import Allele
 
 COMPARE_TSV_FIELDS = (
-    ("sample1", "%s"), ("sample2", "%s"),
+    ("sample1", "%s"), ("sample2", "%s"), ("ref", "%s"),
     ("scaffold", "%s"), ("length", "%d"), ("common", "%d"),
     ("commonPct", "%.4f"), ("single", "%d"),
     ("singlePct", "%.4f"), ("singleAgree", "%d"), ("singleAgreePct", "%.4f"),

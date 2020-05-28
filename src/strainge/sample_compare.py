@@ -32,7 +32,7 @@ import logging
 import numpy
 from intervaltree import IntervalTree
 
-from strainge.variant_caller import count_ts_tv
+from strainge.variant_caller import count_ts_tv, scale_min_gap_size
 from strainge.utils import pct
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,7 @@ class SampleComparison:
         transversions_pct = transitions / single_cnt if single_cnt else 0.0
 
         return {
+            "ref": a.ref_name if a.ref_name else "na",
             "length": a.length,
             "common": common_cnt,
             "commonPct": common_pct,
@@ -223,13 +224,29 @@ class SampleComparison:
         gaps_a = numpy.zeros((a.length,), dtype=bool)
         gaps_b = numpy.zeros((b.length,), dtype=bool)
 
+        # For jaccard similarity, only take into account gaps that can be
+        # detected in both samples. That means, that if one sample has a
+        # higher min_gap_size because it's a low abundance strain,
+        # ignore gaps in the other sample smaller than that size.
+        scaled_min_gap_a = scale_min_gap_size(self.sample1.min_gap_size,
+                                              a.mean_coverage)
+        scaled_min_gap_b = scale_min_gap_size(self.sample2.min_gap_size,
+                                              b.mean_coverage)
+        min_gap_size = max(scaled_min_gap_a, scaled_min_gap_b)
+
         for g in a.gaps:
-            gaps_a[g.start:g.end] = True
+            if (g.end - g.start) >= min_gap_size:
+                gaps_a[g.start:g.end] = True
 
         for g in b.gaps:
-            gaps_b[g.start:g.end] = True
+            if (g.end - g.start) >= min_gap_size:
+                gaps_b[g.start:g.end] = True
 
-        jaccard = (~gaps_a & ~gaps_b).sum() / (~gaps_a | ~gaps_b).sum()
+        total_non_gap = (~gaps_a | ~gaps_b).sum()
+        if total_non_gap > 0:
+            jaccard = (~gaps_a & ~gaps_b).sum() / total_non_gap
+        else:
+            jaccard = 1.0
 
         return {
             "Agaps": a_length,

@@ -629,6 +629,11 @@ class CompareSubCommand(Subcommand):
                  "genome instead of only for positions where alleles differ."
         )
 
+        subparser.add_argument(
+            '-G', '--min-gap', type=int, default=None, metavar='SIZE',
+            help="Only compare gaps larger than the given size."
+        )
+
         group = subparser.add_mutually_exclusive_group()
 
         group.add_argument(
@@ -652,8 +657,8 @@ class CompareSubCommand(Subcommand):
         )
 
     def __call__(self, samples, summary_out=None, details_out=None,
-                 verbose_details=False, baseline=None, all_vs_all=False,
-                 output_dir="", *args, **kwargs):
+                 min_gap=None, verbose_details=False, baseline=None,
+                 all_vs_all=False, output_dir="", *args, **kwargs):
         if baseline and not baseline.is_file() and not baseline == Path(""):
             logger.error("Baseline %s does not exists.", baseline)
             return 1
@@ -673,6 +678,7 @@ class CompareSubCommand(Subcommand):
                 print(sys.argv[0], "compare",
                       "-o", summary_file,
                       "-d", details_file,
+                      f"-G {min_gap}" if min_gap is not None else "",
                       "-V" if verbose_details else "",
                       sample1, sample2)
         else:
@@ -687,9 +693,9 @@ class CompareSubCommand(Subcommand):
                         samples[1].stem)
 
             logger.info("Loading sample 1 %s", samples[0].stem)
-            call_data1 = call_data_from_hdf5(samples[0])
+            call_data1 = call_data_from_hdf5(samples[0], min_gap)
             logger.info("Loading sample 2 %s", samples[1].stem)
-            call_data2 = call_data_from_hdf5(samples[1])
+            call_data2 = call_data_from_hdf5(samples[1], min_gap)
 
             comparison = SampleComparison(call_data1, call_data2)
 

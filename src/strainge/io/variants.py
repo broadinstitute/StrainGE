@@ -153,7 +153,7 @@ def call_data_to_hdf5(call_data, output_file):
         h5.attrs['lowmq_reads'] = call_data.lowmq_reads
 
 
-def call_data_from_hdf5(hdf5_file):
+def call_data_from_hdf5(hdf5_file, new_min_gap=None) -> VariantCallData:
     """
     Create a `CallStatsCollector` by loading the relevant data from an
     earlier created HDF5 file.
@@ -162,10 +162,12 @@ def call_data_from_hdf5(hdf5_file):
     ----------
     hdf5_file : str
         HDF5 filename
+    new_min_gap : int
+        Optionally set a new minimum gap size
 
     Returns
     -------
-    CallStatsCollector
+    VariantCallData
     """
     datasets = {"refmask", "alleles", "bad", "lowmq_count",
                 "mq_sum", "strong", "weak", "coverage", "high_coverage"}
@@ -179,6 +181,11 @@ def call_data_from_hdf5(hdf5_file):
                           f"`VariantCallData`.")
 
         min_gap = hdf5.attrs['min_gap_size']
+        if new_min_gap is not None:
+            logger.info("Using new minimum gap size %d (original: %d)",
+                        new_min_gap, min_gap)
+
+            min_gap = new_min_gap
 
         scaffolds = {}
         for scaffold in hdf5:
@@ -228,7 +235,6 @@ def call_data_from_hdf5(hdf5_file):
 
         call_data.mean_coverage = hdf5.attrs['mean_coverage']
         call_data.median_coverage = hdf5.attrs['median_coverage']
-        call_data.min_gap_size = hdf5.attrs['min_gap_size']
 
         if 'total_reads' not in hdf5.attrs:
             logger.warning("This is an old StrainGR hdf5 file. Strain "
@@ -257,7 +263,6 @@ def call_data_from_hdf5(hdf5_file):
                     call_data.mean_coverage)
         logger.info("Median coverage (across all scaffolds): %.2f",
                     call_data.median_coverage)
-        logger.info("Minimum gap size: %.2f", call_data.min_gap_size)
 
         # Reconstruct gaps again
         call_data.find_gaps()

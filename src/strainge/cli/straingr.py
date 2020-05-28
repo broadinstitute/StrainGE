@@ -58,6 +58,8 @@ from strainge import cluster
 
 logger = logging.getLogger()
 
+DEFAULT_MIN_GAP_SIZE = 5000
+
 
 class PrepareRefSubcommand(Subcommand):
     """
@@ -329,7 +331,7 @@ def write_tracks(call_data, tracks, prefix, min_size=1):
     ----------
     call_data
     tracks : set
-    prefix : Path
+    prefix : Path | str
     min_size : int
     """
     if "all" in tracks:
@@ -344,7 +346,7 @@ def write_tracks(call_data, tracks, prefix, min_size=1):
     for track in tracks:
         suffix, func = TRACKS[track]
 
-        with prefix.with_suffix(suffix).open("w") as f:
+        with open(str(prefix) + suffix, 'w') as f:
             func(call_data, f, min_size)
 
 
@@ -399,9 +401,10 @@ class CallSubcommand(Subcommand):
                  "check. Default: %(default)d."
         )
         call_qc_group.add_argument(
-            '-G', '--min-gap', type=int, default=2000,
+            '-G', '--min-gap', type=int, default=DEFAULT_MIN_GAP_SIZE,
             help="Minimum size of gap to be considered as such. Default: "
-                 "2000. Will be automatically scaled depending on coverage."
+                 "%(default)d. Will be automatically scaled depending on "
+                 "coverage."
         )
 
         call_out_group = subparser.add_argument_group(
@@ -487,8 +490,8 @@ class CallSubcommand(Subcommand):
             write_vcf(call_data, vcf, verbose_vcf)
 
         if tracks:
-            write_tracks(call_data, set(tracks), Path(hdf5_out),
-                         track_min_size)
+            write_tracks(call_data, set(tracks),
+                         Path(hdf5_out).with_suffix(""), track_min_size)
 
         logger.info("Done.")
 
@@ -521,9 +524,25 @@ class ViewSubcommand(Subcommand):
             )
         )
         subparser.add_argument(
+            '-p', '--track-prefix', default=None, required=False,
+            metavar='PATH',
+            help="Specifiy filename prefix for all track files. By default "
+                 "it will use the path of the HDF5 file without the '.hdf5' "
+                 "extension."
+        )
+
+        subparser.add_argument(
             '--track-min-size', type=int, required=False, default=1,
             help="For all --track-* options above, only include features ("
                  "regions) of at least the given size. Default: %(default)d."
+        )
+
+        subparser.add_argument(
+            '-G', '--min-gap', type=int, default=None, required=False,
+            help="Minimum size of gap to be considered as such. If not set, "
+                 "will use the value used in the original `straingr call` "
+                 "run. If set, gaps will need to be at least the given size "
+                 "to be reported. Will be scaled depending on coverage."
         )
 
         subparser.add_argument(
@@ -544,12 +563,13 @@ class ViewSubcommand(Subcommand):
                  "observed."
         )
 
-    def __call__(self, hdf5, summary=None, tracks=None, track_min_size=1,
-                 vcf=None, verbose_vcf=False, **kwargs):
+    def __call__(self, hdf5, summary=None, tracks=None,
+                 track_prefix=None, track_min_size=1,
+                 min_gap=None, vcf=None, verbose_vcf=False, **kwargs):
         """View and output the StrainGR calling results in different file
         formats."""
         logger.info("Loading data from HDF5 file %s", hdf5)
-        call_data = call_data_from_hdf5(hdf5)
+        call_data = call_data_from_hdf5(hdf5, min_gap)
 
         if summary:
             # Output a summary TSV
@@ -560,7 +580,12 @@ class ViewSubcommand(Subcommand):
         if tracks:
             tracks = set(tracks)
 
-            write_tracks(call_data, tracks, Path(hdf5), track_min_size)
+            if track_prefix is not None:
+                prefix = track_prefix
+            else:
+                prefix = str(Path(hdf5).with_suffix(""))
+
+            write_tracks(call_data, tracks, prefix, track_min_size)
 
         if vcf:
             logger.info("Generating VCF file...")

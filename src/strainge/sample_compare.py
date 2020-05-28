@@ -234,6 +234,8 @@ class SampleComparison:
         else:
             jaccard = 1.0
 
+        jaccard2 = (~gaps_a & ~gaps_b).sum() / (~gaps_a | ~gaps_b).sum()
+
         return {
             "Agaps": a_length,
             "AsharedGaps": a_shared_length,
@@ -241,5 +243,6 @@ class SampleComparison:
             "Bgaps": b_length,
             "BsharedGaps": b_shared_length,
             "BgapPct": pct(b_shared_length, b_length),
-            "gapJaccardSim": jaccard
+            "gapJaccardSim": jaccard,
+            "gapJaccardSim2": jaccard2
         }

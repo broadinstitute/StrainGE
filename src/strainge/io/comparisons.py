@@ -63,7 +63,9 @@ def generate_compare_summary_tsv(name1, name2, sample_comparison, output_file):
 
     writer.writerow(f[0] for f in COMPARE_TSV_FIELDS)
 
-    for scaffold, metrics in sample_comparison.metrics.items():
+    for scaffold, metrics in sorted(
+            sample_comparison.metrics.items(),
+            key=lambda e: (e[1]['ref'], -e[1]['length'])):
         metrics['scaffold'] = scaffold
         metrics['sample1'] = name1
         metrics['sample2'] = name2

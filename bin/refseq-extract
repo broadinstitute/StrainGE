@@ -30,8 +30,12 @@
 
 import argparse
 import os
+import gzip
+import bz2
+from pathlib import Path
 from Bio import SeqIO
-from strainge.kmertools import open_seq_file
+#from strainge.io.utils import open_compressed
+
 
 
 parser = argparse.ArgumentParser(description="Parse RefSeq fasta files to chromosome & plasmid fasta files")
@@ -44,18 +48,35 @@ def strainName(description):
 
 names = set()
 
+def open_compressed(filename):
+    if not isinstance(filename, Path):
+        filename = Path(filename)
+
+    if filename.suffix == ".gz":
+        f = gzip.open(filename, "rt")
+    elif filename.suffix == ".bz2":
+        f = bz2.open(filename, "rt")
+    else:
+        f = open(filename)
+    return f
+
+def open_fasta_file(file_name):
+    return SeqIO.parse(open_compressed(file_name), "fasta")
+
+
+
 def extract(seqFile, outputDir):
     global names
-    for seq in open_seq_file(seqFile):
+    for seq in open_fasta_file(seqFile):
         #print seq.description
         # remove all after comma
-        print(seq.description)
         name = seq.description.split(',')[0]
         name = name.replace("Escherichia coli", "E_coli")
         name = name.replace("Escherichia ", "E_")
         name = name.replace("Enterococcus", "En")
         name = name.replace("Shigella", "Sh")
         name = name.replace("Staphylococcus", "S")
+        name = name.replace("Citrobacter", "Citro")
         name = name.replace("Streptococcus", "Strep")
         name = name.replace("Klebsiella", "K")
         name = name.replace("Pseudomonas", "Ps")
@@ -75,9 +96,12 @@ def extract(seqFile, outputDir):
         name = name.replace("'", "")
         name = name.replace(":", "-")
         name = name.replace("/", " ")
+        name = name.replace("/", " ")
         name = name.replace(".", " ")
         name = name.replace("(", " ")
         name = name.replace(")", " ")
+        if name.find('=') > 0:
+            name = name[:name.index('=')]
         name = name.strip()
         words = name.split(' ')
 

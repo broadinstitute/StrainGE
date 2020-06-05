@@ -850,6 +850,17 @@ class ScaffoldCallData:
                      (qual_fraction > min_qual_frac))
         self.strong = (confirmed * ALLELE_MASKS[numpy.newaxis, :]).sum(axis=-1)
 
+        # Determine regions where the majority of reads map with low mapping
+        # quality, and thus are likely repetitive regions
+        depth = self.alleles[:, 0].sum(axis=-1)
+        self.lowmq = ((self.lowmq_count > 1) & (self.lowmq_count > depth))
+
+        # Determine regions where we have mostly bad (discarded) reads,
+        # and don't make calls in those regions.
+        bad = ((self.bad > 1) & (self.bad > depth))
+        self.weak[bad] = 0
+        self.strong[bad] = 0
+
         # Remove any calls in too high coverage regions
         self.weak[self.high_coverage] = 0
         self.strong[self.high_coverage] = 0
@@ -868,9 +879,6 @@ class ScaffoldCallData:
         min_size = scale_min_gap_size(min_size, self.mean_coverage)
         logger.info("%s: scaled min-gap size %.2f at mean coverage %.2f",
                     self.name, min_size, self.mean_coverage)
-
-        depth = self.alleles[:, 0].sum(axis=-1)
-        self.lowmq = ((self.lowmq_count > 1) & (self.lowmq_count > depth))
 
         # Covered is either: 1) we can make a weak call 2) we have low
         # mapping quality reads there (potentially from repetitive regions)
@@ -981,7 +989,6 @@ class VariantCaller:
         logger.info("%d low mapping quality reads", call_data.lowmq_reads)
 
         logger.info("Processing pileups...")
-        self.discarded_reads = set()
         for column in bamfile.pileup():
             scaffold = column.reference_name
             refpos = column.reference_pos

@@ -850,13 +850,9 @@ class ScaffoldCallData:
                      (qual_fraction > min_qual_frac))
         self.strong = (confirmed * ALLELE_MASKS[numpy.newaxis, :]).sum(axis=-1)
 
-        # Determine regions where the majority of reads map with low mapping
-        # quality, and thus are likely repetitive regions
-        depth = self.alleles[:, 0].sum(axis=-1)
-        self.lowmq = ((self.lowmq_count > 1) & (self.lowmq_count > depth))
-
         # Determine regions where we have mostly bad (discarded) reads,
         # and don't make calls in those regions.
+        depth = self.alleles[:, 0].sum(axis=-1)
         bad = ((self.bad > 1) & (self.bad > depth))
         self.weak[bad] = 0
         self.strong[bad] = 0
@@ -879,6 +875,11 @@ class ScaffoldCallData:
         min_size = scale_min_gap_size(min_size, self.mean_coverage)
         logger.info("%s: scaled min-gap size %.2f at mean coverage %.2f",
                     self.name, min_size, self.mean_coverage)
+
+        # Determine regions where the majority of reads map with low mapping
+        # quality, and thus are likely repetitive regions
+        depth = self.alleles[:, 0].sum(axis=-1)
+        self.lowmq = ((self.lowmq_count > 1) & (self.lowmq_count > depth))
 
         # Covered is either: 1) we can make a weak call 2) we have low
         # mapping quality reads there (potentially from repetitive regions)

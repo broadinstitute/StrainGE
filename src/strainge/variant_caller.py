@@ -850,13 +850,6 @@ class ScaffoldCallData:
                      (qual_fraction > min_qual_frac))
         self.strong = (confirmed * ALLELE_MASKS[numpy.newaxis, :]).sum(axis=-1)
 
-        # Determine regions where we have mostly bad (discarded) reads,
-        # and don't make calls in those regions.
-        depth = self.alleles[:, 0].sum(axis=-1)
-        bad = ((self.bad > 1) & (self.bad > depth))
-        self.weak[bad] = 0
-        self.strong[bad] = 0
-
         # Remove any calls in too high coverage regions
         self.weak[self.high_coverage] = 0
         self.strong[self.high_coverage] = 0

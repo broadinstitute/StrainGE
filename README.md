@@ -213,7 +213,7 @@ file specifies a cluster along with its entries, separated by a tab. The
 genomes in the first column represent the cluster representatives. This option 
 is optional, but can be useful for debugging purposes.
 
-#### 3. Create pan-genome k-mer database
+#### 4. Create pan-genome k-mer database
 
 Using our list of references, we finally create a single database file which
 will contain all k-mers of the given references. 

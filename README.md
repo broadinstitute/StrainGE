@@ -98,29 +98,70 @@ connected. A graphical overview of the pipeline can be seen below.
 
 ### StrainGST database creation
 
-#### 1. k-merize your reference sequences
+#### 1. Download high quality reference genomes for your genus/species of interest
 
 This tutorial assumes you have activated the *strainge* conda environment.
-Furthermore, we assume that you've downloaded your reference sequences as FASTA
-files in the current working directory.
+The first step is to obtain high quality reference genomes for your genus or
+species of interest, any method suffices. We've found the tool [ncbi-genome
+-download](https://github.com/kblin/ncbi-genome-download) useful, and will
+use that tool for this step. 
 
-To k-merize all downloaded reference genomes, run the following bash command:
+For example, to download all *Escherichia* genomes:
 
 ```bash
-for f in *.fa; do straingst kmerize -k 23 -o $f.hdf5 $f; done;
+mkdir ref_genomes
+ncbi-genome-download bacteria -l complete -g Escherichia,Shigella -H \ 
+    -o ref_genomes
 ```
 
-For each FASTA file, there is now an accompanying HDF5 file containing the
-k-mer data. With `-k` you can specify the k-mer size, which is by default 23.
+The `-H` flag automatically organizes all downloaded files in a nice human
+-readable folder structure. Besides downloading references, this command
+downloads all associated metadata like gene annotations too, which is useful
+for downstram analyses.
 
-#### 2. Compare the k-mer sets and cluster similar references
+Next, we organize all references in a single directory using a script
+available in the `bin/` directory of this repository: 
+`prepare_strainge_db.py`. This script serves two main purposes: 1) it
+organizes all references in a single directory, 2) it optionally splits
+chromosomes and plasmids into separate files. When tracking strains we're
+usually more interested in tracking the chromosome, and we don't want
+StrainGST to report a strain as present because it shares a plasmid
+(although its algorithm should already prevent most of those cases.)
+
+So download the [prepare_strainge_db.py](https://github.com/broadinstitute/StrainGE/blob/master/bin/prepare_strainge_db.py)
+script to your analysis folder, and run it as follows:
+```bash
+mkdir strainge_db
+python3 prepare_strainge_db.py ref_genomes/human_readable -s \
+    -o strainge_db > strainge_db/references_meta.tsv
+```
+
+The `-s` flag enables splitting chromosomes and plasmids. The file
+`references_meta.tsv` contains metadata on each reference (for example its
+accession no.)
+
+#### 2. K-merize your reference sequences
+
+Next, we k-merize each genome:
+
+```bash
+for f in *.chrom.fna.gz; do straingst kmerize -o $f.hdf5 $f; done;
+```
+
+The FASTA files with only chromosomes have a suffix of `*.chrom.fna.gz`. For
+each FASTA file, there is now an accompanying HDF5 file containing the
+k-mer data. With `-k` you can optionally specify a different k-mer size, which
+by default is 23.
+
+#### 3. Compare the k-mer sets and cluster similar references
 
 The goal of StrainGST is to identify close reference genomes to strains present
 in a sample. These reference genomes are in turn used for variant calling and
 sample comparisons. Here lies a trade-off: the reference genome should close
 enough for accurate variant calling, but sample comparisons are more easy to
 perform when the variant calling step is done using the same reference genome,
-so you don't want to be too specific. The database of reference genomes should 
+so you don't want to be too specific. Furthermore, limiting the database
+size reduces computational time. The database of reference genomes should 
 cover the diversity of the species of interest but not contain too many highly 
 similar genomes. Therefore a clustering step is performed to reduce redundancy 
 in the database.
@@ -153,7 +194,7 @@ these pairwise similarities.
 We can now cluster our references using the `straingst cluster` command. 
 
 ```bash
-straingst cluster -i similarities.tsv -d -C 0.99 -c 0.95 \
+straingst cluster -i similarities.tsv -d -C 0.99 -c 0.90 \
    --clusters-out clusters.tsv \
     *.hdf5 > references_to_keep.txt
 ```
@@ -163,7 +204,7 @@ determine which references to keep. The first step is to discard any genome
 where more than 99% of its kmers are present in another genome, as enabled by
 `-d` and `-C 0.99`. Afterwards, we cluster similar genomes based on the
 *Jaccard* similarity between k-mersets: if the Jaccard similarity between two
-k-mer sets is higher than 0.95 (`-c 0.95`), those two genomes will be clustered 
+k-mer sets is higher than 0.90 (`-c 0.90`), those two genomes will be clustered 
 together. For each cluster we pick one representative genome: the genome with 
 the smallest mean distance to the other cluster members. Each genome to keep is
 written to `references_to_keep.txt`. With the option `--clusters-out` we 
@@ -270,6 +311,8 @@ After concatenating the selected references, `prepare-ref` runs `nucmer` from
 the [MUMmer][mummer] toolkit to analyze how "repetitive" the concatenated
 reference is, i.e. how much sequence do the genomes concatenated share. These
 values are used to normalize strain abundances in a later step.
+
+[mummer]: https://github.com/mummer4/mummer
 
 To create a concatenated reference, use `straingr prepare-ref` as follows:
 

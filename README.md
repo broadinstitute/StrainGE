@@ -110,7 +110,7 @@ For example, to download all *Escherichia* genomes:
 
 ```bash
 mkdir ref_genomes
-ncbi-genome-download bacteria -l complete -g Escherichia,Shigella -H \ 
+ncbi-genome-download bacteria -l complete -g Escherichia,Shigella -H -F all \ 
     -o ref_genomes
 ```
 

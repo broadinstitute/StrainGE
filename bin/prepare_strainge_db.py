@@ -85,11 +85,13 @@ def split_chrom_plasmids(path):
     prefix = path.name.replace(".fna", "").replace(".gz", "")
     chrom_path = path.parent / f"{prefix}.chrom.fna.gz"
     with gzip.open(chrom_path, "wt") as f:
-        skbio.io.write(chromosomes, "fasta", into=f)
+        for chrom in chromosomes:
+            skbio.io.write(chrom, "fasta", into=f)
 
     plasmid_path = path.parent / f"{prefix}.plasmids.fna.gz"
     with gzip.open(plasmid_path, "wt") as f:
-        skbio.io.write(plasmids, "fasta", into=f)
+        for plasmid in plasmids:
+            skbio.io.write(plasmid, "fasta", into=f)
 
 
 def search_directory(directory, output_dir, ofile, split_plasmids=False):

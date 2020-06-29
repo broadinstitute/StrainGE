@@ -145,7 +145,7 @@ accession no.)
 Next, we k-merize each genome:
 
 ```bash
-for f in *.chrom.fna.gz; do straingst kmerize -o $f.hdf5 $f; done;
+for f in strainge_db/*.chrom.fna.gz; do straingst kmerize -o $f.hdf5 $f; done;
 ```
 
 The FASTA files with only chromosomes have a suffix of `*.chrom.fna.gz`. For

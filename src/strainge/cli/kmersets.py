@@ -404,7 +404,7 @@ class ClusterSubcommand(Subcommand):
 
     def register_arguments(self, subparser: argparse.ArgumentParser):
         subparser.add_argument(
-            '-c', '--cutoff', type=float, default=0.95,
+            '-c', '--cutoff', type=float, default=0.90,
             help="Minimum similarity between two sets to group them together."
         )
         subparser.add_argument(

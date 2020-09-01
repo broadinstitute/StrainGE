@@ -145,7 +145,7 @@ accession no.)
 Next, we k-merize each genome:
 
 ```bash
-for f in strainge_db/*.chrom.fna.gz; do straingst kmerize -o $f.hdf5 $f; done;
+for f in strainge_db/*.fna.gz; do straingst kmerize -o $f.hdf5 $f; done;
 ```
 
 The FASTA files with only chromosomes have a suffix of `*.chrom.fna.gz`. For
@@ -157,7 +157,7 @@ by default is 23.
 
 The goal of StrainGST is to identify close reference genomes to strains present
 in a sample. These reference genomes are in turn used for variant calling and
-sample comparisons. Here lies a trade-off: the reference genome should close
+sample comparisons. Here lies a trade-off: the reference genome should be close
 enough for accurate variant calling, but sample comparisons are more easy to
 perform when the variant calling step is done using the same reference genome,
 so you don't want to be too specific. Furthermore, limiting the database
@@ -169,7 +169,7 @@ in the database.
 We remove redundant reference genomes two ways:
 
 1. Remove reference genomes that are a near perfect subset of another genome.
-   An example of this an an *E. coli* strain used for synthetic biology
+   An example of this is an *E. coli* strain used for synthetic biology
    applications that was basically a K-12 strain with many genes removed.
 2. Cluster closely related genomes based on k-mer similarity and pick one 
    representative.

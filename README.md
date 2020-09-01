@@ -179,7 +179,7 @@ and a metric to identify whether a k-mer set is a subset of another. Both can
 be obtained using `straingst kmersim`.
 
 ```bash
-straingst kmersim --all-vs-all -t 4 -S jaccard -S subset *.hdf5 > similarities.tsv
+straingst kmersim --all-vs-all -t 4 -S jaccard -S subset strainge_db/*.hdf5 > similarities.tsv
 ```
 
 This command produces as tab separated file, where each line contains
@@ -196,7 +196,7 @@ We can now cluster our references using the `straingst cluster` command.
 ```bash
 straingst cluster -i similarities.tsv -d -C 0.99 -c 0.90 \
    --clusters-out clusters.tsv \
-    *.hdf5 > references_to_keep.txt
+    strainge_db/*.hdf5 > references_to_keep.txt
 ```
 
 The cluster command reads our previously created file `similarities.tsv` to

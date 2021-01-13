@@ -251,10 +251,19 @@ class KmersimRunner:
     often.
     """
 
-    def __init__(self):
-        self.kmersets = {}
+    def __init__(self, kmersets, scoring, fingerprint):
+        logger.info("Loading k-mer sets...")
+        with h5py.File(kmersets[0], 'r') as h5:
+            self.k = h5.attrs['k']
 
-    def __call__(self, kmersets, scoring, fingerprint=False):
+        load_func = kmertools.load_fingerprint if fingerprint else kmertools.load_kmers
+        self.kmersets = {
+            kmerset: load_func(kmerset, expect_k=self.k) for kmerset in kmersets
+        }
+
+        self.scoring = scoring
+
+    def __call__(self, kmersets):
         try:
             set1, set2 = kmersets
 
@@ -271,20 +280,18 @@ class KmersimRunner:
             name1 = kmertools.name_from_path(set1)
             name2 = kmertools.name_from_path(set2)
 
-            data_attr = 'fingerprint' if fingerprint else 'kmers'
-            data1 = getattr(self.kmersets[set1], data_attr)
-            data2 = getattr(self.kmersets[set2], data_attr)
+            data1 = self.kmersets[set1]
+            data2 = self.kmersets[set2]
 
             logger.info("Comparing %s vs %s...", name1, name2)
 
             scores = {
                 metric: comparison.similarity_score(data1, data2, metric)
-                for metric in scoring
+                for metric in self.scoring
             }
 
             if 'jaccard' in scores:
-                k = self.kmersets[set1].k
-                scores['ani'] = comparison.ani(k, scores['jaccard'])
+                scores['ani'] = comparison.ani(self.k, scores['jaccard'])
 
             return [name1, name2, scores]
         except KeyboardInterrupt:
@@ -311,9 +318,8 @@ class KmersimSubCommand(Subcommand):
         )
 
         subparser.add_argument(
-            '-f', '--fingerprint', action="store_true", default=False,
-            required=False,
-            help="Use min-hash fingerprint instead of full k-mer set."
+            '-f', '--full-db', action="store_true",
+            help="Use full k-mer set instead of min-hash fingerprint."
         )
         subparser.add_argument(
             '-S', '--scoring', choices=list(comparison.SCORING_METHODS.keys()),
@@ -338,11 +344,13 @@ class KmersimSubCommand(Subcommand):
         )
 
     def __call__(self, strains, output, all_vs_all=False, sample=None,
-                 fingerprint=False, scoring=None, threads=1,
+                 full_db=False, scoring=None, threads=1,
                  fraction=False, **kwargs):
 
         if not scoring:
-            scoring = ["jaccard"]
+            scoring = ["jaccard", "subset"]
+
+        fingerprint = not full_db
 
         if sample:
             sample_name = kmertools.name_from_path(sample)
@@ -362,13 +370,12 @@ class KmersimSubCommand(Subcommand):
             logger.error("Either --sample or --all-vs-all required.")
             return 1
 
-        runner = functools.partial(KmersimRunner(), scoring=scoring,
-                                   fingerprint=fingerprint)
+        runner = KmersimRunner(strains, scoring, fingerprint)
         if threads > 1:
             pool = multiprocessing.Pool(threads)
 
             scores = list(pool.imap_unordered(runner, to_compute_iter,
-                                              chunksize=2**8))
+                                              chunksize=2**16))
         else:
             scores = list(map(runner, to_compute_iter))
 

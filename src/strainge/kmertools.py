@@ -114,7 +114,7 @@ def open_seq_file(file_name):
                 yield from iter_sequences_fasta(f)
 
 
-def load_hdf5(file_path, thing):
+def load_hdf5(file_path, thing, expect_k=None):
     with h5py.File(file_path, 'r') as h5:
         hdf5_type = h5.attrs['type']
 
@@ -125,19 +125,23 @@ def load_hdf5(file_path, thing):
             raise ValueError("The HDF5 file is not a KmerSet, unexpected type:"
                              " '{}'".format(h5.attrs['type']))
 
+        k = h5.attrs['k']
+        if expect_k is not None and expect_k != k:
+            raise ValueError(f"The loaded kmerset has not the expected k-mer size! Expected: {expect_k}, actual: {k}")
+
         return np.array(h5[thing])
 
 
-def load_kmers(file_name):
-    return load_hdf5(file_name, "kmers")
+def load_kmers(file_name, expect_k=None):
+    return load_hdf5(file_name, "kmers", expect_k)
 
 
-def load_counts(file_name):
-    return load_hdf5(file_name, "counts")
+def load_counts(file_name, expect_k=None):
+    return load_hdf5(file_name, "counts", expect_k)
 
 
-def load_fingerprint(file_name):
-    return load_hdf5(file_name, "fingerprint")
+def load_fingerprint(file_name, expect_k=None):
+    return load_hdf5(file_name, "fingerprint", expect_k)
 
 
 def name_from_path(file_path):

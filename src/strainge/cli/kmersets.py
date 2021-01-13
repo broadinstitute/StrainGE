@@ -37,6 +37,7 @@ import multiprocessing
 from pathlib import Path
 
 import h5py
+import numpy
 import pandas
 
 from strainge.cli.registry import Subcommand
@@ -267,16 +268,6 @@ class KmersimRunner:
         try:
             set1, set2 = kmersets
 
-            if not set1 in self.kmersets:
-                self.kmersets[set1] = kmertools.kmerset_from_hdf5(set1)
-
-            if not set2 in self.kmersets:
-                self.kmersets[set2] = kmertools.kmerset_from_hdf5(set2)
-
-            if self.kmersets[set1].k != self.kmersets[set2].k:
-                raise ValueError(f"Comparing two k-mer sets with different "
-                                 f"values for `k`!\n{set1}\n{set2}")
-
             name1 = kmertools.name_from_path(set1)
             name2 = kmertools.name_from_path(set2)
 
@@ -433,6 +424,11 @@ class ClusterSubcommand(Subcommand):
                  "to discard it."
         )
         subparser.add_argument(
+            '-w', '--warn-too-distant', type=float, default=85, metavar="ANI",
+            help="Warn when including references that that seem too distantly related, which could indicate a "
+                 "mislabeled reference genome. Default: %(default)s%% ANI."
+        )
+        subparser.add_argument(
             '-p', '--priorities', type=argparse.FileType('r'), default=None,
             metavar="FILE",
             help="An optional TSV file where the first column represents the "
@@ -459,16 +455,29 @@ class ClusterSubcommand(Subcommand):
         )
 
     def __call__(self, kmersets, similarity_scores, output,
-                 discard_contained=False, priorities=None, cutoff=0.95,
+                 discard_contained=False, priorities=None, cutoff=0.95, warn_too_distant=85,
                  contained_cutoff=0.99, clusters_out=None, **kwargs):
         label_to_path = {
             kset.stem: kset for kset in kmersets
         }
         labels = list(label_to_path.keys())
+        label_ix = {label: i for i, label in enumerate(labels)}
 
         logger.info("Reading pairwise similarities...")
-        similarities = pandas.read_csv(similarity_scores, sep='\t',
-                                       comment='#')
+        similarities = pandas.read_csv(similarity_scores, sep='\t', comment='#').set_index(['kmerset1', 'kmerset2'])
+
+        # Check for references too distant
+        if 'ani' in similarities:
+            sim_matrix = cluster.similarities_to_matrix(similarities, labels, 'ani')
+
+            threshold = warn_too_distant / 100
+            mean_sim = numpy.nanmean(sim_matrix.values, axis=1)
+            ix = mean_sim < threshold
+            too_distant = sim_matrix[mean_sim < threshold].index
+
+            for ref, dist in zip(too_distant, mean_sim[ix]):
+                logger.warning(f"%s average ANI to other references is {dist*100:.1f}%%, possibly mislabeled "
+                               "reference?", ref)
 
         exclude = set()
         if discard_contained and 'subset' not in similarities.columns:
@@ -477,18 +486,15 @@ class ClusterSubcommand(Subcommand):
                            "Run `strainge kmersim` with both '--scoring "
                            "jaccard' and '--scoring subset'")
         elif discard_contained:
-            subset_matrix = similarities.pivot('kmerset1', 'kmerset2',
-                                               'subset')
+            subset_matrix = cluster.similarities_to_matrix(similarities, labels, 'subset')
 
-            subset_max = subset_matrix.max(axis=1)
-            exclude = subset_max[subset_max >= contained_cutoff].index
+            subset_max = numpy.nanmax(subset_matrix, axis=1)
+            exclude = subset_matrix[subset_max >= contained_cutoff].index
             logger.info("Excluding %d genomes because they're for at least "
                         "%d%% contained in another genome.", len(exclude),
                         contained_cutoff * 100)
 
             labels = [l for l in labels if l not in exclude]
-
-        similarities = similarities.set_index(['kmerset1', 'kmerset2'])
 
         logger.info("Clustering genomes...")
         clusters = cluster.cluster_genomes(similarities, labels, cutoff)

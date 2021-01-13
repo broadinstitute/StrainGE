@@ -31,7 +31,26 @@ import logging
 import itertools
 from collections import defaultdict
 
+import numpy
+import pandas
+
 logger = logging.getLogger(__name__)
+
+
+def similarities_to_matrix(similarities, labels, metric='jaccard'):
+    """Turn the pairwise similarities into a symmetric matrix."""
+
+    label_ix = {label: i for i, label in enumerate(labels)}
+
+    matrix = numpy.empty((len(labels), len(labels)))
+    for kmerset1, kmerset2 in similarities.index:
+        i = label_ix[kmerset1]
+        j = label_ix[kmerset2]
+
+        matrix[i, j] = similarities.loc[(kmerset1, kmerset2), metric]
+        matrix[j, i] = similarities.loc[(kmerset1, kmerset2), metric]
+
+    return pandas.DataFrame(matrix, index=labels, columns=labels)
 
 
 def cluster_genomes(similarities, labels, threshold, metric='jaccard'):

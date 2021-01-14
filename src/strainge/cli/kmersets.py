@@ -278,11 +278,16 @@ class KmersimRunner:
 
             scores = {
                 metric: comparison.similarity_score(data1, data2, metric)
-                for metric in self.scoring
+                for metric in self.scoring if metric != 'subset'
             }
 
             if 'jaccard' in scores:
                 scores['ani'] = comparison.ani(self.k, scores['jaccard'])
+
+            # Subset scores are not symmetric
+            if 'subset' in self.scoring:
+                scores['subset1'] = comparison.subset(data1, data2)
+                scores['subset2'] = comparison.subset(data2, data1)
 
             return [name1, name2, scores]
         except KeyboardInterrupt:
@@ -480,7 +485,7 @@ class ClusterSubcommand(Subcommand):
                                "reference?", ref)
 
         exclude = set()
-        if discard_contained and 'subset' not in similarities.columns:
+        if discard_contained and 'subset1' not in similarities.columns:
             logger.warning("No 'subset' score in similarities file. Can't "
                            "discard k-mersets that are subsets of another. "
                            "Run `strainge kmersim` with both '--scoring "
@@ -490,8 +495,8 @@ class ClusterSubcommand(Subcommand):
 
             subset_max = numpy.nanmax(subset_matrix, axis=1)
             exclude = subset_matrix[subset_max >= contained_cutoff].index
-            logger.info("Excluding %d genomes because they're for at least "
-                        "%d%% contained in another genome.", len(exclude),
+            logger.info("Excluding %d genomes because they're contained for at least "
+                        "%d%% in another genome.", len(exclude),
                         contained_cutoff * 100)
 
             labels = [l for l in labels if l not in exclude]

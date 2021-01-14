@@ -47,8 +47,12 @@ def similarities_to_matrix(similarities, labels, metric='jaccard'):
         i = label_ix[kmerset1]
         j = label_ix[kmerset2]
 
-        matrix[i, j] = similarities.loc[(kmerset1, kmerset2), metric]
-        matrix[j, i] = similarities.loc[(kmerset1, kmerset2), metric]
+        if metric == 'subset':
+            matrix[i, j] = similarities.loc[(kmerset1, kmerset2), 'subset1']
+            matrix[j, i] = similarities.loc[(kmerset1, kmerset2), 'subset2']
+        else:
+            matrix[i, j] = similarities.loc[(kmerset1, kmerset2), metric]
+            matrix[j, i] = similarities.loc[(kmerset1, kmerset2), metric]
 
     return pandas.DataFrame(matrix, index=labels, columns=labels)
 

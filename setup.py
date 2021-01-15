@@ -138,6 +138,7 @@ setup(
         'pysam',
         'pyvcf'
     ],
+    python_requires=">=3.7",
 
     # CLI endpoints
     entry_points={

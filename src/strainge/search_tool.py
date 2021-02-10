@@ -180,9 +180,7 @@ class StrainGST:
         # Score all pangenome strains unless list given
         strains = score_strains or self.pangenome.strain_names
 
-
         logger.info("Sample %s has %d k-mers", sample.name, sample.counts.sum())
-
 
         # Reduce the sample KmerSet to its intersection with the PanGenome
         # to free up memory and speed things up.
@@ -219,8 +217,6 @@ class StrainGST:
         h5 = None
         if self.debug_hdf5:
             h5 = h5py.File(self.debug_hdf5, 'w')
-
-
 
         for i in range(self.iterations):
             # Output the remaining sample k-mers per iteration for debugging

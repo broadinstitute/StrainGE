@@ -1,2 +1,3 @@
 include versioneer.py
 include src/strainge/_version.py
+recursive-include src *.h *.cpp

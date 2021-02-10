@@ -10,11 +10,11 @@ strain-aware variant calling at low coverages.
 Dependencies
 ------------
 
-* Python >= 3.6
+* Python >= 3.7
 * NumPy
 * SciPy
 * matplotlib
-* scikit-bio
+* scikit-bio >= 0.5
 * pyvcf
 * pysam
 * h5py

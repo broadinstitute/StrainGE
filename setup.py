@@ -95,12 +95,26 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
+with open("README.md") as f:
+    long_desc = f.read()
+
 setup(
     name='strainge',
     author='Bruce Walker, Tim Straub, Lucas van Dijk',
     author_email='bruce@broadinstitute.org, tstraub@broadinstitute.org, '
                  'lvandijk@broadinstitute.org',
-    description='Strain-level diversity analysis tools',
+    description='Strain Genome Explorer: a tool suite for tracking and characterizing low-abundance strains.',
+    long_desription=long_desc,
+    long_description_content_type="text/markdown",
+    utl="https://strainge.readthedocs.io",
+
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
+        "Environment :: Console",
+        "Topic :: Scientific/Engineering :: Bio-Informatics"
+    ],
 
     packages=find_packages('src'),
     package_dir={'': 'src'},

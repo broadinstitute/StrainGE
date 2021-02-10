@@ -141,8 +141,10 @@ setup(
     zip_safe=False,
 
     # Dependencies
-    install_requires=[
+    setup_requires=[
         'pybind11>=2.2',
+    ],
+    install_requires=[
         'numpy',
         'scipy',
         'h5py',

@@ -1,2 +1,2 @@
 [build-system]
-requires = ["numpy>=1.9.2", "setuptools", "wheel", "pybind>=2.2"]
+requires = ["numpy>=1.9.2", "setuptools", "wheel", "pybind11>=2.2"]

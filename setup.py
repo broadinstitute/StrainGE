@@ -143,9 +143,9 @@ setup(
     # Dependencies
     setup_requires=[
         'pybind11>=2.2',
+        'numpy>=1.9.2',
     ],
     install_requires=[
-        'numpy',
         'scipy',
         'h5py',
         'intervaltree',

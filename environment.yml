@@ -4,7 +4,7 @@ channels:
     - conda-forge
     - anaconda
 dependencies:
-    - "python>=3.6"
+    - "python>=3.7"
     - pybind11
     - "scikit-bio>=0.5"
     - numpy
@@ -14,7 +14,9 @@ dependencies:
     - pyvcf
     - pysam
     - samtools
+    - mummer4
     - bwa
     - pip
     - pip:
         - intervaltree
+        - strainge

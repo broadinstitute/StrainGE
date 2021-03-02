@@ -54,6 +54,9 @@ def similarities_to_matrix(similarities, labels, metric='jaccard'):
             matrix[i, j] = similarities.loc[(kmerset1, kmerset2), metric]
             matrix[j, i] = similarities.loc[(kmerset1, kmerset2), metric]
 
+    for i in range(len(label_ix)):
+        matrix[i, i] = numpy.nan
+
     return pandas.DataFrame(matrix, index=labels, columns=labels)
 
 

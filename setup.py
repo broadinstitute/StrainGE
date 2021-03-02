@@ -104,7 +104,7 @@ setup(
     author_email='bruce@broadinstitute.org, tstraub@broadinstitute.org, '
                  'lvandijk@broadinstitute.org',
     description='Strain Genome Explorer: a tool suite for tracking and characterizing low-abundance strains.',
-    long_desription=long_desc,
+    long_description=long_desc,
     long_description_content_type="text/markdown",
     utl="https://strainge.readthedocs.io",
 

@@ -591,8 +591,9 @@ class VariantCallData:
         # Calculate normalization factor for strain abundances, based on
         # genome length and how much repetitive content each genome has
         avg_cov_uniq = {
-            scaffold.name: scaffold.read_count / (
-                scaffold.length - (scaffold.length * scaffold.repetitiveness))
+            scaffold.name:
+                scaffold.read_count / (scaffold.length - (scaffold.length * scaffold.repetitiveness))
+                if scaffold.repetitiveness < 1.0 else 0
             for scaffold in self.scaffolds_data.values()
         }
 

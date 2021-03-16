@@ -122,12 +122,6 @@ class PrepareRefSubcommand(Subcommand):
                  "want the included references not too closely related, "
                  "due to increased shared content."
         )
-        cluster_group.add_argument(
-            '-O', '--clusters-out', type=argparse.FileType('w'), default=None,
-            required=False, metavar='FILE',
-            help="Path to a file where the clustering results will be written."
-                 " Optional."
-        )
 
         mummer_group = subparser.add_argument_group(
             "MUMmer", "Settings for MUMmer, used to analyze the "
@@ -142,7 +136,7 @@ class PrepareRefSubcommand(Subcommand):
         )
 
     def __call__(self, refs, straingst_files, path_template, output,
-                 similarities, threshold, clusters_out, minmatch,
+                 similarities, threshold, minmatch,
                  *args, **kwargs):
 
         logger.info("Determining which reference strains to include...")
@@ -179,6 +173,8 @@ class PrepareRefSubcommand(Subcommand):
             logger.info("Load k-mer similarity scores for clustering...")
             similarities = pandas.read_csv(similarities, sep='\t', comment='#')
 
+            clusters_out = output.with_suffix('.collapsed.tsv').open()
+
             ix = (similarities['kmerset1'].isin(refs) &
                   similarities['kmerset2'].isin(refs))
             similarities = similarities[ix].set_index(['kmerset1', 'kmerset2'])
@@ -194,9 +190,8 @@ class PrepareRefSubcommand(Subcommand):
 
             clusters = cluster.cluster_genomes(similarities, labels, threshold)
 
-            if clusters_out:
-                print("pre_cluster", "post_cluster", sep='\t',
-                      file=clusters_out)
+            print("pre_cluster", "post_cluster", sep='\t',
+                  file=clusters_out)
 
             orig_refs = refs
             refs = set()
@@ -209,14 +204,15 @@ class PrepareRefSubcommand(Subcommand):
                                 sorted_entries[0])
                 refs.add(sorted_entries[0])
 
-                if clusters_out:
-                    entry_iter = iter(sorted_entries)
-                    cluster_rep = next(entry_iter)
-                    print(cluster_rep, cluster_rep, sep='\t',
-                          file=clusters_out)
+                entry_iter = iter(sorted_entries)
+                cluster_rep = next(entry_iter)
+                print(cluster_rep, cluster_rep, sep='\t',
+                      file=clusters_out)
 
-                    for entry in entry_iter:
-                        print(entry, cluster_rep, sep='\t', file=clusters_out)
+                for entry in entry_iter:
+                    print(entry, cluster_rep, sep='\t', file=clusters_out)
+
+            clusters_out.close()
 
             logger.info("After clustering %d/%d reference strains remain.",
                         len(refs), len(orig_refs))

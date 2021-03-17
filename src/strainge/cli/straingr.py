@@ -173,7 +173,7 @@ class PrepareRefSubcommand(Subcommand):
             logger.info("Load k-mer similarity scores for clustering...")
             similarities = pandas.read_csv(similarities, sep='\t', comment='#')
 
-            clusters_out = output.with_suffix('.collapsed.tsv').open()
+            clusters_out = output.with_suffix('.collapsed.tsv').open('w')
 
             ix = (similarities['kmerset1'].isin(refs) &
                   similarities['kmerset2'].isin(refs))

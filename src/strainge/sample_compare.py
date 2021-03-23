@@ -98,9 +98,12 @@ class SampleComparison:
         singles, single_cnt, single_pct = self.compare_thing(
             common, single_a & single_b)
 
-        # locations where both have only a single allele called
+        # locations where both have the same single allele called
         single_agree, single_agree_cnt, single_agree_pct = self.compare_thing(
             singles, a.strong == b.strong)
+
+        _, multi_cnt, multi_pct = self.compare_thing(
+            common, ~single_a | ~single_b)
 
         # Common locations where they share at least one allele (other alleles
         # may be present)
@@ -154,6 +157,8 @@ class SampleComparison:
             "singlePct": single_pct,
             "singleAgree": single_agree_cnt,
             "singleAgreePct": single_agree_pct,
+            "multi": multi_cnt,
+            "multiPct": multi_pct,
             "sharedAlleles": shared_alleles_cnt,
             "sharedAllelesPct": shared_alleles_pct,
             "variants": variant_cnt,

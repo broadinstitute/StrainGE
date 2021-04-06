@@ -209,6 +209,7 @@ class StrainGST:
         # get removed at each iteration.
         self.ref_sample_kmersets = {
             s: kmerizer.intersect_ix(self.pangenome.load_strain(s).kmers, sample.kmers)
+            for s in self.pangenome.strain_names
         }
 
         if self.use_fingerprint:

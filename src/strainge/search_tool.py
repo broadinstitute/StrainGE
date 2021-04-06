@@ -167,6 +167,8 @@ class StrainGST:
         self.universal = universal
 
         self.pangenome = pangenome
+        self.ref_sample_kmersets = {}
+
         self.debug_hdf5 = debug_hdf5
 
     def find_close_references(self, sample, score_strains=None):
@@ -184,9 +186,7 @@ class StrainGST:
 
         # Reduce the sample KmerSet to its intersection with the PanGenome
         # to free up memory and speed things up.
-        s = sample.intersect(self.pangenome.kmers)
-        sample.kmers = s.kmers
-        sample.counts = s.counts
+        sample.intersect(self.pangenome.kmers)
         logger.info("Sample %s has %d k-mers (%d distinct) in common with pan-genome "
                     "before filtering", sample.name, sample.counts.sum(), sample.kmers.size)
 
@@ -203,6 +203,13 @@ class StrainGST:
         sample_pan_kmers = sample.counts.sum()
         sample_pan_kcov = sample_pan_kmers / sample.kmers.size
         sample_pan_pct = sample_pan_kmers * 100.0 / sample.total_kmers
+
+        # Subset the k-mer set of each reference by the k-mers actually present in the sample.
+        # Used for relative abundance calculations. We're doing this upfront because sample k-mers
+        # get removed at each iteration.
+        self.ref_sample_kmersets = {
+            s: kmerizer.intersect_ix(self.pangenome.load_strain(s).kmers, sample.kmers)
+        }
 
         if self.use_fingerprint:
             # really minHash fraction
@@ -365,8 +372,10 @@ class StrainGST:
         # higher or lower is worse)
         weighted_score = score * min(specificity, 1.0 / specificity)
 
-        # Estimated relative abundance of this strain
-        relative_abundance = 100.0 * genome_coverage * strain_kmerset.total_kmers / sample.total_kmers
+        # Estimated relative abundance of this strain, only use ref k-mers actually seen in the sample
+        ref_sample_ix = self.ref_sample_kmersets[strain_name]
+        genome_cov_subset = sample_count / strain_kmerset[ref_sample_ix].counts.sum()
+        relative_abundance = 100.0 * genome_cov_subset * np.count_nonzero(ref_sample_ix) / sample.total_kmers
 
         if self.use_fingerprint:
             # really minHash fraction
@@ -384,6 +393,6 @@ class StrainGST:
             even=evenness,
             spec=specificity,
             rapct=relative_abundance,
-            wscore =weighted_score,
+            wscore=weighted_score,
             score=score
         )

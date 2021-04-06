@@ -167,8 +167,6 @@ class StrainGST:
         self.universal = universal
 
         self.pangenome = pangenome
-        self.ref_sample_kmersets = {}
-
         self.debug_hdf5 = debug_hdf5
 
     def find_close_references(self, sample, score_strains=None):
@@ -204,14 +202,6 @@ class StrainGST:
         sample_pan_kcov = sample_pan_kmers / sample.kmers.size
         sample_pan_pct = sample_pan_kmers * 100.0 / sample.total_kmers
 
-        # Subset the k-mer set of each reference by the k-mers actually present in the sample.
-        # Used for relative abundance calculations. We're doing this upfront because sample k-mers
-        # get removed at each iteration.
-        self.ref_sample_kmersets = {
-            s: kmerizer.intersect_ix(self.pangenome.load_strain(s).kmers, sample.kmers)
-            for s in self.pangenome.strain_names
-        }
-
         if self.use_fingerprint:
             # really minHash fraction
             sample_pan_pct /= self.pangenome.fingerprint_fraction
@@ -246,14 +236,14 @@ class StrainGST:
                 and s.even >= self.min_evenness
             )
 
-            strain_scores.sort(key=lambda e: e.wscore  if self.alt_score else e.score, reverse=True)
+            strain_scores.sort(key=lambda e: e.wscore if self.alt_score else e.score, reverse=True)
 
             if not strain_scores:
                 logger.info("No good strains found, quiting.")
                 break
 
             winner = strain_scores[0]
-            winner_score = winner.wscore  if self.alt_score else winner.score
+            winner_score = winner.wscore if self.alt_score else winner.score
             # if best score isn't good enough, we're done
             if winner_score < self.min_score:
                 logger.info("Score %.3f for %s below min score %.3f, quiting.",
@@ -355,9 +345,6 @@ class StrainGST:
         # Weight of each sample kmer
         sample_total_weight = (sample_counts * weights).sum()
 
-        # Weighted genome coverage
-        weighted_coverage = sample_total_weight / strain_total_weight
-
         # Specificity is a measure of how specific the sample kmers are to
         # this strain. If they are randomly sampled, this should be close
         # to 1. A low number indicates that the sample kmers that hit this
@@ -374,9 +361,7 @@ class StrainGST:
         weighted_score = score * min(specificity, 1.0 / specificity)
 
         # Estimated relative abundance of this strain, only use ref k-mers actually seen in the sample
-        ref_sample_ix = self.ref_sample_kmersets[strain_name]
-        genome_cov_subset = sample_count / strain_kmerset[ref_sample_ix].counts.sum()
-        relative_abundance = 100.0 * genome_cov_subset * np.count_nonzero(ref_sample_ix) / sample.total_kmers
+        relative_abundance = 100.0 * kmer_coverage * kmers.size / sample.total_kmers
 
         if self.use_fingerprint:
             # really minHash fraction

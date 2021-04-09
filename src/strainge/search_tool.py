@@ -342,6 +342,7 @@ class StrainGST:
             if np.count_nonzero(zero_ix) > 0:
                 gcov_abun = gcovs / gcovs.sum()
                 abundances[zero_ix] = gcov_abun[ix]
+                abundances /= abundances.sum()
 
         abundances *= result.pan_pct
 

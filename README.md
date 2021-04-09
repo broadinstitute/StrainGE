@@ -23,6 +23,7 @@ Dependencies
 * SciPy
 * matplotlib
 * scikit-bio >= 0.5
+* scikit-learn >= 0.24
 * pyvcf
 * pysam
 * h5py
@@ -73,5 +74,3 @@ Citation
 --------
 
 Dijk LR van, Walker BJ, Straub TJ, Worby C, Grote A, Schreiber HL, et al. StrainGE: A toolkit to track and characterize low-abundance strains in complex microbial communities. bioRxiv. 2021 Feb 14;2021.02.14.431013. 
-
-

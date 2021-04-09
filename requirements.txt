@@ -6,4 +6,5 @@ h5py
 pysam
 matplotlib
 scikit-bio
+scikit-learn
 pyvcf

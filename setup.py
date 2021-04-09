@@ -143,7 +143,7 @@ setup(
     # Dependencies
     setup_requires=[
         'pybind11>=2.2',
-        'numpy>=1.9.2',
+        'oldest-supported-numpy',
     ],
     install_requires=[
         'scipy',
@@ -151,6 +151,7 @@ setup(
         'intervaltree',
         'matplotlib',
         'scikit-bio>=0.5',
+        'scikit-learn>=0.24'
         'pysam',
         'pyvcf'
     ],

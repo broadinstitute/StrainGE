@@ -31,6 +31,7 @@ import csv
 import sys
 import logging
 import argparse
+from dataclasses import asdict
 
 from strainge.search_tool import StrainGST, PanGenome, Sample
 from strainge.cli.registry import Subcommand
@@ -59,6 +60,7 @@ strain_tsv_columns = dict([
     ("even", "%.3f"),
     ("spec", "%.3f"),
     ("rapct", "%.3f"),
+    ("old_rapct", "%.3f"),
     ("wscore", "%.3f"),
     ("score", "%.3f"),
 ])
@@ -170,7 +172,7 @@ class StrainGSTSubCommand(Subcommand):
         # Output found strains
         writer.writerow(list(strain_tsv_columns.keys()))
         for pos, strain in results.strains:
-            values = strain._asdict()
+            values = asdict(strain)
             values['i'] = pos
 
             v = [strain_tsv_columns[col] % values[col]

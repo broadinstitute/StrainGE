@@ -27,11 +27,17 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
+from __future__ import annotations
+
 import math
 import logging
 from collections import namedtuple
+from dataclasses import dataclass
+
 import h5py
 import numpy as np
+from sklearn.preprocessing import scale
+from sklearn.linear_model import LinearRegression
 
 from strainge import kmertools, kmerizer
 
@@ -114,6 +120,9 @@ class PanGenome(kmertools.KmerSet):
             self.strainCache[name] = strain
             return strain
 
+    def reset_cache(self):
+        self.strainCache = {}
+
 
 class StrainKmerSet(kmertools.KmerSet):
     def __init__(self, pan, name):
@@ -136,19 +145,31 @@ class StrainKmerSet(kmertools.KmerSet):
         self.total_kmers = self.counts.sum()
 
 
+@dataclass
+class Strain:
+    strain: str
+    gkmers: int
+    ikmers: int
+    skmers: int
+    cov: float
+    kcov: float
+    gcov: float
+    acct: float
+    even: float
+    spec: float
+    wscore: float
+    score: float
+    rapct: float = 0
+    old_rapct: float = 0
+
+
 class StrainGSTResult:
     def __init__(self, pan_kmers, pan_kcov, pan_pct):
         self.pan_kmers = pan_kmers
         self.pan_kcov = pan_kcov
         self.pan_pct = pan_pct
 
-        self.strains = []
-
-
-Strain = namedtuple('Strain', [
-    'strain', 'gkmers', 'ikmers', 'skmers', 'cov', 'kcov', 'gcov',
-    'acct', 'even', 'rapct', 'spec', 'wscore', 'score'
-])
+        self.strains: List[Strain] = []
 
 
 class StrainGST:
@@ -196,6 +217,10 @@ class StrainGST:
         logger.info(f"Sample kmer frequency cutoff: {universal_limit}")
         excludes = sample.kmers[sample.counts > universal_limit]
         sample.exclude(excludes)
+
+        # Copy sample k-mers and counts for relative abundance estimation later, because the iterative StrainGST
+        # algorithm below removes k-mers at each iteration.
+        sample_for_ra = sample.copy()
 
         # Metrics for Sample kmers in pan genome
         sample_pan_kmers = sample.counts.sum()
@@ -266,10 +291,63 @@ class StrainGST:
             excludes = winning_strain.kmers
             sample.exclude(excludes)
 
+        logger.info("Estimating relative abundance...")
+        self.calc_relative_abundance(sample_for_ra, result)
+
         if h5 is not None:
             h5.close()
 
         return result
+
+    def calc_relative_abundance(self, sample, result):
+        """
+        Applies a regression model to estimate the relative abundances of reported strains.
+        """
+
+        # Reset cache because the StrainGST algorithm may have removed k-mers from the reference k-mer sets
+        self.pangenome.reset_cache()
+        if self.top == 1:
+            ref_kmersets = [self.pangenome.load_strain(s.strain).copy() for pos, s in result.strains]
+        else:
+            ref_kmersets = [self.pangenome.load_strain(s.strain).copy()
+                            for pos, s in result.strains if pos.split('.')[-1] == "0"]
+
+        for ref_kmerset in ref_kmersets:
+            # Intersect with sample k-mers to remove the k-mers that were classified as too high abundance
+            ref_kmerset.intersect(sample.kmers)
+
+        kmers, matrix = kmertools.build_kmer_count_matrix([sample, *ref_kmersets])
+        matrix = scale(matrix)
+        sample_abun = matrix[:, 0]
+        strain_matrix = matrix[:, 1:]
+
+        model = LinearRegression(positive=True)
+        model.fit(strain_matrix, sample_abun)
+        summed_weights = model.coef_.sum()
+
+        if self.top == 1:
+            gcovs = np.array([s.gcov for pos, s in result.strains])
+        else:
+            gcovs = np.array([s.gcov for pos, s in result.strains if pos.split('.')[-1] == "0"])
+
+        # Prevent coefficients of zero
+        if summed_weights == 0:
+            # Fallback on estimated genome coverage
+            abundances = gcovs / gcovs.sum()
+        else:
+            abundances = model.coef_ / summed_weights
+            zero_ix = abundances == 0
+
+            # If a coefficient is zero, try to estimate abundance using gcov
+            if np.count_nonzero(zero_ix) > 0:
+                gcov_abun = gcovs / gcovs.sum()
+                abundances[zero_ix] = gcov_abun[ix]
+
+        abundances *= result.pan_pct
+
+        for i, abun in enumerate(abundances):
+            ix = self.top * i
+            result.strains[ix][1].rapct = abun
 
     def score_strain(self, strain_name, sample, excludes=None):
         # This loads a cached version with possibly already several k-mers
@@ -378,7 +456,8 @@ class StrainGST:
             acct=accounted,
             even=evenness,
             spec=specificity,
-            rapct=relative_abundance,
+            rapct=0,  ## Will be calculated later
+            old_rapct=relative_abundance,
             wscore=weighted_score,
             score=score
         )

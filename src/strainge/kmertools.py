@@ -578,3 +578,18 @@ class KmerSet(object):
     def load(self, file_name):
         with h5py.File(file_name, 'r') as h5:
             self.load_hdf5(h5)
+
+    def copy(self):
+        new_kmerset = KmerSet(self.k)
+        new_kmerset.kmers = self.kmers.copy()
+        new_kmerset.counts = self.counts.copy()
+        new_kmerset.fingerprint = self.fingerprint.copy()
+        new_kmerset.fingerprint_counts = self.fingerprint_counts.copy()
+        new_kmerset.fingerprint_fraction = self.fingerprint_fraction
+
+        new_kmerset.singletons = self.singletons
+        new_kmerset.n_seqs = self.n_seqs
+        new_kmerset.n_kmers = self.n_kmers
+        new_kmerset.n_bases = self.n_bases
+
+        return new_kmerset

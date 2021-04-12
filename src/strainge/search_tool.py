@@ -341,7 +341,7 @@ class StrainGST:
             # If a coefficient is zero, try to estimate abundance using gcov
             if np.count_nonzero(zero_ix) > 0:
                 gcov_abun = gcovs / gcovs.sum()
-                abundances[zero_ix] = gcov_abun[ix]
+                abundances[zero_ix] = gcov_abun[zero_ix]
                 abundances /= abundances.sum()
 
         abundances *= result.pan_pct

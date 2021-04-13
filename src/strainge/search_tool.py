@@ -304,6 +304,9 @@ class StrainGST:
         Applies a regression model to estimate the relative abundances of reported strains.
         """
 
+        if not result.strains:
+            return
+
         # Reset cache because the StrainGST algorithm may have removed k-mers from the reference k-mer sets
         self.pangenome.reset_cache()
         if self.top == 1:

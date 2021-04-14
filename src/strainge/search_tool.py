@@ -36,7 +36,7 @@ from dataclasses import dataclass
 
 import h5py
 import numpy as np
-from sklearn.preprocessing import scale
+from sklearn.preprocessing import minmax_scale
 from sklearn.linear_model import LinearRegression
 
 from strainge import kmertools, kmerizer
@@ -320,11 +320,11 @@ class StrainGST:
             ref_kmerset.intersect(sample.kmers)
 
         kmers, matrix = kmertools.build_kmer_count_matrix([sample, *ref_kmersets])
-        matrix = scale(matrix)
+        matrix = minmax_scale(matrix)
         sample_abun = matrix[:, 0]
         strain_matrix = matrix[:, 1:]
 
-        model = LinearRegression(positive=True)
+        model = LinearRegression(fit_intercept=False, positive=True)
         model.fit(strain_matrix, sample_abun)
         summed_weights = model.coef_.sum()
 

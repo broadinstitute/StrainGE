@@ -584,7 +584,7 @@ class KmerSet(object):
         new_kmerset.kmers = self.kmers.copy()
         new_kmerset.counts = self.counts.copy()
 
-        if self.fingerprint:
+        if self.fingerprint is not None:
             new_kmerset.fingerprint = self.fingerprint.copy()
             new_kmerset.fingerprint_counts = self.fingerprint_counts.copy()
 

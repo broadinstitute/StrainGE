@@ -583,8 +583,11 @@ class KmerSet(object):
         new_kmerset = KmerSet(self.k)
         new_kmerset.kmers = self.kmers.copy()
         new_kmerset.counts = self.counts.copy()
-        new_kmerset.fingerprint = self.fingerprint.copy()
-        new_kmerset.fingerprint_counts = self.fingerprint_counts.copy()
+
+        if self.fingerprint:
+            new_kmerset.fingerprint = self.fingerprint.copy()
+            new_kmerset.fingerprint_counts = self.fingerprint_counts.copy()
+
         new_kmerset.fingerprint_fraction = self.fingerprint_fraction
 
         new_kmerset.singletons = self.singletons

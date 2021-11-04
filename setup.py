@@ -146,6 +146,7 @@ setup(
         'oldest-supported-numpy',
     ],
     install_requires=[
+        'numpy',
         'scipy',
         'h5py',
         'intervaltree',

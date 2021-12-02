@@ -24,7 +24,6 @@ Dependencies
 * matplotlib
 * scikit-bio >= 0.5
 * scikit-learn >= 0.24
-* pyvcf
 * pysam
 * h5py
 * intervaltree

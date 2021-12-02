@@ -27,7 +27,6 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
-import io
 import csv
 import logging
 import itertools
@@ -35,9 +34,7 @@ from datetime import datetime
 
 import h5py
 import numpy
-import vcf
-from vcf.model import (_Record as VcfRecord, _Substitution as Substitution,
-                       _SV as SV)
+import pysam
 
 from strainge.utils import find_consecutive_groups
 from strainge.variant_caller import Allele, VariantCallData
@@ -61,20 +58,17 @@ VCF_TEMPLATE = """##fileformat=VCFv4.0
 ##reference={ref}
 {contig_lengths}
 ##INFO=<ID=DP,Number=1,Type=Integer,Description="Coverage depth">
-##INFO=<ID=RQ,Number=1,Type=Integer,Description="Sum of reference base \
-qualities">
+##INFO=<ID=RQ,Number=1,Type=Integer,Description="Sum of reference base qualities">
 ##INFO=<ID=MQ,Number=1,Type=Integer,Description="Mean mapping quality">
 ##INFO=<ID=RF,Number=1,Type=Float,Description="Reference Fraction">
 ##INFO=<ID=AD,Number=R,Type=Integer,Description="Allele read depths">
 ##INFO=<ID=QS,Number=R,Type=Integer,Description="Sum of base qualities">
-##INFO=<ID=BF,Number=R,Type=Float,Description="Quality weighted base \
-frequencies">
-##INFO=<ID=ST,Number=R,Type=Integer,Description="Which of the observed \
-alleles have strong evidence">
+##INFO=<ID=BF,Number=R,Type=Float,Description="Quality weighted base frequencies">
+##INFO=<ID=ST,Number=R,Type=Integer,Description="Which of the observed alleles have strong evidence">
+##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
 ##ALT=<ID=INS,Description="Insertion">
 ##ALT=<ID=DEL,Description="Deletion">
-#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
-"""
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">"""
 
 
 def generate_call_summary_tsv(call_data, output_file):
@@ -336,13 +330,15 @@ def array_to_wig(array, output_file, scaffold_name):
                   encoding="utf-8")
 
 
-def vcf_records_for_scaffold(scaffold, verboseness=0):
+def vcf_records_for_scaffold(writer, scaffold, verboseness=0):
     """
     Yield VCF records for all positions in the scaffold, or only the
     positions with something else than the reference.
 
     Parameters
     ----------
+    writer : pysam.VariantFile
+        PySam output VCF object
     scaffold : strainge.variant_caller.ScaffoldCallData
         Variant call data for this scaffold
     verboseness : int
@@ -385,9 +381,9 @@ def vcf_records_for_scaffold(scaffold, verboseness=0):
                 alts_bit.append(allele)
 
                 if allele & (Allele.INS | Allele.DEL):
-                    alts.append(SV(str(allele)))
+                    alts.append(str(allele))
                 else:
-                    alts.append(Substitution(str(allele)))
+                    alts.append(str(allele))
 
             # We don't check if this is the refbase or not because we also want
             # to include information whether the reference is strongly
@@ -396,40 +392,42 @@ def vcf_records_for_scaffold(scaffold, verboseness=0):
                 strong.add(allele)
 
         ref = scaffold.refmask[pos]
-        ref_plus_alts = [ref] + alts_bit
+        ref_plus_alts = [Allele(ref)] + alts_bit
 
         allele_counts = [
-            scaffold.allele_count(pos, allele) if allele else 0
+            int(scaffold.allele_count(pos, allele)) if allele else 0
             for allele in ref_plus_alts
         ]
         allele_quals = [
-            scaffold.allele_qual(pos, allele) if allele else 0
+            int(scaffold.allele_qual(pos, allele)) if allele else 0
             for allele in ref_plus_alts
         ]
+        sum_quals = sum(allele_quals)
+        weighted_base_freqs = [v / sum_quals for v in allele_quals]
 
         ref_qual = scaffold.ref_qual(pos) if ref else 0
         ref_fraction = round(scaffold.ref_fraction(pos), 3) if ref else 0.0
 
-        yield VcfRecord(
-            CHROM=scaffold.name,
-            POS=pos+1,  # 1-based coordinate system
-            ID=".",
-            REF=str(Allele(ref))[:1],
-            ALT=alts,
-            QUAL=".",
-            FILTER="PASS",
-            INFO={
-                'DP': scaffold.depth(pos),
-                'MQ': int(round(scaffold.mean_mq(pos))),
-                'RQ': ref_qual,
-                'RF': ref_fraction,
-                'AD': allele_counts,
-                'QS': allele_quals,
-                'ST': [int(b in strong) for b in ref_plus_alts]
-            },
-            FORMAT="",
-            sample_indexes=None
+        info_dict = {
+            'DP': int(scaffold.depth(pos)),
+            'RQ': int(ref_qual),
+            'MQ': int(round(scaffold.mean_mq(pos))),
+            'RF': ref_fraction,
+            'AD': allele_counts,
+            'QS': allele_quals,
+            'BF': weighted_base_freqs,
+            'ST': [int(b in strong) for b in ref_plus_alts]
+        }
+        record = writer.new_record(
+            scaffold.name,
+            start=pos,
+            alleles=[str(a) for a in ref_plus_alts],
+            filter="PASS",
+            info=info_dict,
+            samples=[{"GT": "./."}],
         )
+
+        yield record
 
 
 def write_vcf(call_data, output_file, verboseness=0):
@@ -457,18 +455,24 @@ def write_vcf(call_data, output_file, verboseness=0):
             f"##contig=<ID={scaffold.name},length={scaffold.length}>"
         )
 
-    vcf_template = vcf.Reader(io.StringIO(VCF_TEMPLATE.format(
+    header = pysam.VariantHeader()
+    header_str = VCF_TEMPLATE.format(
         date=datetime.now(),
         ref=call_data.reference_fasta,
         contig_lengths="\n".join(contig_lengths)
-    )))
+    )
 
-    vcf_writer = vcf.Writer(output_file, vcf_template)
+    for line in header_str.split('\n'):
+        header.add_line(line)
+
+    header.add_sample("straingr")
+
+    vcf_writer = pysam.VariantFile(output_file, 'w', header=header)
 
     record_iter = itertools.chain.from_iterable(
-        vcf_records_for_scaffold(scaffold, verboseness)
+        vcf_records_for_scaffold(vcf_writer, scaffold, verboseness)
         for scaffold in call_data.scaffolds_data.values()
     )
 
     for record in record_iter:
-        vcf_writer.write_record(record)
+        vcf_writer.write(record)

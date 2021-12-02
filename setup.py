@@ -152,9 +152,8 @@ setup(
         'intervaltree',
         'matplotlib',
         'scikit-bio>=0.5',
-        'scikit-learn>=0.24'
+        'scikit-learn>=0.24',
         'pysam',
-        'pyvcf'
     ],
     python_requires=">=3.7",
 

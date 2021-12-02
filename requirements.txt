@@ -7,4 +7,3 @@ pysam
 matplotlib
 scikit-bio
 scikit-learn
-pyvcf

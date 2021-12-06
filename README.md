@@ -42,26 +42,30 @@ Installation
 
 `pip install strainge`
 
+**Warning**: NumPy already has to be installed otherwise the above command will fail.
 You'll have to make sure all tools like `bwa`, `samtools` and `mummer` are installed as well.
 
 ### Conda
 
 1. Install Anaconda or miniconda (if not already present on your system)
-2. Clone the repository:
+2. Create a new environment:
 
-    `git clone https://github.com/broadinstitute/StrainGE`
-
-3. Move into the directory:
-
-    `cd StrainGE`
-
-4. Create a new conda environment:
-
-    `conda env create -f environment.yml`
-
-5. Activate the environment:
+    `conda create -n strainge python=3`
+3. Activate the environment:
 
     `source activate strainge`
+4. Enable `bioconda` and `conda-forge` channels:
+
+   ```
+   conda config --add channels bioconda
+   conda config --add channels conda-forge
+   ```
+5. Install StrainGE:
+   
+   `conda install strainge`
+
+Optional tip: also consider installing [mamba](https://github.com/mamba-org/mamba) before installing StrainGE for much 
+faster conda operations.
 
 
 Documentation

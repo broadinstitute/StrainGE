@@ -28,7 +28,8 @@ author = 'Lucas van Dijk, Bruce Walker, Tim Straub, Colin Worby, Alexandra Grote
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'recommonmark'
+    'recommonmark',
+    'nbsphinx'
 ]
 
 # Add any paths that contain templates here, relative to this directory.

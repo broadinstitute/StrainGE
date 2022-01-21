@@ -97,6 +97,7 @@ Usage
    straingst
    straingr
    compare-strains
+   analysis
 
 
 Citation

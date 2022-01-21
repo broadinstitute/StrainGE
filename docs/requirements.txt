@@ -1,2 +1,3 @@
 sphinx~=3.4
 recommonmark
+nbsphinx

@@ -97,8 +97,7 @@ Columns:
 - *even*: Evenness of coverage. A value close to 1 indicates that the coverage is evenly distributed along the genome,
     a value close to zero indicates that only a small part of the genome is well covered.
 - *spec*: Obsolete
-- *rapct*: Estimated strain relative abundance. The relative abundance of the first strain is biased upwards because it
-    included "core" k-mers that get discarded in next iterations.
+- *rapct*: Estimated strain relative abundance (relative to the whole sample).
 - *wscore*: Obsolete
 - *score*: Score used to rank each reference in the database at each iteration. A high score represents high confidence
     in this prediction. Scores cannot be compared across iterations or across samples, and it is possible that a strain

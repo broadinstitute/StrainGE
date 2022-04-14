@@ -67,10 +67,11 @@ flag. Usually these are all StrainGST results file belonging to a single
 patient, or an other related set of samples. Next, we need to specify how
 `prepare-ref` can find the actual FASTA files belonging to strains reported by
 StrainGST, this is done using the "path-template" switch `-p`: in this given
-path "{ref}" will be replaced with the actual strain name. Don't forgot to use
-quotes, because { and } are special characters in many shells. We specify the
-similarities.tsv file created at the StrainGST database construction step, to
-reuse the calculated k-mer similarities again for clustering. The resulting
+path "{ref}" will be replaced **by StrainGR** (so don't replace it yourself) with 
+the actual strain name. 
+Don't forgot to use quotes, because { and } are special characters in many shells. 
+We specify the similarities.tsv file created at the StrainGST database construction 
+step, to reuse the calculated k-mer similarities again for clustering. The resulting
 concatenated reference will be written to `refs_concat.fasta`.
 
 #### 2. Align reads to the reference
@@ -146,7 +147,7 @@ For each scaffold in the concatenated reference StrainGR outputs several metrics
 - *uReads*: Number of reads uniquely aligned to this scaffold
 - *abundance*: Estimated relative abundance of this scaffold. Calculated by dividing the number uniquely aligned reads to
     this scaffold by the total number of reads uniquely aligned, normalized by the estimated repetitiveness in the
-    `prepare-ref` stage.
+    `prepare-ref` stage. Generally, we trust the abundances calculated by StrainGST a lot more.
 - *median*: median depth of coverage
 - *callable* (*callablePct*): Number (percentage) of positions in this scaffold with *strong* evidence for an allele 
     (i.e. two good reads supporting a single allele)

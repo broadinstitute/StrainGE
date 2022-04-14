@@ -47,13 +47,16 @@ accession no.)
 Next, we k-merize each genome:
 
 ```bash
-for f in strainge_db/*.fa.gz; do straingst kmerize -o $f.hdf5 $f; done;
+for f in strainge_db/*.fa.gz; do straingst kmerize -o ${f%.fa.gz}.hdf5 $f; done;
 ```
 
-The FASTA files with only chromosomes have a suffix of `*.chrom.fna.gz`. For
-each FASTA file, there is now an accompanying HDF5 file containing the
-k-mer data. With `-k` you can optionally specify a different k-mer size, which
-by default is 23.
+These steps can run in parallel, so use your favorite parallelization method if
+desired (e.g., cluster task array, GNU parallel).
+
+The syntax `${f%.fa.gz}` removes the `.fa.gz` extension from the filename in `$f`,
+thus the output filename for each kmerset HDF5 will follow the format 
+`REF_NAME.hdf5`. StrainGE will infer the strain name from the HDF5 filename in 
+the steps below, thus by removing the `.fa.gz` extension we remove clutter.
 
 ### 3. Compare the k-mer sets and cluster similar references
 
@@ -107,13 +110,13 @@ where more than 99% of its kmers are present in another genome, as enabled by
 `-d` and `-C 0.99`. Afterwards, we cluster similar genomes based on the
 *Jaccard* similarity between k-mersets: if the Jaccard similarity between two
 k-mer sets is higher than 0.90 (`-c 0.90`), those two genomes will be clustered 
-together. For each cluster we pick one representative genome: the genome with 
-the smallest mean distance to the other cluster members. Each genome to keep is
-written to `references_to_keep.txt`. With the option `--clusters-out` we 
-specify another file where we write the clustering results. Each line in this 
-file specifies a cluster along with its entries, separated by a tab. The
-genomes in the first column represent the cluster representatives. This option 
-is optional, but can be useful for debugging purposes.
+together (approximate ANI: ~99.8%). For each cluster we pick one representative 
+genome: the genome with the smallest mean distance to the other cluster members. 
+Each genome to keep is written to `references_to_keep.txt`. With the option 
+`--clusters-out` we specify another file where we write the clustering results. 
+Each line in this file specifies a cluster along with its entries, separated 
+by a tab. The genomes in the first column represent the cluster representatives. 
+This option is optional, but can be useful for debugging purposes.
 
 ### 4. Create pan-genome k-mer database
 

@@ -51,13 +51,42 @@ This will output a *tab separated values* (tsv) file, containing statistics
 about the sample k-mer set and a list of identified reference strains with 
 accompanying metrics. 
 
+**New in version 1.3:** instead of writing both sample statistics and the identified strains to a
+single TSV file, which is generally not as easily read in Python's `pandas` or R, you can now enable 
+the option to write sample statistics and strains to separate files when enabling the `--separate-outputs` (`-O`)
+option. If enabling this option, use `-o` to specify the output filename prefix.
+
+Example:
+
+```bash
+straingst run -O -o PREFIX pan-genome-df.hdf5 patient1.hdf5
+```
+
+This will result in two files: `PREFIX.stats.tsv` (sample statistics), and `PREFIX.strains.tsv` 
+(list of identified strains).
+
 ### Output file description
 
-#### Example output
+#### Example output (single file output)
 
 ```
 sample    totalkmers      distinct   pkmers  pkcov   pan%
 UMB11_01  2277023860      380759656  50090   6.984   1.536
+i         strain          gkmers     ikmers  skmers  cov    kcov   gcov   acct   even   spec   rapct  wscore  score
+0         Esch_coli_NGF1  49631      49622   50090   0.985  7.009  6.831  0.980  0.987  1.000  1.507  0.940   0.940
+```
+
+#### Example output (separate file output; new in version 1.3)
+
+`PREFIX.stats.tsv`
+
+```
+sample    totalkmers      distinct   pkmers  pkcov   pan%
+UMB11_01  2277023860      380759656  50090   6.984   1.536
+```
+
+`PREFIX.strains.tsv`
+```
 i         strain          gkmers     ikmers  skmers  cov    kcov   gcov   acct   even   spec   rapct  wscore  score
 0         Esch_coli_NGF1  49631      49622   50090   0.985  7.009  6.831  0.980  0.987  1.000  1.507  0.940   0.940
 ```
@@ -106,7 +135,7 @@ Columns:
 
 ### Tips and Tricks
 
-Easily parse StrainGST file in Python:
+Easily parse StrainGST file in Python (mainly useful for single file output):
 
 ```python
 from strainge.io.utils import parse_straingst

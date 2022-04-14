@@ -347,25 +347,22 @@ def vcf_records_for_scaffold(writer, scaffold, verboseness=0):
 
         0: Only output StrainGR strong SNPs
         1: Output strong and weak SNPs
-        2: Output an entry for every position in the genome, even if nothing
-           else but the reference is observed.
 
     """
 
     logger.info("Generate VCF records for scaffold %s", scaffold.name)
     positions = numpy.arange(scaffold.length)
 
-    if verboseness < 2:
-        # Find positions with something else than the reference base
-        # Remove bit corresponding to reference base
-        if verboseness == 0:
-            alt_mask = scaffold.strong & ~scaffold.refmask
-        else:
-            alt_mask = scaffold.weak & ~scaffold.refmask
+    # Find positions with something else than the reference base
+    # Remove bit corresponding to reference base
+    if verboseness == 0:
+        alt_mask = scaffold.strong & ~scaffold.refmask
+    else:
+        alt_mask = scaffold.weak & ~scaffold.refmask
 
-        # Only keep those with something else than the reference
-        ix = alt_mask > 0
-        positions = positions[ix]
+    # Only keep those with something else than the reference
+    ix = alt_mask > 0
+    positions = positions[ix]
 
     for pos in positions:
         alts = []
@@ -402,8 +399,12 @@ def vcf_records_for_scaffold(writer, scaffold, verboseness=0):
             int(scaffold.allele_qual(pos, allele)) if allele else 0
             for allele in ref_plus_alts
         ]
+
         sum_quals = sum(allele_quals)
-        weighted_base_freqs = [v / sum_quals for v in allele_quals]
+        if sum_quals:
+            weighted_base_freqs = [v / sum_quals for v in allele_quals]
+        else:
+            weighted_base_freqs = [0] * len(ref_plus_alts)
 
         ref_qual = scaffold.ref_qual(pos) if ref else 0
         ref_fraction = round(scaffold.ref_fraction(pos), 3) if ref else 0.0

@@ -431,10 +431,7 @@ class CallSubcommand(Subcommand):
             '--verbose-vcf', type=int, default=0, metavar='LEVEL',
             help="To be used with --vcf. Increase the verboseness of the "
                  "generated VCF. By default it only outputs strong SNPs. A "
-                 "value of 1 will also output any weak calls. If set to 2, "
-                 "it will include an entry for every position in the "
-                 "reference, even if no other base than the reference is "
-                 "observed."
+                 "value of 1 will also output any weak calls."
         )
         call_out_group.add_argument(
             '-t', '--tracks', action="append", default=[],
@@ -553,10 +550,7 @@ class ViewSubcommand(Subcommand):
             '--verbose-vcf', type=int, default=0, metavar='LEVEL',
             help="To be used with --vcf. Increase the verboseness of the "
                  "generated VCF. By default it only outputs strong SNPs. A "
-                 "value of 1 will also output any weak calls. If set to 2, "
-                 "it will include an entry for every position in the "
-                 "reference, even if no other base than the reference is "
-                 "observed."
+                 "value of 1 will also output any weak calls."
         )
 
     def __call__(self, hdf5, summary=None, tracks=None,

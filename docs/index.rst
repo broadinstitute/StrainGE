@@ -105,8 +105,8 @@ Citation
 
 If you use StrainGE in your project, please consider citing our publication:
 
-   Dijk LR van, Walker BJ, Straub TJ, Worby C, Grote A, Schreiber HL, et al. StrainGE: A toolkit to track and
-   characterize low-abundance strains in complex microbial communities. bioRxiv. 2021 Feb 14;2021.02.14.431013.
+   Dijk, Lucas R. van, Bruce J. Walker, Timothy J. Straub, Colin J. Worby, Alexandra Grote, Henry L. Schreiber, Christine Anyansi, et al. 2022. “StrainGE: A Toolkit to Track and Characterize Low-Abundance Strains in Complex Microbial Communities.” Genome Biology 23 (1): 74. https://doi.org/10.1186/s13059-022-02630-0.
+
 
 
 Indices and tables

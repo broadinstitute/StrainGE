@@ -74,6 +74,11 @@ We specify the similarities.tsv file created at the StrainGST database construct
 step, to reuse the calculated k-mer similarities again for clustering. The resulting
 concatenated reference will be written to `refs_concat.fasta`.
 
+**New in version 1.3**: If you use the new split StrainGST output format introduced in 
+version 1.3, only specify the files listing the predicted strains. So, replace 
+`straigr prepare-ref -s path/to/straingst/*.tsv ...` with 
+`straingr prepare-ref -s path/to/straingst/*.strains.tsv ...`.
+
 #### 2. Align reads to the reference
 
 StrainGR is built to be used with `bwa mem`, as it uses the supplied 

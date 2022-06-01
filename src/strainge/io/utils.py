@@ -33,6 +33,7 @@ import gzip
 from typing import List, Iterable  # noqa
 from pathlib import Path
 from contextlib import contextmanager
+from itertools import chain
 
 
 @contextmanager
@@ -102,18 +103,31 @@ def parse_straingst(result_file, return_sample_stats=False):
 
     # Ignore comments
     result_file = (line for line in result_file if not line.startswith('#'))
+    first_line = next(result_file)
+
+    old_style_straingst = False
+    if first_line.startswith("sample"):
+        old_style_straingst = True
 
     # Collect sample statistics (first two lines)
-    sample_stats = [
-        next(result_file),
-        next(result_file)
-    ]
+    if old_style_straingst:
+        sample_stats = [
+            first_line,
+            next(result_file)
+        ]
+    else:
+        sample_stats = []
 
-    if return_sample_stats:
+    if sample_stats and return_sample_stats:
         sample_stats = next(csv.DictReader(sample_stats, delimiter='\t'))
 
         # Return sample statistics
         yield sample_stats
+    elif not sample_stats and return_sample_stats:
+        raise ValueError("Trying to read sample statistics from a new style (v1.3) StrainGST output!")
 
     # Return each strain found with its statistics
-    yield from csv.DictReader(result_file, delimiter='\t')
+    if old_style_straingst:
+        yield from csv.DictReader(result_file, delimiter='\t')
+    else:
+        yield from csv.DictReader(chain([first_line], result_file), delimiter='\t')

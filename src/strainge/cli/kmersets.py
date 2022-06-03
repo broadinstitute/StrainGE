@@ -151,7 +151,7 @@ class KmerizeSubcommand(Subcommand):
             help="K-mer size (default %(default)s)",
         )
         subparser.add_argument(
-            "-o", "--output",
+            "-o", "--output", required=True,
             help="Filename of the output HDF5."
         )
         subparser.add_argument(
@@ -183,6 +183,10 @@ class KmerizeSubcommand(Subcommand):
 
         limit = utils.parse_num_suffix(limit)
         prune = utils.parse_num_suffix(prune)
+
+        if not output:
+            logger.error("No output filename given! Please specify the output file with `-o`.")
+            return 1
 
         for seq in sequences:
             logger.info('K-merizing file %s...', seq)

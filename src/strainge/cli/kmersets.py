@@ -196,7 +196,7 @@ class KmerizeSubcommand(Subcommand):
             thresholds = kmerset.spectrum_filter()
             if thresholds:
                 logger.info("Filtered kmerset. Only k-mers within frequency "
-                            "range [%d, %d] are kept (mode %d).", *(thresholds[0], thresholds[2], thresholds[1]))
+                            "range [%d, %d] are kept (mode %d).", thresholds[0], thresholds[2], thresholds[1])
             else:
                 logger.warning("Unable to compute filter thresholds! Continuing without filtering...")
 

@@ -192,7 +192,7 @@ class KmerizeSubcommand(Subcommand):
             thresholds = kmerset.spectrum_filter()
             if thresholds:
                 logger.info("Filtered kmerset. Only k-mers within frequency "
-                            "range [%d, %d] are kept.", *thresholds)
+                            "range [%d, %d] are kept (mode %d).", *(thresholds[0], thresholds[2], thresholds[1]))
 
         if fingerprint_fraction:
             kmerset.min_hash(fingerprint_fraction)

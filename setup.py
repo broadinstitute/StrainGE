@@ -147,7 +147,7 @@ setup(
     ],
     install_requires=[
         'numpy',
-        'scipy',
+        'scipy<1.9',
         'h5py',
         'intervaltree',
         'matplotlib',

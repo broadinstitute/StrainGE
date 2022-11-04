@@ -53,7 +53,7 @@ accompanying metrics.
 
 **New in version 1.3:** instead of writing both sample statistics and the identified strains to a
 single TSV file, which is generally not as easily read in Python's `pandas` or R, you can now enable 
-the option to write sample statistics and strains to separate files when enabling the `--separate-outputs` (`-O`)
+the option to write sample statistics and strains to separate files when enabling the `--separate-output` (`-O`)
 option. If enabling this option, use `-o` to specify the output filename prefix.
 
 Example:

@@ -155,7 +155,7 @@ setup(
         'scikit-learn>=0.24',
         'pysam',
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
 
     # CLI endpoints
     entry_points={

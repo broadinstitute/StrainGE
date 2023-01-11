@@ -4,7 +4,7 @@ channels:
     - conda-forge
     - anaconda
 dependencies:
-    - "python>=3.7"
+    - "python>=3.8"
     - pybind11
     - "scikit-bio>=0.5.8"
     - "scikit-learn>=0.24"
@@ -12,8 +12,8 @@ dependencies:
     - scipy
     - h5py
     - matplotlib
-    - pysam
-    - samtools
+    - "pysam>=0.19"
+    - "samtools>=1.15"
     - mummer4
     - bwa
     - pip

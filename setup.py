@@ -147,11 +147,11 @@ setup(
     ],
     install_requires=[
         'numpy',
-        'scipy<1.9',
+        'scipy',
         'h5py',
         'intervaltree',
         'matplotlib',
-        'scikit-bio>=0.5',
+        'scikit-bio>=0.5.8',
         'scikit-learn>=0.24',
         'pysam',
     ],

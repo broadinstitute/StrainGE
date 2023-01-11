@@ -1077,7 +1077,7 @@ class VariantCaller:
         pos = read.query_position_or_next
         qual = alignment.query_qualities[pos]
         if qual < self.min_qual:
-            call_data.bad_read(scaffold, refpos)
+            call_data.bad_allele(scaffold, refpos)
             return
 
         # insertions and deletions are treated like alleles

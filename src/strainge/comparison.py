@@ -36,6 +36,10 @@ def jaccard(kmers1, kmers2):
     """Computes jaccard similarity. Returns numerator and denominator
     separately."""
     intersection = kmerizer.count_common(kmers1, kmers2)
+
+    if kmers1.size == 0 and kmers2.size == 0:
+        return 0
+
     return intersection / (kmers1.size + kmers2.size - intersection)
 
 

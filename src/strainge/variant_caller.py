@@ -604,7 +604,7 @@ class VariantCallData:
         }
 
         summed_abun = sum(abun.values())
-        abun = {k: v / summed_abun for k, v in abun.items()}
+        abun = {k: v / summed_abun if summed_abun else 0 for k, v in abun.items()}
 
         # abundance of all references relative to whole metagenome
         total_aln_reads = self.passing_reads + self.lowmq_reads

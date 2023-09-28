@@ -762,7 +762,7 @@ class ScaffoldCallData:
         # Store for each position and per possible allele the counts and sum
         # of base qualities. We use len(Allele)-1 because we store nothing
         # for Allele.N.
-        self.alleles = numpy.zeros((self.length, 2, len(Allele)-1),
+        self.alleles = numpy.zeros((self.length, 2, len(ALLELE_INDEX)),
                                    dtype=numpy.uint32)
 
         # Number of reads rejected for some reason

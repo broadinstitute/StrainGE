@@ -1,2 +1,6 @@
 [build-system]
 requires = ["oldest-supported-numpy", "setuptools", "wheel", "pybind11>=2.2"]
+
+# No need to build wheels for PyPy
+[tool.cibuildwheel]
+skip = "pp*"

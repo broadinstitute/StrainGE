@@ -1,6 +1,6 @@
 [build-system]
 requires = ["oldest-supported-numpy", "setuptools", "wheel", "pybind11>=2.2", "versioneer[toml]"]
-build-backend = ["setuptools.build_meta"]
+build-backend = "setuptools.build_meta"
 
 # No need to build wheels for PyPy
 [tool.cibuildwheel]

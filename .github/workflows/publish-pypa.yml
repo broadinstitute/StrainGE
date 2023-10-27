@@ -34,7 +34,7 @@ jobs:
           python-version: '3.11'
 
       - name: Build sdist
-        run: python setup.py sdist
+        run: python -m build . --sdist
 
       - uses: actions/upload-artifact@v3
         with:

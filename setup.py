@@ -134,7 +134,7 @@ setup(
 
     # Versioneer setup
     version=versioneer.get_version(),
-    cmdclass=dict(build_ext=BuildExt, **versioneer.get_cmdclass()),
+    cmdclass=versioneer.get_cmdclass({"build_ext": BuildExt}),
 
     # C++ extensions
     ext_modules=ext_modules,

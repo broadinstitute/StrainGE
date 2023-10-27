@@ -35,6 +35,5 @@ A set of tools for strain-level analysis in mixed metagenomic samples
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
-from ._version import get_versions
-__version__ = get_versions()['version']
-del get_versions
+from . import _version
+__version__ = _version.get_versions()['version']

@@ -504,40 +504,40 @@ class ClusterSubcommand(Subcommand):
 
         logger.info("Picking a representive genome per cluster...")
         count = 0
-        to_keep = []
+        to_keep = set()
         for ix, sorted_entries in cluster.pick_representative(
                 clusters, similarities, ref_priorities):
-            to_keep.append(sorted_entries[0])
+            to_keep.add(sorted_entries[0])
 
             if clusters_out:
                 print(*sorted_entries, sep='\t', file=clusters_out)
 
             count += 1
 
-        similarities = similarities.loc[(to_keep, to_keep), :].copy()
+        to_keep_ix = [ix for ix in similarities.index if ix[0] in to_keep and ix[1] in to_keep]
+        similarities = similarities.loc[to_keep_ix, :].copy()
 
-        exclude = set()
         if discard_contained and 'subset1' not in similarities.columns:
             logger.warning("No 'subset' score in similarities file. Can't "
                            "discard k-mersets that are subsets of another. "
                            "Run `strainge kmersim` with both '--scoring "
                            "jaccard' and '--scoring subset'")
         elif discard_contained:
-            subset_matrix = cluster.similarities_to_matrix(similarities, to_keep, 'subset')
+            subset_matrix = cluster.similarities_to_matrix(similarities, list(to_keep), 'subset')
             subset_max = numpy.nanmax(subset_matrix, axis=1)
 
-            exclude = subset_matrix[subset_max >= contained_cutoff].index
+            exclude = set(subset_matrix[subset_max >= contained_cutoff].index)
             logger.info("Excluding %d genomes because they're contained for at least "
                         "%d%% in another genome.", len(exclude),
                         contained_cutoff * 100)
 
-            to_keep = [l for l in to_keep if l not in exclude]
+            to_keep -= exclude
 
-        for l in to_keep:
-            print(label_to_path[l], file=output)
+        for label in to_keep:
+            print(label_to_path[label], file=output)
 
         logger.info("Done. After clustering %d/%d genomes remain.",
-                    count, len(kmersets))
+                    len(to_keep), len(kmersets))
 
 
 class CreateDBSubcommand(Subcommand):

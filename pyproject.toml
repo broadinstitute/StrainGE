@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 # No need to build wheels for PyPy
 [tool.cibuildwheel]
-skip = "pp*"
+skip = ["pp*", "*i686"]
 
 [tool.versioneer]
 VCS = "git"
